@@ -70,6 +70,19 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(decoded, [])
         self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.AWAITING_USER_ACTION)
 
+    def test_decoder_receives_the_exact_verified_request(self):
+        event = self.event("same-request", EventType.BRIDGE_RINGING)
+        request = SignedWebhookRequest(
+            method="POST", public_url="https://hooks.example.test/provider",
+            content_type="application/x-www-form-urlencoded", raw_body=b"event=ring",
+            headers={"X-Test-Signature": "valid"}, form_parameters={"event": "ring"},
+        )
+        decoded = []
+        self.processor.process(request=request,
+            decode=lambda verified_request: (decoded.append(verified_request) or event))
+        self.assertEqual(len(decoded), 1)
+        self.assertIs(decoded[0], request)
+
     def test_late_event_cannot_resurrect_cancelled_session(self):
         session = self.repo.get_session("session-opaque-1")
         self.repo.set_session_for_test(session.transition(SessionState.CANCELLED))
