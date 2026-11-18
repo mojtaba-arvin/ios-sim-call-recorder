@@ -2,7 +2,7 @@
 
 > Status: implementation contract proposal; provider-neutral.
 > Reviewed: 2026-11-19
-> Related work: [P02 proof issue](../../issues/2)
+> Related work: [P02 proof issue](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/2)
 
 ## 1. Operating boundary
 
