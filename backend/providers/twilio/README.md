@@ -40,3 +40,8 @@ The request adapter must pass one `SignedWebhookRequest` instance to both the
 signature verifier and the post-verification event decoder. For form callbacks,
 the decoder must consume the same `form_parameters` collection used by the SDK
 validator; it must not independently parse the raw body a second time.
+
+The implementation uses the official SDK's default request-validation behavior.
+If a Twilio account is configured for a non-default signature algorithm or a
+different webhook mode, treat that as a compatibility change and add explicit
+SDK-backed tests before enabling it; do not silently fall back to custom crypto.
