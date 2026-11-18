@@ -41,7 +41,7 @@ public struct RecordingSessionStateMachine: Sendable {
         case .interrupted:
             return [.connecting, .finalizing, .failed, .cancelled]
         case .degraded:
-            return [.recording, .finalizing, .failed, .cancelled]
+            return []
         case .finalizing:
             return [.completed, .degraded, .failed]
         case .completed, .failed, .cancelled:
