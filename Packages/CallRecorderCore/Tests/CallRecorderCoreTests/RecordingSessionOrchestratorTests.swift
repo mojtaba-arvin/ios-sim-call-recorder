@@ -22,10 +22,7 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
             )
             XCTFail("Empty consent evidence must not start capture")
         } catch {
-            XCTAssertEqual(
-                error as? RecordingSessionOrchestratorError,
-                .consentEvidenceRequired
-            )
+            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .consentEvidenceRequired)
         }
 
         let waitingState = await orchestrator.state
@@ -41,6 +38,37 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         let result = try await orchestrator.finish(sessionID: sessionID)
         let finalState = await orchestrator.state
         XCTAssertTrue(result.hasVerifiedTwoWayAudio)
+        XCTAssertEqual(finalState, .completed)
+    }
+
+    func testInterruptionCanResumeBeforeFinalization() async throws {
+        let artifact = RecordingArtifact(
+            identifier: "resumed",
+            durationSeconds: 45,
+            localAudioVerified: true,
+            remoteAudioVerified: true
+        )
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: StubAdapter(availability: .available, artifact: artifact)
+        )
+        let sessionID = UUID()
+
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+        try await orchestrator.startRecording(
+            sessionID: sessionID,
+            consentEvidenceReference: "consent-event-resume"
+        )
+        try await orchestrator.markInterrupted(sessionID: sessionID)
+
+        let interruptedState = await orchestrator.state
+        XCTAssertEqual(interruptedState, .interrupted)
+
+        try await orchestrator.resume(sessionID: sessionID)
+        let resumedState = await orchestrator.state
+        XCTAssertEqual(resumedState, .recording)
+
+        _ = try await orchestrator.finish(sessionID: sessionID)
+        let finalState = await orchestrator.state
         XCTAssertEqual(finalState, .completed)
     }
 
@@ -121,9 +149,7 @@ private struct StubAdapter: RecordingPathwayAdapter {
     func startCapture(sessionID: UUID) async throws {}
 
     func finishCapture(sessionID: UUID) async throws -> RecordingArtifact {
-        guard let artifact else {
-            throw StubError.missingArtifact
-        }
+        guard let artifact else { throw StubError.missingArtifact }
         return artifact
     }
 }
