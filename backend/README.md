@@ -9,6 +9,8 @@ deployable recording service and not a real PSTN provider integration.
 - Provider-native signature verification using the exact request URL, method,
   content type, headers, original body and (where required) syntactically parsed
   form parameters before business event decoding.
+- A Twilio webhook verifier using the pinned official Python SDK for both
+  form-encoded and JSON callbacks, including multi-value form parameters.
 - Atomic event-deduplication port; duplicate events are ignored.
 - Fail-closed handling of invalid and out-of-order lifecycle events.
 - Opaque participant references rather than phone numbers.
@@ -24,6 +26,11 @@ The webhook processor passes the same verified request object to the business
 decoder. This is important for form callbacks: signature validation and event
 normalization must consume the same parsed parameter collection, not parse the
 raw form body independently with potentially different duplicate/encoding rules.
+
+The Twilio verifier is a provider-specific security adapter only; it does not
+create conferences, dial participants, start provider recordings or retrieve
+media. It accepts POST callbacks only and expects production endpoints to be
+configured for POST.
 
 Provider webhook adapters must use the exact signature algorithm and request
 semantics documented by that provider's official SDK. For example, Twilio's
