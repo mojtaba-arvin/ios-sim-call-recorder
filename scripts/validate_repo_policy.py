@@ -42,7 +42,8 @@ for path in WORKFLOWS:
         if not SHA.fullmatch(ref):
             ERRORS.append(f"{rel}: action must be pinned to a full 40-character SHA: {action}")
 
-    job_blocks = re.split(r"(?m)^  [A-Za-z0-9_-]+:\s*$", text)[1:]
+    jobs_section = text.split("jobs:", 1)[1] if "jobs:" in text else ""
+    job_blocks = re.split(r"(?m)^  [A-Za-z0-9_-]+:\s*$", jobs_section)[1:]
     for index, block in enumerate(job_blocks, 1):
         if not re.search(r"(?m)^    timeout-minutes:\s*[1-9][0-9]*\s*$", block):
             ERRORS.append(f"{rel}: job block {index} is missing timeout-minutes")
