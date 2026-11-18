@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from .domain import BridgeSession, EventType, InvalidTransition, SessionState
-from .ports import BridgeRepository, WebhookSignatureVerifier
+from .ports import BridgeRepository, SignedWebhookRequest, WebhookSignatureVerifier
 
 class InvalidWebhookSignature(PermissionError): pass
 class UnknownSession(LookupError): pass
@@ -32,11 +32,12 @@ class WebhookProcessor:
     def __init__(self, *, verifier: WebhookSignatureVerifier, repository: BridgeRepository):
         self._verifier, self._repository = verifier, repository
 
-    def process(self, *, raw_body: bytes, headers: Mapping[str, str],
+    def process(self, *, request: SignedWebhookRequest,
                 decode: Callable[[bytes], NormalizedProviderEvent]) -> bool:
-        if not self._verifier.verify(raw_body, headers):
+        # Provider-native verification runs before business payload decoding.
+        if not self._verifier.verify(request):
             raise InvalidWebhookSignature("provider webhook signature verification failed")
-        event = decode(raw_body)
+        event = decode(request.raw_body)
         def apply(session: BridgeSession) -> BridgeSession:
             if session.session_id != event.session_id: raise UnknownSession(event.session_id)
             return self._reduce(session, event)
