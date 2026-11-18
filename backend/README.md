@@ -20,6 +20,11 @@ No production signature verifier, provider adapter, HTTP endpoint, authenticatio
 secret store, media ingestion, audio verification, object storage, retention
 worker or deletion integration is implemented.
 
+The webhook processor passes the same verified request object to the business
+decoder. This is important for form callbacks: signature validation and event
+normalization must consume the same parsed parameter collection, not parse the
+raw form body independently with potentially different duplicate/encoding rules.
+
 Provider webhook adapters must use the exact signature algorithm and request
 semantics documented by that provider's official SDK. For example, Twilio's
 form-encoded and JSON webhook validation inputs differ; never replace its SDK
