@@ -1,12 +1,34 @@
 """Production infrastructure boundaries; no provider SDK is selected."""
 from __future__ import annotations
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 from .domain import BridgeSession
 
+@dataclass(frozen=True, slots=True)
+class SignedWebhookRequest:
+    """Transport facts required by provider-native signature validators.
+
+    public_url must be reconstructed from trusted deployment configuration or
+    trusted proxy metadata and must exactly match the externally configured URL.
+    form_parameters are syntactically parsed fields for validators that require
+    them; they are NOT business-decoded events. raw_body is always preserved.
+    """
+    method: str
+    public_url: str
+    content_type: str
+    raw_body: bytes
+    headers: Mapping[str, str]
+    form_parameters: Mapping[str, str | Sequence[str]] | None = None
+
+    def __post_init__(self):
+        if not self.method.strip(): raise ValueError("HTTP method is required")
+        if not self.public_url.startswith("https://"): raise ValueError("webhook public_url must use HTTPS")
+        if not self.content_type.strip(): raise ValueError("content_type is required")
+
 class WebhookSignatureVerifier(Protocol):
-    """Verify exact, unmodified request bytes using provider-specific rules."""
-    def verify(self, raw_body: bytes, headers: Mapping[str, str]) -> bool: ...
+    """Use the provider SDK's exact signature algorithm and request semantics."""
+    def verify(self, request: SignedWebhookRequest) -> bool: ...
 
 class BridgeRepository(Protocol):
     """Atomically deduplicate an event and persist its session mutation.
