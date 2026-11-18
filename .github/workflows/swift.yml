@@ -6,25 +6,21 @@ on:
     paths:
       - "Packages/CallRecorderCore/**"
       - ".github/workflows/swift.yml"
-  push:
-    branches:
-      - "feat/**"
-    paths:
-      - "Packages/CallRecorderCore/**"
-      - ".github/workflows/swift.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: swift-${{ github.workflow }}-${{ github.ref }}
+  group: swift-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   call-recorder-core:
     name: CallRecorderCore tests
-    runs-on: macos-14
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2
     timeout-minutes: 10
     steps:
       - name: Check out source
