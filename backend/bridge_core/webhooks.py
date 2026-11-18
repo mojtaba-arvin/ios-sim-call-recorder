@@ -48,6 +48,8 @@ class WebhookProcessor:
     @staticmethod
     def _reduce(session: BridgeSession, event: NormalizedProviderEvent) -> BridgeSession:
         at, kind = event.occurred_at, event.event_type
+        if session.updated_at is not None and at < session.updated_at:
+            raise InvalidTransition("stale provider event cannot move session state backwards")
         if kind is EventType.BRIDGE_RINGING:
             return session.transition(SessionState.BRIDGE_LEG_RINGING, at=at)
         if kind is EventType.PARTICIPANT_JOINED:
