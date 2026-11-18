@@ -12,29 +12,86 @@ public enum RecordingPathway: String, CaseIterable, Sendable {
     case experimental
 }
 
+public enum SIMConfiguration: String, Sendable {
+    case physicalSingle
+    case eSIMSingle
+    case dualPhysical
+    case dualESIM
+    case physicalAndESIM
+    case unknown
+}
+
+public enum NetworkType: String, Sendable {
+    case cellularLTE
+    case cellular5G
+    case wifiCalling
+    case unknown
+}
+
+public enum CallDirection: String, Sendable {
+    case incoming
+    case outgoing
+}
+
+public enum CallAudioRoute: String, Sendable {
+    case receiver
+    case speaker
+    case wired
+    case bluetoothHFP
+    case externalAccessory
+    case unknown
+}
+
 /// Capability decisions are scoped to this exact environment context.
 public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let deviceModelIdentifier: String
     public let operatingSystemVersion: String
-    public let regionCode: String
+    public let operatingSystemBuild: String?
+    public let deviceRegionCode: String
+    public let physicalTestCountryCode: String
+    public let languageCode: String
     public let carrierIdentifier: String?
-    public let usesPhysicalSIM: Bool
+    public let carrierBundleVersion: String?
+    public let simConfiguration: SIMConfiguration
     public let isRoaming: Bool
+    public let networkType: NetworkType
+    public let wifiCallingEnabled: Bool
+    public let volteEnabled: Bool
+    public let callDirection: CallDirection
+    public let audioRoute: CallAudioRoute
 
     public init(
         deviceModelIdentifier: String,
         operatingSystemVersion: String,
-        regionCode: String,
+        operatingSystemBuild: String? = nil,
+        deviceRegionCode: String,
+        physicalTestCountryCode: String,
+        languageCode: String,
         carrierIdentifier: String? = nil,
-        usesPhysicalSIM: Bool,
-        isRoaming: Bool
+        carrierBundleVersion: String? = nil,
+        simConfiguration: SIMConfiguration,
+        isRoaming: Bool,
+        networkType: NetworkType,
+        wifiCallingEnabled: Bool,
+        volteEnabled: Bool,
+        callDirection: CallDirection,
+        audioRoute: CallAudioRoute
     ) {
         self.deviceModelIdentifier = deviceModelIdentifier
         self.operatingSystemVersion = operatingSystemVersion
-        self.regionCode = regionCode
+        self.operatingSystemBuild = operatingSystemBuild
+        self.deviceRegionCode = deviceRegionCode
+        self.physicalTestCountryCode = physicalTestCountryCode
+        self.languageCode = languageCode
         self.carrierIdentifier = carrierIdentifier
-        self.usesPhysicalSIM = usesPhysicalSIM
+        self.carrierBundleVersion = carrierBundleVersion
+        self.simConfiguration = simConfiguration
         self.isRoaming = isRoaming
+        self.networkType = networkType
+        self.wifiCallingEnabled = wifiCallingEnabled
+        self.volteEnabled = volteEnabled
+        self.callDirection = callDirection
+        self.audioRoute = audioRoute
     }
 }
 
