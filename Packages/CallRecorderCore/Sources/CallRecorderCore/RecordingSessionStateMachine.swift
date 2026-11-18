@@ -1,4 +1,4 @@
-public enum RecordingSessionState: Equatable, Sendable {
+public enum RecordingSessionState: Hashable, Sendable {
     case idle
     case preparing
     case awaitingConsent
