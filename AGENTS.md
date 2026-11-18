@@ -51,7 +51,7 @@ Use the role contracts in `.agents/roles/`. Each task has one accountable implem
 ## CI and quality gates
 
 - Workflows use least-privilege permissions, explicit job timeouts and immutable full-length commit SHAs for third-party actions.
-- CI must be deterministic, path-aware and avoid cancelling unrelated jobs.
+- CI must be deterministic, run the required PR checks consistently, and avoid cancelling unrelated jobs. Do not use path filters on checks that are configured as required status checks.
 - Required checks must correspond to stable job names.
 - A check is passed only when the exact current PR head SHA has a completed successful run.
 - A skipped workflow is not a passing check unless the ruleset intentionally makes that workflow optional for the changed paths.
