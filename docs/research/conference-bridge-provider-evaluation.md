@@ -2,7 +2,7 @@
 
 > Status: preliminary vendor capability research; no provider selected.
 > Reviewed: 2026-11-19
-> Related work: [P02 conference-bridge proof](../../issues/2)
+> Related work: [P02 conference-bridge proof](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/2)
 
 ## Product question
 
