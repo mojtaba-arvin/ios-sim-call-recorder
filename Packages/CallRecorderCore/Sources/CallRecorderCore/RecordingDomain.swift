@@ -1,7 +1,7 @@
 import Foundation
 
 /// A capture or companion route investigated by the product.
-public enum RecordingPathway: String, CaseIterable, Sendable {
+public enum RecordingPathway: String, CaseIterable, Hashable, Sendable {
     case nativeCompanion
     case conferenceBridge
     case carrierService
@@ -12,7 +12,7 @@ public enum RecordingPathway: String, CaseIterable, Sendable {
     case experimental
 }
 
-public enum SIMConfiguration: String, Sendable {
+public enum SIMConfiguration: String, Hashable, Sendable {
     case physicalSingle
     case eSIMSingle
     case dualPhysical
@@ -21,19 +21,19 @@ public enum SIMConfiguration: String, Sendable {
     case unknown
 }
 
-public enum NetworkType: String, Sendable {
+public enum NetworkType: String, Hashable, Sendable {
     case cellularLTE
     case cellular5G
     case wifiCalling
     case unknown
 }
 
-public enum CallDirection: String, Sendable {
+public enum CallDirection: String, Hashable, Sendable {
     case incoming
     case outgoing
 }
 
-public enum CallAudioRoute: String, Sendable {
+public enum CallAudioRoute: String, Hashable, Sendable {
     case receiver
     case speaker
     case wired
