@@ -4,13 +4,16 @@ from datetime import datetime, timezone
 from typing import Mapping
 from bridge_core.domain import BridgeSession, ConsentRequired, EventType, InvalidParticipant, InvalidTransition, SessionState
 from bridge_core.memory import InMemoryBridgeRepository
+from bridge_core.ports import SignedWebhookRequest
 from bridge_core.webhooks import InvalidWebhookSignature, NormalizedProviderEvent, WebhookProcessor
 
 class StaticVerifier:
     def __init__(self, accepted: bool = True): self.accepted, self.calls = accepted, 0
-    def verify(self, raw_body: bytes, headers: Mapping[str, str]) -> bool:
+    def verify(self, request: SignedWebhookRequest) -> bool:
         self.calls += 1
-        return self.accepted and bool(raw_body) and headers.get("X-Test-Signature") == "valid"
+        return (self.accepted and bool(request.raw_body)
+                and request.headers.get("X-Test-Signature") == "valid"
+                and request.public_url.startswith("https://"))
 
 class BridgeCoreTests(unittest.TestCase):
     def setUp(self):
@@ -25,8 +28,12 @@ class BridgeCoreTests(unittest.TestCase):
                                         occurred_at or self.now, participant_ref, "sha256:fixture")
 
     def send(self, event):
-        return self.processor.process(raw_body=b'{"synthetic":"event"}',
-            headers={"X-Test-Signature": "valid"}, decode=lambda raw: event)
+        request = SignedWebhookRequest(
+            method="POST", public_url="https://hooks.example.test/provider",
+            content_type="application/json", raw_body=b'{"synthetic":"event"}',
+            headers={"X-Test-Signature": "valid"},
+        )
+        return self.processor.process(request=request, decode=lambda raw: event)
 
     def test_consent_is_required_before_recording(self):
         session = BridgeSession("s", 2, state=SessionState.AWAITING_CONSENT,
@@ -52,8 +59,14 @@ class BridgeCoreTests(unittest.TestCase):
     def test_invalid_signature_is_rejected_before_decode(self):
         decoded = []
         with self.assertRaises(InvalidWebhookSignature):
-            self.processor.process(raw_body=b"tampered", headers={"X-Test-Signature":"invalid"},
-                                   decode=lambda raw: decoded.append(raw))
+            self.processor.process(
+                request=SignedWebhookRequest(
+                    method="POST", public_url="https://hooks.example.test/provider",
+                    content_type="application/json", raw_body=b"tampered",
+                    headers={"X-Test-Signature": "invalid"},
+                ),
+                decode=lambda raw: decoded.append(raw),
+            )
         self.assertEqual(decoded, [])
         self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.AWAITING_USER_ACTION)
 
