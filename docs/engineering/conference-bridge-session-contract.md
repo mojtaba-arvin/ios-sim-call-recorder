@@ -90,11 +90,15 @@ Provider adapters normalize events into:
 - `payload_digest`
 
 Requirements:
-- Verify provider signatures against the raw request body and documented timestamp rules.
-- Reject invalid signatures and stale/replayed requests.
-- Deduplicate by provider event ID with a unique database constraint.
+- Verify provider signatures with the provider's official SDK using the exact externally configured URL, HTTP method, content type, headers, original body and any provider-required parsed parameters. Preserve the raw body.
+- Verify before business event decoding. Limited syntactic form parsing may be necessary for a provider SDK's signature validator; do not normalize, drop or re-encode signed parameters first.
+- Do not assume all providers sign raw bodies the same way. Twilio form-encoded validation uses the exact URL plus all form parameters; JSON validation uses the `bodySHA256` URL parameter and raw JSON body. Use Twilio's `RequestValidator`, not a home-grown generic HMAC.
+- Reconstruct the public webhook URL from trusted deployment/proxy configuration. Never trust arbitrary client-supplied `X-Forwarded-Host` or scheme headers.
+- Reject invalid signatures. Apply provider-specific freshness checks only where documented; do not invent a universal timestamp rule.
+- Deduplicate by provider event ID with a unique database constraint. Twilio documents at-least-once webhook delivery, so retries are expected.
 - Persist the raw encrypted event only when needed for audit/debugging; redact or tokenize phone numbers.
 - Acknowledge quickly after durable enqueue; process state changes asynchronously.
+- Store the exact provider account/tenant scope with each event key if the provider's event IDs are not globally unique.
 - Never trust a webhook media URL without validating provider ownership and fetching it with server-side credentials.
 - Make every handler idempotent and safe under duplicate delivery and out-of-order arrival.
 
