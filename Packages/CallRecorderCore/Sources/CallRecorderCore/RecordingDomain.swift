@@ -119,7 +119,8 @@ public struct PathwayCapability: Equatable, Sendable {
     }
 }
 
-/// Two-way support is not inferred from the existence of an artifact.
+/// A returned file is not successful until its metadata and both audio
+/// directions have been independently verified.
 public struct RecordingArtifact: Equatable, Sendable {
     public let identifier: String
     public let durationSeconds: TimeInterval
@@ -138,7 +139,13 @@ public struct RecordingArtifact: Equatable, Sendable {
         self.remoteAudioVerified = remoteAudioVerified
     }
 
+    public var isStructurallyValid: Bool {
+        !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && durationSeconds.isFinite
+            && durationSeconds > 0
+    }
+
     public var hasVerifiedTwoWayAudio: Bool {
-        localAudioVerified && remoteAudioVerified
+        isStructurallyValid && localAudioVerified && remoteAudioVerified
     }
 }
