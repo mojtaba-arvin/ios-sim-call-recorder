@@ -2,36 +2,19 @@ import XCTest
 @testable import CallRecorderCore
 
 final class RecordingSessionOrchestratorTests: XCTestCase {
-    func testConsentGatesConnectionAndVerifiedArtifactCompletes() async throws {
-        let artifact = RecordingArtifact(
-            identifier: "verified",
-            durationSeconds: 30,
-            localAudioVerified: true,
-            remoteAudioVerified: true
-        )
-        let orchestrator = RecordingSessionOrchestrator(
-            adapter: StubAdapter(availability: .available, artifact: artifact)
+    func testVerifiedConsentGatesConnectionAndVerifiedArtifactCompletes() async throws {
+        let orchestrator = makeOrchestrator(
+            artifact: verifiedArtifact(),
+            consentVerified: true
         )
         let sessionID = UUID()
 
         _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
-        do {
-            try await orchestrator.startRecording(
-                sessionID: sessionID,
-                consentEvidenceReference: "  "
-            )
-            XCTFail("Empty consent evidence must not start capture")
-        } catch {
-            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .consentEvidenceRequired)
-        }
-
-        let waitingState = await orchestrator.state
-        XCTAssertEqual(waitingState, .awaitingConsent)
-
         try await orchestrator.startRecording(
             sessionID: sessionID,
-            consentEvidenceReference: "consent-event-123"
+            consentEvidence: makeConsentEvidence()
         )
+
         let recordingState = await orchestrator.state
         XCTAssertEqual(recordingState, .recording)
 
@@ -41,22 +24,86 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(finalState, .completed)
     }
 
-    func testInterruptionCanResumeBeforeFinalization() async throws {
-        let artifact = RecordingArtifact(
-            identifier: "resumed",
-            durationSeconds: 45,
-            localAudioVerified: true,
-            remoteAudioVerified: true
+    func testIncompleteConsentEvidenceFailsClosed() async throws {
+        let orchestrator = makeOrchestrator(artifact: verifiedArtifact(), consentVerified: true)
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+
+        var evidence = makeConsentEvidence()
+        evidence = ConsentEvidence(
+            reference: evidence.reference,
+            policyVersion: evidence.policyVersion,
+            participantIdentifiers: ["caller", "callee"],
+            consentTimestamps: ["caller": Date(timeIntervalSince1970: 100)],
+            disclosureTimestamp: Date(timeIntervalSince1970: 90)
         )
+
+        do {
+            try await orchestrator.startRecording(sessionID: sessionID, consentEvidence: evidence)
+            XCTFail("Missing participant consent must fail closed")
+        } catch {
+            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .consentEvidenceIncomplete)
+        }
+
+        let state = await orchestrator.state
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testTrustedVerifierCanRejectStructurallyValidEvidence() async throws {
+        let orchestrator = makeOrchestrator(artifact: verifiedArtifact(), consentVerified: false)
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+
+        do {
+            try await orchestrator.startRecording(
+                sessionID: sessionID,
+                consentEvidence: makeConsentEvidence()
+            )
+            XCTFail("Unverified consent evidence must not start capture")
+        } catch {
+            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .consentEvidenceRejected)
+        }
+
+        let state = await orchestrator.state
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testAdapterCannotAdvertiseAnotherPathway() async throws {
         let orchestrator = RecordingSessionOrchestrator(
-            adapter: StubAdapter(availability: .available, artifact: artifact)
+            adapter: StubAdapter(
+                pathway: .conferenceBridge,
+                advertisedPathway: .bluetoothAccessory,
+                availability: .available,
+                artifact: verifiedArtifact()
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
         )
+
+        do {
+            _ = try await orchestrator.prepare(sessionID: UUID(), context: makeContext())
+            XCTFail("Mismatched adapter capability must fail closed")
+        } catch {
+            XCTAssertEqual(
+                error as? RecordingSessionOrchestratorError,
+                .adapterPathwayMismatch(
+                    expected: .conferenceBridge,
+                    actual: .bluetoothAccessory
+                )
+            )
+        }
+
+        let state = await orchestrator.state
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testInterruptionCanResumeBeforeFinalization() async throws {
+        let orchestrator = makeOrchestrator(artifact: verifiedArtifact(), consentVerified: true)
         let sessionID = UUID()
 
         _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
         try await orchestrator.startRecording(
             sessionID: sessionID,
-            consentEvidenceReference: "consent-event-resume"
+            consentEvidence: makeConsentEvidence()
         )
         try await orchestrator.markInterrupted(sessionID: sessionID)
 
@@ -72,22 +119,20 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(finalState, .completed)
     }
 
-    func testOneSidedArtifactFinishesAsDegraded() async throws {
-        let artifact = RecordingArtifact(
+    func testOneSidedOrMalformedArtifactFinishesAsDegraded() async throws {
+        let malformedArtifact = RecordingArtifact(
             identifier: "one-sided",
-            durationSeconds: 30,
+            durationSeconds: .infinity,
             localAudioVerified: true,
-            remoteAudioVerified: false
+            remoteAudioVerified: true
         )
-        let orchestrator = RecordingSessionOrchestrator(
-            adapter: StubAdapter(availability: .available, artifact: artifact)
-        )
+        let orchestrator = makeOrchestrator(artifact: malformedArtifact, consentVerified: true)
         let sessionID = UUID()
 
         _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
         try await orchestrator.startRecording(
             sessionID: sessionID,
-            consentEvidenceReference: "consent-event-456"
+            consentEvidence: makeConsentEvidence()
         )
         _ = try await orchestrator.finish(sessionID: sessionID)
 
@@ -95,12 +140,15 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(finalState, .degraded)
     }
 
-    func testUnavailablePathwayFailsBeforePreparation() async throws {
+    func testUnavailablePathwayFailsBeforeAdapterPreparation() async throws {
         let orchestrator = RecordingSessionOrchestrator(
             adapter: StubAdapter(
+                pathway: .conferenceBridge,
+                advertisedPathway: .conferenceBridge,
                 availability: .unavailable(reason: "carrier merge unsupported"),
                 artifact: nil
-            )
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
         )
 
         do {
@@ -114,7 +162,22 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         }
 
         let state = await orchestrator.state
-        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(state, .failed)
+    }
+
+    private func makeOrchestrator(
+        artifact: RecordingArtifact?,
+        consentVerified: Bool
+    ) -> RecordingSessionOrchestrator {
+        RecordingSessionOrchestrator(
+            adapter: StubAdapter(
+                pathway: .conferenceBridge,
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: artifact
+            ),
+            consentVerifier: StubConsentVerifier(verified: consentVerified)
+        )
     }
 
     private func makeContext() -> DeviceCompatibilityContext {
@@ -133,15 +196,37 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
             audioRoute: .receiver
         )
     }
+
+    private func makeConsentEvidence() -> ConsentEvidence {
+        let disclosure = Date(timeIntervalSince1970: 100)
+        let consent = Date(timeIntervalSince1970: 110)
+        return ConsentEvidence(
+            reference: "audit-event-123",
+            policyVersion: "consent-v1",
+            participantIdentifiers: ["caller", "callee"],
+            consentTimestamps: ["caller": consent, "callee": consent],
+            disclosureTimestamp: disclosure
+        )
+    }
+
+    private func verifiedArtifact() -> RecordingArtifact {
+        RecordingArtifact(
+            identifier: "verified",
+            durationSeconds: 30,
+            localAudioVerified: true,
+            remoteAudioVerified: true
+        )
+    }
 }
 
 private struct StubAdapter: RecordingPathwayAdapter {
-    let pathway: RecordingPathway = .conferenceBridge
+    let pathway: RecordingPathway
+    let advertisedPathway: RecordingPathway
     let availability: PathwayAvailability
     let artifact: RecordingArtifact?
 
     func capability(for context: DeviceCompatibilityContext) async -> PathwayCapability {
-        PathwayCapability(pathway: pathway, availability: availability)
+        PathwayCapability(pathway: advertisedPathway, availability: availability)
     }
 
     func prepare(sessionID: UUID) async throws {}
@@ -151,6 +236,14 @@ private struct StubAdapter: RecordingPathwayAdapter {
     func finishCapture(sessionID: UUID) async throws -> RecordingArtifact {
         guard let artifact else { throw StubError.missingArtifact }
         return artifact
+    }
+}
+
+private struct StubConsentVerifier: ConsentEvidenceVerifying {
+    let verified: Bool
+
+    func verify(_ evidence: ConsentEvidence, sessionID: UUID) async throws -> Bool {
+        verified
     }
 }
 
