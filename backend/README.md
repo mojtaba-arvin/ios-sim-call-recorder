@@ -6,7 +6,9 @@ deployable recording service and not a real PSTN provider integration.
 ## Included
 - Typed bridge lifecycle and guarded transitions.
 - Consent from every expected, joined participant before recording can start.
-- Signature verification against original request bytes before event decoding.
+- Provider-native signature verification using the exact request URL, method,
+  content type, headers, original body and (where required) syntactically parsed
+  form parameters before business event decoding.
 - Atomic event-deduplication port; duplicate events are ignored.
 - Fail-closed handling of invalid and out-of-order lifecycle events.
 - Opaque participant references rather than phone numbers.
@@ -18,9 +20,12 @@ No production signature verifier, provider adapter, HTTP endpoint, authenticatio
 secret store, media ingestion, audio verification, object storage, retention
 worker or deletion integration is implemented.
 
-Provider webhook adapters must use the exact signature algorithm, timestamp
-tolerance and replay rules documented by the provider. This core does not invent
-a generic HMAC scheme.
+Provider webhook adapters must use the exact signature algorithm and request
+semantics documented by that provider's official SDK. For example, Twilio's
+form-encoded and JSON webhook validation inputs differ; never replace its SDK
+validator with a generic raw-body HMAC implementation. The public URL used for
+validation must be reconstructed from trusted deployment/proxy configuration,
+not arbitrary client-supplied forwarding headers.
 
 ## Tests
 From the repository root:
