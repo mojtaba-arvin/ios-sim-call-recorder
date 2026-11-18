@@ -2,7 +2,7 @@ name: Backend core checks
 
 on:
   pull_request:
-    branches: [main, feat/twilio-webhook-signature-adapter]
+    branches: [main, feat/conference-bridge-backend-core]
   workflow_dispatch:
 
 permissions:
