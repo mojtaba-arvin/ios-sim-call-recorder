@@ -33,7 +33,7 @@ class BridgeCoreTests(unittest.TestCase):
             content_type="application/json", raw_body=b'{"synthetic":"event"}',
             headers={"X-Test-Signature": "valid"},
         )
-        return self.processor.process(request=request, decode=lambda raw: event)
+        return self.processor.process(request=request, decode=lambda verified_request: event)
 
     def test_consent_is_required_before_recording(self):
         session = BridgeSession("s", 2, state=SessionState.AWAITING_CONSENT,
@@ -65,7 +65,7 @@ class BridgeCoreTests(unittest.TestCase):
                     content_type="application/json", raw_body=b"tampered",
                     headers={"X-Test-Signature": "invalid"},
                 ),
-                decode=lambda raw: decoded.append(raw),
+                decode=lambda verified_request: decoded.append(verified_request),
             )
         self.assertEqual(decoded, [])
         self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.AWAITING_USER_ACTION)
