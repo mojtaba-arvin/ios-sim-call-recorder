@@ -3,9 +3,6 @@ name: Swift package checks
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "Packages/CallRecorderCore/**"
-      - ".github/workflows/swift.yml"
   workflow_dispatch:
 
 permissions:
