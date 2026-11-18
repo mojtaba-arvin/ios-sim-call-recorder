@@ -33,11 +33,13 @@ class WebhookProcessor:
         self._verifier, self._repository = verifier, repository
 
     def process(self, *, request: SignedWebhookRequest,
-                decode: Callable[[bytes], NormalizedProviderEvent]) -> bool:
+                decode: Callable[[SignedWebhookRequest], NormalizedProviderEvent]) -> bool:
         # Provider-native verification runs before business payload decoding.
         if not self._verifier.verify(request):
             raise InvalidWebhookSignature("provider webhook signature verification failed")
-        event = decode(request.raw_body)
+        # Pass the exact verified request object so form validators and event
+        # decoders consume the same parsed parameters, avoiding parser drift.
+        event = decode(request)
         def apply(session: BridgeSession) -> BridgeSession:
             if session.session_id != event.session_id: raise UnknownSession(event.session_id)
             return self._reduce(session, event)
