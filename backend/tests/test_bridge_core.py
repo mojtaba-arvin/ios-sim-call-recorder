@@ -110,4 +110,20 @@ class BridgeCoreTests(unittest.TestCase):
         with self.assertRaises(InvalidTransition): self.send(late)
         self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.FINALIZING)
 
+    def test_stale_failure_event_cannot_override_verification_state(self):
+        for event in [
+            self.event("ring", EventType.BRIDGE_RINGING),
+            self.event("ja", EventType.PARTICIPANT_JOINED, "a"),
+            self.event("jb", EventType.PARTICIPANT_JOINED, "b"),
+            self.event("ca", EventType.PARTICIPANT_CONSENTED, "a"),
+            self.event("cb", EventType.PARTICIPANT_CONSENTED, "b"),
+            self.event("start", EventType.RECORDING_STARTED),
+            self.event("end", EventType.CALL_ENDED),
+            self.event("ready", EventType.RECORDING_READY),
+        ]: self.send(event)
+        stale = self.event("old-failure", EventType.RECORDING_FAILED,
+                           occurred_at=datetime(2026, 11, 18, tzinfo=timezone.utc))
+        with self.assertRaises(InvalidTransition): self.send(stale)
+        self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.VERIFYING)
+
 if __name__ == "__main__": unittest.main()
