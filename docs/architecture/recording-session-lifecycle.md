@@ -38,6 +38,7 @@ The core's structural checks do not establish consent authenticity. The injected
 - The adapter's `cancel(sessionID:)` must be idempotent, release partial resources and coordinate with in-flight connect/start calls. A late adapter completion must not restart capture after cancellation.
 - The orchestrator checks session ownership and state after each asynchronous verifier/connect/start boundary. A continuation that resumes after cancellation returns `sessionCancelled` and cannot transition back to `recording`.
 - If adapter cancellation fails, the orchestrator enters `failed`; callers must treat resource cleanup as uncertain and reconcile the adapter/provider before retrying.
+- If `prepare`, consent verification, `connect` or `startCapture` fails after preparation begins, the orchestrator makes a best-effort idempotent `cancel(sessionID:)` call to release partially allocated resources. The original operation error remains the reported failure; cleanup uncertainty must be logged/reconciled by the adapter without leaking sensitive data.
 - A cancellation request is rejected after finalization has started. Finalization and cancellation are mutually exclusive terminal paths.
 
 ## Actor reentrancy invariants
