@@ -17,7 +17,7 @@ public enum RecordingPathwayAssessment {
     /// EU member states are expanded explicitly so callers can pass ISO country
     /// codes instead of relying on a non-standard "EU" pseudo-country code.
     private static let unavailableCountryCodes: Set<String> = [
-        "AZ", "BH", "EG", "IR", "IQ", "JO", "KW", "MA", "NG", "OM",
+        "EU", "AZ", "BH", "EG", "IR", "IQ", "JO", "KW", "MA", "NG", "OM",
         "PK", "QA", "RU", "SA", "ZA", "TR", "AE", "YE",
         "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI",
         "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU",
@@ -39,7 +39,9 @@ public enum RecordingPathwayAssessment {
         for context: DeviceCompatibilityContext
     ) -> PathwayCapability {
         let version = parseVersion(context.operatingSystemVersion)
-        guard version >= minimumAppleCallRecordingVersion else {
+        guard version.major > minimumAppleCallRecordingVersion.major
+                || (version.major == minimumAppleCallRecordingVersion.major
+                    && version.minor >= minimumAppleCallRecordingVersion.minor) else {
             return PathwayCapability(
                 pathway: .appleSystemCallRecording,
                 availability: .unavailable(
