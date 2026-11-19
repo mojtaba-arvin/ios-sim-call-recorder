@@ -25,11 +25,22 @@ Every non-trivial task follows this sequence:
 7. **Publish:** open/update a PR with evidence, limitations, risks and linked issues. Keep it unmerged until required review and checks are satisfied.
 8. **Report:** re-read the current PR head SHA and state it with the PR URL, checks and remaining uncertainty. Inspect job steps and test summaries. A passing run on an earlier SHA, or a queued/pending/cancelled/skipped run, is not a pass. Never equate a build with a test pass.
 
+## Agent roles and skills
+
+Role contracts live in `.agents/roles/`; reusable, task-oriented skills live in `.agents/skills/<skill-name>/SKILL.md`. Before a task, select the relevant role and skills rather than copying generic instructions into each issue.
+
+- Roles define responsibility, authority boundaries and deliverables.
+- Skills define repeatable procedures, inputs, outputs and completion gates.
+- Templates in `.agents/templates/` define task, ADR, research-report, independent PR-review and validation-report structure.
+- Policies in `.agents/policies/` are the canonical privacy, branch and evidence rules.
+- `scripts/validate_agent_assets.py` checks required role/skill/template/policy structure; it does not prove that an agent executed a skill correctly.
+- `scripts/validate_agent_tasks.py` checks machine-readable task contracts, dependency existence/cycles and done-state evidence fields; it does not query GitHub or execute work.
+
 ## Multi-agent work allocation
 
 Use the role contracts in `.agents/roles/`. Each task has one accountable implementer and a separate reviewer/validator whenever independent execution is available.
 
-- Parallelize only work with disjoint file ownership and explicit interfaces.
+- Parallelize only work with disjoint path ownership and explicit interfaces.
 - Assign a file/path ownership list to each worker before execution.
 - A worker must not modify files outside its assignment without coordination.
 - Shared branches are not shared workspaces: do not have multiple agents commit to the same branch concurrently.
