@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** first SwiftUI app target and document-picker import adapter implemented; simulator build and device validation remain CI/QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion and basic local playback implemented. Simulator CI passes; physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -29,7 +29,9 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
 - It does not read Notes private storage or automate the Phone app. The user must export/share a recording and select it.
-- Playback, retention settings, share/export, transcription, cloud upload and two-way speaker verification are not implemented. Users can list and delete imported recordings.
+- Playback is local-only through AVPlayer; no network transfer is performed. Users can play/pause, list and delete imported recordings.
+- Playback is a listening aid, not proof of two-way call capture. Users must listen for both their own voice and the remote participant; channel count alone is insufficient.
+- Retention settings, share/export, transcription, cloud upload and automated two-way speaker verification are not implemented.
 - Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device. No network transfer is implemented.
