@@ -104,6 +104,72 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertTrue(reason.contains("distinct observation timestamp"))
     }
 
+    func testUserReportedRouteCannotPromotePhysicalEvidence() {
+        let context = makeContext(routeEvidence: .userReported)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("A user-reported route is not physical route evidence")
+        }
+        XCTAssertTrue(reason.contains("physically observed"))
+    }
+
+    func testAppOwnedAudioSessionRouteCannotPromotePhoneCallEvidence() {
+        let context = makeContext(routeEvidence: .appOwnedSessionObserved)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testMissingCarrierIdentityBlocksEvidencePromotion() {
+        let context = makeContext(carrier: nil)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("Carrier identity is part of the hardware/network compatibility tuple")
+        }
+        XCTAssertTrue(reason.contains("carrier"))
+    }
+
+    func testMissingCarrierBundleVersionBlocksEvidencePromotion() {
+        let context = makeContext(carrierBundle: nil)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testUSBCAccessoryMatchesIPhone15GenerationBoundary() {
+        let context = makeContext(model: "iPhone15,2", route: .wired)
+        let usbC = AccessoryCaptureProfile(
+            modelIdentifier: "USB-C-Recorder",
+            firmwareVersion: "1.0",
+            transport: .usbC
+        )
+        XCTAssertTrue(AccessoryCaptureAssessment.isCandidateTuple(context: context, accessory: usbC))
+    }
+
+    func testLightningAccessoryMatchesIPhone14GenerationBoundary() {
+        let context = makeContext(model: "iPhone14,7", route: .wired)
+        let lightning = AccessoryCaptureProfile(
+            modelIdentifier: "Lightning-Recorder",
+            firmwareVersion: "1.0",
+            transport: .lightning
+        )
+        XCTAssertTrue(AccessoryCaptureAssessment.isCandidateTuple(context: context, accessory: lightning))
+    }
+
     func testMissingOSBuildBlocksConfirmation() {
         let context = makeContext(build: nil)
         let evidence = AccessoryCompatibilityEvidence(
@@ -175,7 +241,10 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
     private func makeContext(
         build: String? = "22H",
         model: String = "iPhone16,1",
-        route: CallAudioRoute = .speaker
+        route: CallAudioRoute = .speaker,
+        routeEvidence: CallAudioRouteEvidence = .physicalTestObserved,
+        carrier: String? = "carrier.example",
+        carrierBundle: String? = "bundle-1.0"
     ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
             deviceModelIdentifier: model,
@@ -184,13 +253,16 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
             deviceRegionCode: "US",
             physicalTestCountryCode: "US",
             languageCode: "en-US",
+            carrierIdentifier: carrier,
+            carrierBundleVersion: carrierBundle,
             simConfiguration: .physicalAndESIM,
             isRoaming: false,
             networkType: .cellular5G,
             wifiCallingEnabled: false,
             volteEnabled: true,
             callDirection: .incoming,
-            audioRoute: route
+            audioRoute: route,
+            audioRouteEvidence: routeEvidence
         )
     }
 }
