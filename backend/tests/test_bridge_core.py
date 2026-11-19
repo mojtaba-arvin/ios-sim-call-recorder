@@ -224,7 +224,7 @@ class BridgeCoreTests(unittest.TestCase):
                     idempotency_key=f"unsafe-{key}",
                     session_id="session-opaque-1",
                     provider="test-provider",
-                    payload={"nested": [{"metadata": {key: "+15555550123}}]},
+                    payload={"nested": [{"metadata": {key: "+15555550123"}}]},
                 )
 
     def test_decoder_receives_the_exact_verified_request(self):
