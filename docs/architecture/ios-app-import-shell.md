@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion and basic local playback implemented. Simulator CI passes; physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback and system share/export implemented. Simulator CI passes; physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -25,13 +25,18 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups.
 10. The library lists catalog entries and lets the user delete an imported recording; missing media files are pruned from the catalog when the library loads. A failed import removes its staged copy.
 
+## Playback and export
+
+- Playback is local-only through AVPlayer. The library supports play/pause and resets the playback state when the selected item reaches its end.
+- The system share sheet exports the selected app-private audio file to a user-chosen destination or app. Export is user initiated; the app does not upload audio to a service.
+- Playback and export URLs are resolved through the catalog and checked for file existence before use.
+- Users should listen for both their own voice and the remote participant. Playback is a listening aid, not proof of two-way call capture; channel count alone is insufficient.
+
 ## Explicit limitations
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
 - It does not read Notes private storage or automate the Phone app. The user must export/share a recording and select it.
-- Playback is local-only through AVPlayer; no network transfer is performed. Users can play/pause, list and delete imported recordings.
-- Playback is a listening aid, not proof of two-way call capture. Users must listen for both their own voice and the remote participant; channel count alone is insufficient.
-- Retention settings, share/export, transcription, cloud upload and automated two-way speaker verification are not implemented.
 - Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
-- Imported audio stays on-device. No network transfer is implemented.
+- Imported audio stays on-device until the user explicitly chooses a destination in the system share sheet. No background network transfer is implemented.
+- Retention settings, transcription, cloud upload and automated two-way speaker verification remain future work.
