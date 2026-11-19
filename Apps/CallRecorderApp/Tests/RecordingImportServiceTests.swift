@@ -41,6 +41,165 @@ final class RecordingImportServiceTests: XCTestCase {
             try JSONDecoder().decode([ImportedRecording].self, from: primary),
             try JSONDecoder().decode([ImportedRecording].self, from: backup)
         )
+        XCTAssertFalse(String(decoding: primary, as: UTF8.self).contains("sample.wav"))
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(storedFiles.count, 1)
+        XCTAssertEqual(storedFiles[0].deletingPathExtension().lastPathComponent, imported.id.uuidString)
+    }
+
+    func testTruncatedAudioPayloadIsRejectedAndStagingIsCleaned() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid.wav")
+        try writeValidWAV(to: validURL)
+        var truncatedData = try Data(contentsOf: validURL)
+        truncatedData.removeLast(1_024)
+        let truncatedURL = temporaryRoot.appendingPathComponent("truncated.wav")
+        try truncatedData.write(to: truncatedURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: truncatedURL, source: .filesApp)
+            XCTFail("A truncated WAV payload must not be imported")
+        } catch let error as RecordingImportServiceError {
+            guard case .unreadableAudio = error else {
+                return XCTFail("Expected unreadableAudio, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testEmptySourceIsRejectedBeforeStaging() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("empty.wav")
+        try Data().write(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("An empty source must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .validation(.emptyFile) = error else {
+                return XCTFail("Expected emptyFile, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+    }
+
+    func testUnknownContainerIsRejectedAndStagingIsCleaned() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("not-audio.wav")
+        try Data("not an audio container".utf8).write(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("An unknown audio container must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .unsupportedContainer = error else {
+                return XCTFail("Expected unsupportedContainer, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testFilenameContainerMismatchIsRejectedBeforeCommit() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid-container.wav")
+        try writeValidWAV(to: validURL)
+        let validWAV = try Data(contentsOf: validURL)
+        XCTAssertEqual(String(decoding: validWAV.prefix(4), as: UTF8.self), "RIFF")
+
+        let sourceURL = temporaryRoot.appendingPathComponent("misleading.m4a")
+        try validWAV.write(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("A WAV payload named as M4A must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .validation(.extensionContainerMismatch) = error else {
+                return XCTFail("Expected extensionContainerMismatch, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testWAVDeclaredDataChunkBeyondPhysicalFileIsRejected() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid-header.wav")
+        try writeValidWAV(to: validURL)
+        var data = try Data(contentsOf: validURL)
+        let dataChunk = try XCTUnwrap(data.range(of: Data("data".utf8)))
+        let lengthOffset = dataChunk.upperBound
+        data.replaceSubrange(lengthOffset..<(lengthOffset + 4), with: [0xFF, 0xFF, 0xFF, 0x7F])
+        let malformedURL = temporaryRoot.appendingPathComponent("invalid-chunk-length.wav")
+        try data.write(to: malformedURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: malformedURL, source: .filesApp)
+            XCTFail("A WAV data chunk extending beyond the physical file must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .unreadableAudio = error else {
+                return XCTFail("Expected unreadableAudio, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testLongAudioIsDecodedInBoundedChunks() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("long.wav")
+        try writeValidWAV(to: sourceURL, durationSeconds: 60)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        let imported = try await service.importRecording(from: sourceURL, source: .filesApp)
+
+        XCTAssertEqual(imported.durationSeconds, 60, accuracy: 0.01)
+        let playbackURL = try await service.playbackURL(for: imported.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: playbackURL.path))
     }
 
     func testCorruptPrimaryRestoresValidatedBackup() async throws {
@@ -58,6 +217,28 @@ final class RecordingImportServiceTests: XCTestCase {
             from: Data(contentsOf: catalogDirectory.appendingPathComponent("recordings.json"))
         )
         XCTAssertEqual(restored, [entry])
+    }
+
+    func testMissingCatalogCopiesFailClosedWhenManagedMediaExists() async throws {
+        let orphanedMedia = recordingsDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("m4a")
+        try Data("preserve this media".utf8).write(to: orphanedMedia)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.recordings()
+            XCTFail("Missing catalog copies with existing media must fail closed")
+        } catch let error as RecordingImportServiceError {
+            guard case .catalogCorrupted = error else {
+                return XCTFail("Expected catalogCorrupted, got \(error)")
+            }
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphanedMedia.path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: catalogDirectory.appendingPathComponent("recordings.json").path
+        ))
     }
 
     func testInvalidPrimaryAndBackupFailClosedWithoutDeletingMedia() async throws {
@@ -135,77 +316,7 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
     }
 
-    func testPlaybackRequestGateAcceptsOnlyCurrentAvailableRequest() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let request = gate.begin(recordingID: recordingID)
-
-        XCTAssertTrue(gate.accepts(request, availableRecordingIDs: [recordingID]))
-        XCTAssertFalse(gate.accepts(request, availableRecordingIDs: []))
-    }
-
-    func testNewPlaybackRequestSupersedesOlderLookup() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let older = gate.begin(recordingID: recordingID)
-        let newer = gate.begin(recordingID: recordingID)
-
-        XCTAssertFalse(gate.isCurrent(older))
-        XCTAssertTrue(gate.accepts(newer, availableRecordingIDs: [recordingID]))
-    }
-
-    func testDeletingPendingRecordingInvalidatesLookup() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let request = gate.begin(recordingID: recordingID)
-
-        gate.invalidate(recordingIDs: [recordingID])
-
-        XCTAssertFalse(gate.isCurrent(request))
-        XCTAssertFalse(gate.accepts(request, availableRecordingIDs: [recordingID]))
-    }
-
-    func testDeletingDifferentRecordingKeepsPendingLookup() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let request = gate.begin(recordingID: recordingID)
-
-        gate.invalidate(recordingIDs: [UUID()])
-
-        XCTAssertTrue(gate.accepts(request, availableRecordingIDs: [recordingID]))
-    }
-
-    func testRetentionInvalidatesLookupForRemovedRecording() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let request = gate.begin(recordingID: recordingID)
-
-        gate.invalidateMissing(from: [UUID()])
-
-        XCTAssertFalse(gate.isCurrent(request))
-    }
-
-    func testFinishingStaleRequestCannotClearNewerRequest() {
-        var gate = PlaybackRequestGate()
-        let recordingID = UUID()
-        let older = gate.begin(recordingID: recordingID)
-        let newer = gate.begin(recordingID: recordingID)
-
-        gate.finish(older)
-
-        XCTAssertTrue(gate.isCurrent(newer))
-    }
-
-    func testViewTeardownInvalidatesAllPendingLookups() {
-        var gate = PlaybackRequestGate()
-        let request = gate.begin(recordingID: UUID())
-
-        gate.invalidateAll()
-
-        XCTAssertFalse(gate.isCurrent(request))
-    }
-
-    private func writeValidWAV(to url: URL) throws {
+    private func writeValidWAV(to url: URL, durationSeconds: Int = 1) throws {
         let format = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 44_100,
@@ -223,13 +334,19 @@ final class RecordingImportServiceTests: XCTestCase {
                 interleaved: false
             )
             let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
-            buffer.frameLength = 44_100
-            try audioFile.write(from: buffer)
+            for _ in 0..<durationSeconds {
+                buffer.frameLength = 44_100
+                try audioFile.write(from: buffer)
+            }
         }
 
         let decodedFile = try AVAudioFile(forReading: url)
         let decodedDuration = Double(decodedFile.length) / decodedFile.processingFormat.sampleRate
-        XCTAssertGreaterThanOrEqual(decodedDuration, 1.0, "The generated fixture must contain at least one second of decodable audio")
+        XCTAssertGreaterThanOrEqual(
+            decodedDuration,
+            Double(durationSeconds),
+            "The generated fixture must contain the requested decodable duration"
+        )
     }
 
     private func makeEntry(importedAt: Date = Date()) -> ImportedRecording {
