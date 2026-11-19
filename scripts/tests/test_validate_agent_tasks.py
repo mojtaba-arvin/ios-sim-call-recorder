@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from validate_agent_tasks import validate_task_graph
+from validate_agent_tasks import validate_state_transition, validate_task_graph
 
 
 def make_task(task_id: str, dependencies: list[str] | None = None) -> dict:
@@ -38,6 +38,32 @@ def make_task(task_id: str, dependencies: list[str] | None = None) -> dict:
 
 
 class AgentTaskValidatorTests(unittest.TestCase):
+    def test_state_machine_accepts_documented_transitions(self) -> None:
+        for current, target in (
+            ("queued", "running"),
+            ("queued", "blocked"),
+            ("running", "review"),
+            ("running", "failed"),
+            ("blocked", "queued"),
+            ("review", "done"),
+            ("review", "running"),
+        ):
+            with self.subTest(current=current, target=target):
+                self.assertTrue(validate_state_transition(current, target))
+
+    def test_state_machine_rejects_reopening_done_tasks(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not allowed"):
+            validate_state_transition("done", "running")
+
+    def test_resetting_running_or_failed_tasks_requires_reason(self) -> None:
+        for current in ("running", "failed"):
+            with self.subTest(current=current):
+                with self.assertRaisesRegex(ValueError, "reset_reason"):
+                    validate_state_transition(current, "queued")
+                self.assertTrue(validate_state_transition(
+                    current, "queued", reset_reason="Reassign after worker timeout"
+                ))
+
     def test_accepts_acyclic_task_graph(self) -> None:
         first = make_task("IOS-1")
         second = make_task("IOS-2", ["IOS-1"])
