@@ -158,7 +158,8 @@ final class RecordingImportServiceTests: XCTestCase {
         }
 
         let decodedFile = try AVAudioFile(forReading: url)
-        XCTAssertGreaterThanOrEqual(decodedFile.duration, 1.0, "The generated fixture must contain at least one second of decodable audio")
+        let decodedDuration = Double(decodedFile.length) / decodedFile.processingFormat.sampleRate
+        XCTAssertGreaterThanOrEqual(decodedDuration, 1.0, "The generated fixture must contain at least one second of decodable audio")
     }
 
     private func makeEntry(importedAt: Date = Date()) -> ImportedRecording {
