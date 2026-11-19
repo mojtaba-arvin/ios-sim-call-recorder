@@ -42,7 +42,7 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-    bridge-core:
+  bridge-core:
     name: Conference bridge backend tests
     needs: detect-changes
     if: needs.detect-changes.outputs.run == 'true'
