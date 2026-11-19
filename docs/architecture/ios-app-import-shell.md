@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -27,7 +27,10 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 ## Playback and export
 
-- Playback is local-only through AVPlayer. The library supports play/pause and resets the playback state when the selected item reaches its end.
+- Playback is local-only through AVPlayer. The library supports play/pause, a seek slider, elapsed/total time, and resetting the playhead when the selected item reaches its end.
+- A periodic AVPlayer time observer updates the playhead only while the user is not dragging the slider. The observer is removed before replacing or releasing its player.
+- Audio interruptions pause playback. Playback does not resume automatically after an interruption; the user must explicitly press play.
+- Disconnecting the current audio output (for example, unplugging headphones) pauses playback to avoid unexpectedly sending private audio to another output.
 - The system share sheet exports the selected app-private audio file to a user-chosen destination or app. Export is user initiated; the app does not upload audio to a service.
 - Playback and export URLs are resolved through the catalog and checked for file existence before use.
 - Users should listen for both their own voice and the remote participant. Playback is a listening aid, not proof of two-way call capture; channel count alone is insufficient.
@@ -35,7 +38,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 ## Explicit limitations
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
-- It does not read Notes private storage or automate the Phone app. The user must export/share a recording and select it.
+- It does not read Notes private storage or automate the Phone app. The user must export/share a recording from Notes or another source and select it.
 - Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device until the user explicitly chooses a destination in the system share sheet. No background network transfer is implemented.
