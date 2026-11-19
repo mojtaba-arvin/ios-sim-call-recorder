@@ -10,7 +10,8 @@ on:
       - ".github/workflows/**"
       - "AGENTS.md"
       - "README.md"
-      - "docs/engineering/**"
+      - "docs/**"
+      - "CONTRIBUTING.md"
       - "scripts/**"
   workflow_dispatch:
 
@@ -39,3 +40,5 @@ jobs:
         run: python3 scripts/validate_agent_assets.py
       - name: Validate example R&D task graph
         run: python3 scripts/validate_agent_tasks.py .agents/templates/task.example.json
+      - name: Validate Markdown links and formatting
+        run: python3 scripts/validate_docs.py
