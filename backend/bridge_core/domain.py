@@ -127,14 +127,14 @@ class BridgeSession:
         failure_code: str | None = None,
         at: datetime | None = None,
     ) -> BridgeSession:
-        if target not in _ALLOWED[self.state]:
-            raise InvalidTransition(f"{self.state.value} -> {target.value} is not allowed")
         if target is SessionState.PARTICIPANTS_JOINING and not self.all_participants_consented:
             raise ConsentRequired("every expected participant must consent before provider joins")
         if target is SessionState.RECORDING and not self.all_participants_consented:
             raise ConsentRequired(
                 "recording requires affirmative pre-join consent from every expected participant"
             )
+        if target not in _ALLOWED[self.state]:
+            raise InvalidTransition(f"{self.state.value} -> {target.value} is not allowed")
         if target is SessionState.FAILED and not failure_code:
             raise ValueError("failed sessions require a stable failure code")
         return replace(self, state=target, failure_code=failure_code, updated_at=at)
