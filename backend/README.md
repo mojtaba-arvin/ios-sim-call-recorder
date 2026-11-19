@@ -5,7 +5,7 @@ recording service and not a real PSTN provider integration.
 
 ## Included
 - Typed bridge lifecycle and guarded transitions.
-- Consent from every expected, joined participant before recording can start.
+- Pre-join consent from every expected participant, bound to immutable opaque participant references.
 - Provider-native signature verification using the exact request URL, method,
   content type, headers, original bytes and (where required) parsed form fields.
 - Provider event deduplication scoped by provider and provider account.
@@ -23,7 +23,8 @@ python -m pip install -r backend/requirements.txt
 ```
 
 Apply SQL migrations in numeric order with the deployment migration runner before starting the
-service: `0001_bridge_persistence.sql`, then `0002_provider_resources.sql`. The repository deliberately
+service: `0001_bridge_persistence.sql`, `0002_provider_resources.sql`, then
+`0003_consent_preflight.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -71,10 +72,10 @@ adapter must return `UNKNOWN` rather than execute when provider state cannot be 
 Only `NOT_APPLIED` permits execution; `APPLIED` is acknowledged without replaying the
 side effect. Provider I/O must never run inside a repository transaction.
 
-Before reconciliation, `participant.add` commands must contain a non-empty opaque `participant_ref` (at most 128 characters and no whitespace). Invalid references are dead-lettered before provider I/O so malformed outbox data cannot create an untracked provider leg.
+Before reconciliation, `conference.create` and `participant.add` commands must contain a non-empty opaque `participant_ref` (at most 128 characters and no whitespace). `conference.create` must use `recording_mode=from_start`; unsupported modes are dead-lettered before provider I/O. Both commands require persisted Conference and Call SIDs before acknowledgement.
 
 The `0002_provider_resources.sql` migration stores provider/account/session-scoped
-Conference SIDs and opaque participant-reference-to-Call-SID mappings. These identifiers
+Conference SIDs and opaque participant-reference-to-Call-SID mappings. The first `conference.create` command maps the recording-enabled first participant; later `participant.add` commands map each additional pre-consented participant. These identifiers
 are immutable for a given mapping; conflicts fail closed. Do not store phone numbers,
 provider credentials, media URLs, audio, or signatures in these tables or outbox payloads.
 
@@ -113,9 +114,7 @@ real two-way recording is proven.
 PYTHONPATH=backend python -m unittest discover -s backend/tests -v
 ```
 
-PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover rollback,
-duplicate/concurrent delivery, account-scoped event identity, atomic outbox
-insertion, concurrent claims, lease expiry, stale lease rejection and retries.
+PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected participant-reference persistence, rollback, duplicate/concurrent delivery, account-scoped event identity, atomic outbox insertion, concurrent claims, lease expiry, stale lease rejection and retries. Unit tests cover consent-before-join, recording-from-start command creation and idempotent participant-add scheduling.
 
 
 The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
