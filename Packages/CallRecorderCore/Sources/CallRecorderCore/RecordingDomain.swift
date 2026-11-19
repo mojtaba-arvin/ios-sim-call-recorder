@@ -3,6 +3,9 @@ import Foundation
 /// A capture or companion route investigated by the product.
 public enum RecordingPathway: String, CaseIterable, Hashable, Sendable {
     case nativeCompanion
+    case appleSystemCallRecording
+    case independentExternalRecorder
+    case replayKitAppCapture
     case conferenceBridge
     case carrierService
     case appOwnedVoIP
@@ -42,6 +45,16 @@ public enum CallAudioRoute: String, Hashable, Sendable {
     case unknown
 }
 
+/// Describes where a route observation came from. An app-owned AVAudioSession
+/// observation does not establish the active route of Phone.app's private
+/// cellular call session.
+public enum CallAudioRouteEvidence: String, Hashable, Sendable {
+    case unknown
+    case userReported
+    case appOwnedSessionObserved
+    case physicalTestObserved
+}
+
 /// Capability decisions are scoped to this exact environment context.
 public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let deviceModelIdentifier: String
@@ -59,6 +72,8 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let volteEnabled: Bool
     public let callDirection: CallDirection
     public let audioRoute: CallAudioRoute
+    public let audioRouteEvidence: CallAudioRouteEvidence
+    public let callParticipantCount: Int
 
     public init(
         deviceModelIdentifier: String,
@@ -75,7 +90,9 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         wifiCallingEnabled: Bool,
         volteEnabled: Bool,
         callDirection: CallDirection,
-        audioRoute: CallAudioRoute
+        audioRoute: CallAudioRoute,
+        audioRouteEvidence: CallAudioRouteEvidence = .unknown,
+        callParticipantCount: Int = 2
     ) {
         self.deviceModelIdentifier = deviceModelIdentifier
         self.operatingSystemVersion = operatingSystemVersion
@@ -92,6 +109,8 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         self.volteEnabled = volteEnabled
         self.callDirection = callDirection
         self.audioRoute = audioRoute
+        self.audioRouteEvidence = audioRouteEvidence
+        self.callParticipantCount = callParticipantCount
     }
 }
 
