@@ -1,0 +1,31 @@
+{
+  "id": "IOS-EXAMPLE",
+  "title": "Example atomic task",
+  "outcome": "An observable result that can be implemented and validated in one work session.",
+  "status": "queued",
+  "dependencies": [],
+  "owner": null,
+  "role": "implementer",
+  "scope": {
+    "in_scope": ["Apps/CallRecorderApp/Sources/Example.swift"],
+    "out_of_scope": ["Backend provider integration"],
+    "owned_paths": ["Apps/CallRecorderApp/Sources/Example.swift"]
+  },
+  "acceptance_criteria": [
+    "The requested behavior is observable and deterministic.",
+    "Failure cleanup is verified by a regression test."
+  ],
+  "risk": "medium",
+  "required_evidence_tier": "unit",
+  "validation": {
+    "commands": ["swift test --package-path Packages/CallRecorderCore"],
+    "scenarios": ["success", "invalid input", "failure cleanup"]
+  },
+  "rollback": "Revert the task-scoped commit or close the PR without merging.",
+  "evidence": {
+    "exact_head_sha": null,
+    "tests_status": "not-run",
+    "independent_review": false,
+    "documentation_updated": false
+  }
+}
