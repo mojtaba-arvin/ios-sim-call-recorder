@@ -2,7 +2,7 @@ name: Swift package checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/swift-recording-core-foundation]
   workflow_dispatch:
 
 permissions:
