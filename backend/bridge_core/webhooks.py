@@ -28,6 +28,8 @@ class NormalizedProviderEvent:
     participant_ref: str | None = None
     payload_digest: str = ""
     provider_account_id: str = "default"
+    consent_policy_version: str | None = None
+    consent_method: str | None = None
 
     def __post_init__(self):
         for name in ("provider", "provider_account_id", "event_id", "session_id"):
@@ -38,6 +40,13 @@ class NormalizedProviderEvent:
         if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED}:
             if not self.participant_ref or not self.participant_ref.strip():
                 raise ValueError("participant event requires opaque participant_ref")
+        if self.event_type is EventType.PARTICIPANT_CONSENTED:
+            if not self.consent_policy_version or not self.consent_policy_version.strip():
+                raise ValueError("consent event requires consent_policy_version")
+            if not self.consent_method or not self.consent_method.strip():
+                raise ValueError("consent event requires consent_method")
+            if not self.payload_digest:
+                raise ValueError("consent event requires a signed payload digest")
 
 
 class WebhookProcessor:
@@ -85,7 +94,16 @@ class WebhookProcessor:
             return EventApplication(session.transition(SessionState.BRIDGE_LEG_RINGING, at=at))
 
         if kind is EventType.PARTICIPANT_CONSENTED:
-            updated = session.participant_consented(event.participant_ref, at=at)
+            updated = session.participant_consented(
+                event.participant_ref,
+                provider=event.provider,
+                provider_account_id=event.provider_account_id,
+                event_id=event.event_id,
+                policy_version=event.consent_policy_version,
+                consent_method=event.consent_method,
+                evidence_digest=event.payload_digest,
+                at=at,
+            )
             commands: tuple[OutboxCommand, ...] = ()
             if updated.all_participants_consented and not session.all_participants_consented:
                 # Twilio creates a Conference when its first participant joins.
