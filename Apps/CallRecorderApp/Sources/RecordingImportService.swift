@@ -1,0 +1,452 @@
+import AVFoundation
+import CallRecorderCore
+import Foundation
+
+enum RecordingImportServiceError: LocalizedError {
+    case unsupportedContainer
+    case unreadableAudio
+    case missingFileSize
+    case sourceChangedDuringImport
+    case validation(RecordingImportValidationError)
+    case storageUnavailable
+    case recordingNotFound
+    case recordingFileMissing
+    case catalogCorrupted
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedContainer:
+            return "This audio container is not supported."
+        case .unreadableAudio:
+            return "The selected file could not be decoded as audio."
+        case .missingFileSize:
+            return "The selected file size could not be determined."
+        case .sourceChangedDuringImport:
+            return "The selected file changed while it was being imported. Please try again."
+        case .validation(let error):
+            switch error {
+            case .emptyFileName:
+                return "The selected file has no valid filename."
+            case .unsupportedFileExtension:
+                return "Choose an M4A, MP3, WAV, CAF, or AIFF audio file."
+            case .emptyFile:
+                return "The selected audio file is empty."
+            case .fileTooLarge(let maximumBytes):
+                return "The selected file exceeds the maximum size of \(maximumBytes / 1_048_576) MiB."
+            case .invalidDuration:
+                return "The selected recording has an invalid audio duration."
+            case .durationTooLong(let maximumSeconds):
+                return "The selected recording exceeds the maximum duration of \(Int(maximumSeconds / 3_600)) hours."
+            case .invalidSampleRate:
+                return "The selected file has an unsupported sample rate."
+            case .unsupportedChannelCount:
+                return "The selected file must contain one or two audio channels."
+            case .extensionContainerMismatch:
+                return "The file extension does not match its actual audio container."
+            }
+        case .storageUnavailable:
+            return "Private recording storage is unavailable."
+        case .recordingNotFound:
+            return "This recording is no longer in your library."
+        case .recordingFileMissing:
+            return "The audio file for this recording is missing."
+        case .catalogCorrupted:
+            return "The recording catalog is damaged and no valid backup is available. Audio files were left untouched."
+        }
+    }
+}
+
+struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
+    let id: UUID
+    let fileExtension: String
+    let byteCount: Int64
+    let durationSeconds: Double
+    let importedAt: Date
+}
+
+/// Owns user-mediated imports, app-private storage, catalog recovery and retention.
+actor RecordingImportService {
+    private let fileManager = FileManager.default
+    private let storageRootURL: URL?
+
+    init(storageRootURL: URL? = nil) {
+        self.storageRootURL = storageRootURL
+    }
+
+    func importRecording(
+        from sourceURL: URL,
+        source: RecordingImportSource
+    ) async throws -> ImportedRecording {
+        let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let stagingDirectory = try privateDirectory(named: "Staging")
+        let stagedURL = stagingDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(sourceURL.pathExtension)
+
+        var stagedFileExists = false
+        defer {
+            if stagedFileExists {
+                try? fileManager.removeItem(at: stagedURL)
+            }
+        }
+
+        var coordinationError: NSError?
+        var copyError: Error?
+        var sourceByteCount: Int64?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(
+            readingItemAt: sourceURL,
+            options: [],
+            error: &coordinationError
+        ) { coordinatedURL in
+            do {
+                let sourceAttributes = try fileManager.attributesOfItem(
+                    atPath: coordinatedURL.path
+                )
+                guard let byteCount = (sourceAttributes[.size] as? NSNumber)?.int64Value else {
+                    throw RecordingImportServiceError.missingFileSize
+                }
+                guard byteCount > 0 else {
+                    throw RecordingImportServiceError.validation(.emptyFile)
+                }
+                guard byteCount <= RecordingImportValidator.maximumFileSizeBytes else {
+                    throw RecordingImportServiceError.validation(
+                        .fileTooLarge(maximumBytes: RecordingImportValidator.maximumFileSizeBytes)
+                    )
+                }
+                sourceByteCount = byteCount
+                try fileManager.copyItem(at: coordinatedURL, to: stagedURL)
+                stagedFileExists = true
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let coordinationError { throw coordinationError }
+        if let copyError { throw copyError }
+        guard stagedFileExists else {
+            throw RecordingImportServiceError.storageUnavailable
+        }
+
+        let container = try AudioContainerProbe.detect(at: stagedURL)
+        let attributes = try fileManager.attributesOfItem(atPath: stagedURL.path)
+        guard let size = (attributes[.size] as? NSNumber)?.int64Value,
+              let sourceByteCount else {
+            throw RecordingImportServiceError.missingFileSize
+        }
+        guard size == sourceByteCount else {
+            throw RecordingImportServiceError.sourceChangedDuringImport
+        }
+
+        let audioFile: AVAudioFile
+        do {
+            audioFile = try AVAudioFile(forReading: stagedURL)
+        } catch {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        let sampleRate = audioFile.processingFormat.sampleRate
+        let channelCount = Int(audioFile.processingFormat.channelCount)
+        let duration = Double(audioFile.length) / sampleRate
+
+        let metadata = RecordingImportMetadata(
+            fileName: sourceURL.lastPathComponent,
+            byteCount: size,
+            durationSeconds: duration,
+            sampleRateHz: sampleRate,
+            channelCount: channelCount,
+            container: container,
+            source: source
+        )
+
+        switch RecordingImportValidator.validate(metadata) {
+        case .success:
+            break
+        case .failure(let error):
+            throw RecordingImportServiceError.validation(error)
+        }
+
+        let entry = ImportedRecording(
+            id: UUID(),
+            fileExtension: container.rawValue,
+            byteCount: size,
+            durationSeconds: duration,
+            importedAt: Date()
+        )
+        let finalURL = try recordingURL(for: entry)
+
+        try fileManager.moveItem(at: stagedURL, to: finalURL)
+        stagedFileExists = false
+
+        do {
+            var entries = try loadCatalog()
+            entries.append(entry)
+            try saveCatalog(entries)
+        } catch {
+            try? fileManager.removeItem(at: finalURL)
+            throw error
+        }
+
+        return entry
+    }
+
+    /// Performs recovery and optional retention before returning the library.
+    /// A value of zero means keep recordings indefinitely.
+    func recordings(retentionDays: Int = 0) throws -> [ImportedRecording] {
+        guard let retentionPolicy = RecordingRetentionPolicy(rawValue: retentionDays) else {
+            throw RecordingImportServiceError.storageUnavailable
+        }
+        try performMaintenance(retentionPolicy: retentionPolicy)
+        return try loadCatalog().sorted { $0.importedAt > $1.importedAt }
+    }
+
+    /// Returns only a URL belonging to a validated catalog entry in app-private storage.
+    func playbackURL(for id: UUID) throws -> URL {
+        let entries = try loadCatalog()
+        guard let entry = entries.first(where: { $0.id == id }) else {
+            throw RecordingImportServiceError.recordingNotFound
+        }
+        let url = try recordingURL(for: entry)
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw RecordingImportServiceError.recordingFileMissing
+        }
+        return url
+    }
+
+    func deleteRecording(id: UUID) throws {
+        var entries = try loadCatalog()
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+
+        let url = try recordingURL(for: entry)
+        if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
+        }
+        entries.removeAll { $0.id == id }
+        try saveCatalog(entries)
+    }
+
+    private func performMaintenance(retentionPolicy: RecordingRetentionPolicy) throws {
+        var entries = try loadCatalog()
+        let now = Date()
+
+        var retainedEntries: [ImportedRecording] = []
+        for entry in entries {
+            let url = try recordingURL(for: entry)
+            let isExpired = retentionPolicy.hasExpired(importedAt: entry.importedAt, relativeTo: now)
+            if isExpired {
+                if fileManager.fileExists(atPath: url.path) {
+                    try fileManager.removeItem(at: url)
+                }
+            } else if fileManager.fileExists(atPath: url.path) {
+                retainedEntries.append(entry)
+            }
+        }
+
+        if retainedEntries != entries {
+            try saveCatalog(retainedEntries)
+            entries = retainedEntries
+        }
+
+        // Imports are serialized by this actor. Anything left in staging after
+        // process termination is an abandoned, incomplete copy and is safe to remove.
+        try removeContents(of: privateDirectory(named: "Staging"))
+
+        // Remove only UUID-named files with known audio extensions that are not
+        // referenced by the validated catalog. Unknown files are left untouched.
+        let knownPaths = Set(try entries.map { try recordingURL(for: $0).standardizedFileURL.path })
+        let recordingsDirectory = try privateDirectory(named: "Recordings")
+        let files = try fileManager.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        for file in files {
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true,
+                  UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
+                  RecordingAudioContainer(rawValue: file.pathExtension.lowercased()) != nil,
+                  !knownPaths.contains(file.standardizedFileURL.path) else {
+                continue
+            }
+            try fileManager.removeItem(at: file)
+        }
+    }
+
+    private func removeContents(of directory: URL) throws {
+        let contents = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        for item in contents {
+            try fileManager.removeItem(at: item)
+        }
+    }
+
+    private func privateDirectory(named name: String) throws -> URL {
+        if let storageRootURL {
+            let directory = storageRootURL.appendingPathComponent(name, isDirectory: true)
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            return directory
+        }
+
+        guard let applicationSupport = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw RecordingImportServiceError.storageUnavailable
+        }
+
+        var directory = applicationSupport.appendingPathComponent(
+            "CallRecorder/\(name)",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directory.path
+        )
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try directory.setResourceValues(resourceValues)
+        return directory
+    }
+
+    private func catalogURL() throws -> URL {
+        try privateDirectory(named: "Catalog")
+            .appendingPathComponent("recordings.json")
+    }
+
+    private func catalogBackupURL() throws -> URL {
+        try privateDirectory(named: "Catalog")
+            .appendingPathComponent("recordings.json.backup")
+    }
+
+    private func decodeAndValidateCatalog(at url: URL) throws -> [ImportedRecording] {
+        let data = try Data(contentsOf: url)
+        let entries = try JSONDecoder().decode([ImportedRecording].self, from: data)
+        try validateCatalog(entries)
+        return entries
+    }
+
+    private func validateCatalog(_ entries: [ImportedRecording]) throws {
+        var identifiers = Set<UUID>()
+        for entry in entries {
+            guard identifiers.insert(entry.id).inserted,
+                  RecordingAudioContainer(rawValue: entry.fileExtension.lowercased()) != nil,
+                  entry.fileExtension == entry.fileExtension.lowercased(),
+                  entry.byteCount > 0,
+                  entry.byteCount <= RecordingImportValidator.maximumFileSizeBytes,
+                  entry.durationSeconds.isFinite,
+                  entry.durationSeconds > 0,
+                  entry.durationSeconds <= RecordingImportValidator.maximumDurationSeconds,
+                  entry.importedAt.timeIntervalSince1970.isFinite else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
+        }
+    }
+
+    private func loadCatalog() throws -> [ImportedRecording] {
+        let primary = try catalogURL()
+        let backup = try catalogBackupURL()
+        guard fileManager.fileExists(atPath: primary.path) else {
+            if fileManager.fileExists(atPath: backup.path) {
+                let recovered = try decodeAndValidateCatalog(at: backup)
+                try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+                return recovered
+            }
+            return []
+        }
+
+        do {
+            return try decodeAndValidateCatalog(at: primary)
+        } catch {
+            guard fileManager.fileExists(atPath: backup.path) else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
+            let recovered = try decodeAndValidateCatalog(at: backup)
+            try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+            return recovered
+        }
+    }
+
+    private func saveCatalog(_ entries: [ImportedRecording]) throws {
+        try validateCatalog(entries)
+        let data = try JSONEncoder().encode(entries)
+        let primary = try catalogURL()
+        let backup = try catalogBackupURL()
+
+        if fileManager.fileExists(atPath: primary.path) {
+            // Preserve the last known-good snapshot before atomically replacing it.
+            let current = try decodeAndValidateCatalog(at: primary)
+            let backupData = try JSONEncoder().encode(current)
+            try backupData.write(to: backup, options: .atomic)
+        } else {
+            // Seed recovery from the first committed catalog, not only later updates.
+            try data.write(to: backup, options: .atomic)
+        }
+        try data.write(to: primary, options: .atomic)
+    }
+
+    private func recordingURL(for entry: ImportedRecording) throws -> URL {
+        guard let container = RecordingAudioContainer(rawValue: entry.fileExtension),
+              entry.fileExtension == entry.fileExtension.lowercased() else {
+            throw RecordingImportServiceError.catalogCorrupted
+        }
+        return try privateDirectory(named: "Recordings")
+            .appendingPathComponent(entry.id.uuidString)
+            .appendingPathExtension(container.rawValue)
+    }
+}
+
+private enum AudioContainerProbe {
+    static func detect(at url: URL) throws -> RecordingAudioContainer {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let header = try handle.read(upToCount: 12) ?? Data()
+
+        if header.count >= 12 {
+            let riff = String(decoding: header[0..<4], as: UTF8.self)
+            let wave = String(decoding: header[8..<12], as: UTF8.self)
+            if riff == "RIFF", wave == "WAVE" { return .wav }
+
+            let form = String(decoding: header[0..<4], as: UTF8.self)
+            let formType = String(decoding: header[8..<12], as: UTF8.self)
+            if form == "FORM", formType == "AIFF" || formType == "AIFC" {
+                return .aiff
+            }
+
+            let atom = String(decoding: header[4..<8], as: UTF8.self)
+            if atom == "ftyp" { return .m4a }
+        }
+
+        if header.count >= 4, String(decoding: header[0..<4], as: UTF8.self) == "caff" {
+            return .caf
+        }
+
+        if header.count >= 3,
+           String(decoding: header[0..<3], as: UTF8.self) == "ID3" {
+            return .mp3
+        }
+
+        if header.count >= 2,
+           header[0] == 0xFF,
+           header[1] & 0xE0 == 0xE0 {
+            return .mp3
+        }
+
+        throw RecordingImportServiceError.unsupportedContainer
+    }
+}
