@@ -92,8 +92,7 @@ class AgentTaskValidatorTests(unittest.TestCase):
         errors = validate_task_graph([task])
         self.assertTrue(any("exact_head_sha" in error for error in errors))
         self.assertTrue(any("successful exact-head tests" in error for error in errors))
-        self.assertTrue(any("independent review" in error for error in errors))
-        self.assertTrue(any("reviewer identity" in error for error in errors))
+        self.assertTrue(any("review_mode" in error for error in errors))
         self.assertTrue(any("Actions run URL" in error for error in errors))
         self.assertTrue(any("documentation status" in error for error in errors))
 
@@ -102,8 +101,8 @@ class AgentTaskValidatorTests(unittest.TestCase):
             "ci_run_sha": "a" * 40,
             "tests_status": "success",
             "ci_run_url": "https://github.com/example/repo/actions/runs/123",
-            "independent_review": True,
-            "reviewer": "independent-reviewer",
+            "review_mode": "owner_authorized_automated",
+            "owner_authorization": "Repository owner explicitly authorized automated review; this is not represented as independent human approval.",
             "documentation_updated": True,
         }
         self.assertEqual(validate_task_graph([task]), [])
@@ -116,8 +115,8 @@ class AgentTaskValidatorTests(unittest.TestCase):
             "ci_run_sha": "b" * 40,
             "tests_status": "success",
             "ci_run_url": "https://github.com/example/repo/actions/runs/123",
-            "independent_review": True,
-            "reviewer": "independent-reviewer",
+            "review_mode": "owner_authorized_automated",
+            "owner_authorization": "Repository owner explicitly authorized automated review; this is not represented as independent human approval.",
             "documentation_updated": True,
         }
         errors = validate_task_graph([task])
@@ -132,8 +131,8 @@ class AgentTaskValidatorTests(unittest.TestCase):
             "ci_run_sha": "a" * 40,
             "tests_status": "success",
             "ci_run_url": "https://github.com/example/repo/actions/runs/123",
-            "independent_review": True,
-            "reviewer": "independent-reviewer",
+            "review_mode": "owner_authorized_automated",
+            "owner_authorization": "Repository owner explicitly authorized automated review; this is not represented as independent human approval.",
             "documentation_updated": True,
         }
         errors = validate_task_graph([prerequisite, dependent])
