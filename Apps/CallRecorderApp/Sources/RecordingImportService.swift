@@ -80,7 +80,6 @@ actor RecordingImportService {
         }
 
         let stagingDirectory = try privateDirectory(named: "Staging")
-        let recordingsDirectory = try privateDirectory(named: "Recordings")
         let stagedURL = stagingDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(sourceURL.pathExtension)
@@ -263,7 +262,9 @@ actor RecordingImportService {
             options: [.skipsHiddenFiles]
         )
         for file in files {
-            guard UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true,
+                  UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
                   RecordingAudioContainer(rawValue: file.pathExtension.lowercased()) != nil,
                   !knownPaths.contains(file.standardizedFileURL.path) else {
                 continue
