@@ -43,7 +43,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 |---:|---|---|---|---|
 | #1 | `docs/recording-pathways-research` | `bb50671edc4301a6605bcc2baa06c709e5c8dec3` | `main` | Independent |
 | #7 | `feat/swift-recording-core-foundation` | `8aa1fed83e1baa5484a91ae6727a6e54a58abaf9` | `main` | Independent |
-| #9 | `chore/agent-git-engineering-governance` | `5975ce5ecfc2bc3475edf14dcb1f170df0fe8164` | `main` | Independent |
+| #9 | `chore/agent-git-engineering-governance` | `b26e5240ba9c20a863b9d06019db220984757913` | `main` | Independent |
 | #11 | `feat/conference-bridge-backend-core` | `ea1de3054afaf63930a9a623894e555dfd0412f4` | `main` | Independent |
 | #13 | `feat/twilio-webhook-signature-adapter` | `8b9297a27c0b0a4e575a2e56910f9ef61e37133c` | #11 | Backend stack |
 | #15 | `feat/postgres-transactional-outbox` | `ab22b8d79086cbb7e2ffb91f9a871dec024e42a6` | #13 | Backend stack |
@@ -63,7 +63,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
 | #37 | `feat/accessory-compatibility-assessment` | `131474f9b4aaa8f142133eaee484d58e077e3bd3` | #19 | Accessory compatibility/evidence gate |
 | #38 | `fix/ios-pending-playback-request-invalidation` | `8952c356e8fed25704d2aef65ec935a5c7751e77` | #27 | Playback lifecycle race fix |
-| #28 | `chore/agent-rd-skills-and-templates` | `eb2da7e697b05adbdf360b5fd696900801e80f3f` | #9 | Governance stack (head before this map refresh) |
+| #28 | `chore/agent-rd-skills-and-templates` | `e447fa74d4fcab3352bcb08b372eb069b4fe0663` | #9 | Governance stack (latest synchronized head) |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
 
@@ -98,8 +98,12 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 ## CI and branch hygiene refresh (2026-11-19)
 
 - PR #9 now centralizes four path-scoped workflows: Swift/audio analyzer checks, backend tests, iOS Simulator build and repository policy validation. The Swift workflow covers `Packages/CallRecorderCore/**` and the WAV analyzer source/tests; backend CI covers `backend/**`; macOS build covers app sources, package dependencies and `project.yml`; policy CI covers workflows, validators, agent instructions and tests.
-- These workflows intentionally do not trigger on edits to their own workflow files. Such changes are validated by the policy workflow, avoiding expensive false-positive runs when a new workflow is introduced without its corresponding source tree.
-- Backend Python dependency installation now uses the setup-python pip cache keyed by `backend/requirements.txt`.
-- PR #9 current head at this snapshot: `97a73c853eee1dff28fea026cd895da16b7c58b5`. Policy run #44515351015 was in progress at map update time; do not mark it green until its exact-head conclusion is fetched.
+- Swift core and WAV analyzer checks are separate workflows, so a change in one no longer starts the other.
+- Backend dependency installation now uses the setup-python pip cache keyed by `backend/requirements.txt`; the previous `--no-cache-dir` flag was removed because it bypassed that cache.
+- Each expensive source workflow has a lightweight Ubuntu change-detection job that diffs the PR merge ref against its exact base SHA. This is required because newly introduced workflow files were observed to start even when their source-path filters did not match. The detector gates the Swift, analyzer, backend and macOS build jobs; `workflow_dispatch` deliberately bypasses the gate.
+- The macOS build avoids installing XcodeGen when it is already present and uses quiet xcodebuild output. On the observed macOS 15 runner XcodeGen was not preinstalled, so the install step still runs there.
+- Exact-head repository-policy run #44517272385 passed on PR #9 SHA `b26e5240ba9c20a863b9d06019db220984757913`. It validated the workflow guardrails and validator tests.
+- Exact-head repository-policy run #44517418342 passed on PR #28 SHA `e447fa74d4fcab3352bcb08b372eb069b4fe0663`; workflow guardrails, all agent-asset/task validators and their regression tests passed.
+- The earlier workflow-addition runs #44515146779 (iOS) and #44515131676 (Backend) failed before build/test execution because PR #9's base did not yet contain `project.yml` or `backend/requirements.txt`. They are completed failures, not queued runs. The new preflight gate prevents this false-positive work.
 - PR #39 converts the previously untracked research branch into a draft documentation PR; its contract is proposal-only and does not prove provider or carrier compatibility.
-- Branch audit found 27 branches total: 25 are heads of open PRs, one is `main`, and `feat/ios-recording-retention-catalog-recovery` is the only orphan. It is superseded by the active `-v2` PR #25 branch, is not a base/head of any open PR, and has no commits ahead of `main`; safe to delete. The connected GitHub actions do not expose delete-ref, so repository owner must run the supplied `gh api -X DELETE ...` command.
+- Branch audit found 27 branches total: 25 are heads of open PRs, one is `main`, and `feat/ios-recording-retention-catalog-recovery` is the only branch not referenced by an open PR. Its head is `06b4ada8fb3120e9ffd11f6a500635f110afff12`; it has six commits not present in the v2 branch's ancestry, so the earlier claim that it had no commits ahead of `main` was incorrect. The retention policy source is identical in both branches; the v2 implementation adds a regular-file check during orphan cleanup, propagates refresh failures in the UI and updates the architecture documentation. The old branch's behavior is superseded by active PR #25, so deletion is reasonable after preserving the head SHA above. The connected GitHub actions do not expose delete-ref; repository owner must run the supplied `gh api -X DELETE ...` command.
