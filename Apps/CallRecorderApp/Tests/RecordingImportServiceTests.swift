@@ -43,6 +43,48 @@ final class RecordingImportServiceTests: XCTestCase {
         )
     }
 
+    func testTruncatedAudioPayloadIsRejectedAndStagingIsCleaned() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid.wav")
+        try writeValidWAV(to: validURL)
+        var truncatedData = try Data(contentsOf: validURL)
+        truncatedData.removeLast(1_024)
+        let truncatedURL = temporaryRoot.appendingPathComponent("truncated.wav")
+        try truncatedData.write(to: truncatedURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: truncatedURL, source: .filesApp)
+            XCTFail("A truncated WAV payload must not be imported")
+        } catch let error as RecordingImportServiceError {
+            guard case .unreadableAudio = error else {
+                return XCTFail("Expected unreadableAudio, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testLongAudioIsDecodedInBoundedChunks() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("long.wav")
+        try writeValidWAV(to: sourceURL, durationSeconds: 60)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        let imported = try await service.importRecording(from: sourceURL, source: .filesApp)
+
+        XCTAssertEqual(imported.durationSeconds, 60, accuracy: 0.01)
+        let playbackURL = try await service.playbackURL(for: imported.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: playbackURL.path))
+    }
+
     func testCorruptPrimaryRestoresValidatedBackup() async throws {
         let entry = makeEntry()
         try writeCatalog([entry], named: "recordings.json.backup")
@@ -135,7 +177,7 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
     }
 
-    private func writeValidWAV(to url: URL) throws {
+    private func writeValidWAV(to url: URL, durationSeconds: Int = 1) throws {
         let format = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 44_100,
@@ -153,13 +195,19 @@ final class RecordingImportServiceTests: XCTestCase {
                 interleaved: false
             )
             let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
-            buffer.frameLength = 44_100
-            try audioFile.write(from: buffer)
+            for _ in 0..<durationSeconds {
+                buffer.frameLength = 44_100
+                try audioFile.write(from: buffer)
+            }
         }
 
         let decodedFile = try AVAudioFile(forReading: url)
         let decodedDuration = Double(decodedFile.length) / decodedFile.processingFormat.sampleRate
-        XCTAssertGreaterThanOrEqual(decodedDuration, 1.0, "The generated fixture must contain at least one second of decodable audio")
+        XCTAssertGreaterThanOrEqual(
+            decodedDuration,
+            Double(durationSeconds),
+            "The generated fixture must contain the requested decodable duration"
+        )
     }
 
     private func makeEntry(importedAt: Date = Date()) -> ImportedRecording {
