@@ -25,9 +25,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install XcodeGen only when missing
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build iOS simulator app
-        run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -quiet -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
