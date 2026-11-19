@@ -168,6 +168,33 @@ class DispatcherTests(unittest.TestCase):
             "CA" + "e" * 32,
         )
 
+    def test_invalid_participant_reference_is_dead_lettered_before_provider_io(self):
+        invalid_references = (None, "", "   ", "participant ref", "x" * 129)
+        for participant_ref in invalid_references:
+            with self.subTest(participant_ref=participant_ref):
+                command = leased_command(
+                    participant_ref=participant_ref,
+                    command_type="participant.add",
+                )
+                repo = FakeRepository([command])
+                adapter = FakeAdapter(
+                    ReconciliationResult(ReconciliationState.NOT_APPLIED),
+                    ProviderExecutionResult(call_sid="CA" + "f" * 32),
+                )
+                dispatcher = OutboxCommandDispatcher(
+                    repository=repo,
+                    adapters={("twilio", "account-opaque"): adapter},
+                    worker_id="worker-test",
+                )
+
+                results = dispatcher.dispatch_once()
+
+                self.assertEqual(results[0].outcome, "deferred")
+                self.assertEqual(adapter.reconcile_calls, [])
+                self.assertEqual(adapter.execute_calls, [])
+                self.assertEqual(repo.failed[0][2], "participant_reference_invalid")
+                self.assertTrue(repo.terminals[0])
+
     def test_create_command_without_provider_resource_is_not_acknowledged(self):
         command = leased_command(command_type="conference.create")
         repo = FakeRepository([command])
