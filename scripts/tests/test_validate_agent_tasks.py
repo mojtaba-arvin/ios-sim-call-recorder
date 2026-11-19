@@ -99,6 +99,7 @@ class AgentTaskValidatorTests(unittest.TestCase):
 
         task["evidence"] = {
             "exact_head_sha": "a" * 40,
+            "ci_run_sha": "a" * 40,
             "tests_status": "success",
             "ci_run_url": "https://github.com/example/repo/actions/runs/123",
             "independent_review": True,
@@ -107,12 +108,28 @@ class AgentTaskValidatorTests(unittest.TestCase):
         }
         self.assertEqual(validate_task_graph([task]), [])
 
+    def test_done_task_rejects_ci_run_from_a_different_sha(self) -> None:
+        task = make_task("IOS-1")
+        task["status"] = "done"
+        task["evidence"] = {
+            "exact_head_sha": "a" * 40,
+            "ci_run_sha": "b" * 40,
+            "tests_status": "success",
+            "ci_run_url": "https://github.com/example/repo/actions/runs/123",
+            "independent_review": True,
+            "reviewer": "independent-reviewer",
+            "documentation_updated": True,
+        }
+        errors = validate_task_graph([task])
+        self.assertTrue(any("CI run SHA must match exact_head_sha" in error for error in errors))
+
     def test_done_task_requires_all_dependencies_to_be_done(self) -> None:
         prerequisite = make_task("IOS-1")
         dependent = make_task("IOS-2", ["IOS-1"])
         dependent["status"] = "done"
         dependent["evidence"] = {
             "exact_head_sha": "a" * 40,
+            "ci_run_sha": "a" * 40,
             "tests_status": "success",
             "ci_run_url": "https://github.com/example/repo/actions/runs/123",
             "independent_review": True,
