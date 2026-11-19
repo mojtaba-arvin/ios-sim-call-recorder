@@ -53,6 +53,18 @@ Acceptance must test both voices independently, clipping, echo, room noise, dist
 
 A USB-C or Lightning microphone/interface is not automatically a call recorder. It may only expose microphone input or app-owned audio. A viable accessory must prove that it receives both call directions through a documented, supported route, and that the resulting recording can be exported to the app. Validate exact iPhone model, connector, adapter, accessory firmware, call route and iOS version.
 
+### Contact / vibration-conduction recorders
+
+A more concrete accessory class has emerged: standalone recorders that attach to the back of the iPhone and use a vibration/contact sensor to capture sound conducted through the handset body while the call is played through the phone speaker.
+
+- PLAUD Note documents a dedicated Phone Call Recording mode and says its vibration-conduction sensor captures the call through the phone speaker. Its support guidance requires attaching the device to the phone, increasing handset volume, and not using wired or wireless earphones in this mode. PLAUD Note Pro also documents a contact sensor for phone-call recording.
+- PLAUD NotePin / NotePin S are not equivalent candidates: PLAUD says these models lack the required vibration-conduction sensor and do not support its dedicated phone-call mode.
+- Tovel AI Card is another magnetic-back recorder marketed for both-side call capture without Bluetooth or an app running during the call. The public material reviewed describes the workflow but does not provide enough technical detail to treat its mechanism or compatibility as independently established.
+
+These are hardware-owned recording paths, not iOS app audio capture. They may avoid Lightning/USB-C audio protocol dependencies, but they remain dependent on the iPhone's acoustic/mechanical design, speaker volume, case thickness, attachment position, and whether the user is using an earpiece/headphones. Do not infer that the accessory's audio file is two-channel or speaker-separated.
+
+**Validation candidates (not certified):** PLAUD Note, PLAUD Note Pro, and Tovel AI Card. For each exact model/firmware, verify both speech directions, call direction, receiver vs speaker route, volume, case/no-case, handset model/generation, and earphone incompatibility. Require three repeated calls per positive configuration and import the produced file into the app. Do not add NotePin variants to the call-recording compatibility list unless a manufacturer documents a relevant sensor and mode.
+
 ### Bluetooth accessories
 
 Bluetooth HFP is a call audio route, not a public third-party API for tapping Phone.app's call stream. A purpose-built accessory may record internally, but the iOS app must not assume it can receive both directions from the Bluetooth route. Validate the accessory's own recording and import/export mechanism separately.
@@ -63,6 +75,12 @@ Bluetooth HFP is a call audio route, not a public third-party API for tapping Ph
 - AVAudioSession is the app's audio-session interface. Apple DTS explains that the app that owns a call's audio stream controls that stream; a third-party app cannot read another app's native call.
 - Audio interruptions are normal system behavior. A recording app must observe interruption notifications and cannot assume microphone capture continues when Phone.app owns the call audio session.
 - Apple's Accessibility "Add Audio in Calls" capability is for injecting app audio into a call after user enablement; it is not a receive/record API for the remote party.
+
+## Additional Apple audio features: scope boundaries
+
+- Apple's Local Capture feature provides local recording controls for audio/video capture in supported apps and websites, including videoconference scenarios. It is useful for app-owned or browser-based conference workflows, but Apple's guide does not describe it as a way to capture the private native Phone.app cellular-call stream. Keep it separate from native SIM recording.
+- Apple's AVAudioSession documentation explicitly says an app may use playback while another app hosts a call, but the app is not permitted to capture the active call's microphone; attempts to activate record or play-and-record while another app hosts a call can fail with insufficient priority.
+- The iOS 18.2 "Add Audio in Calls" API is an outbound microphone-injection capability after explicit system-level user enablement. It does not expose the far-end receive stream and must not be presented as a recording API.
 
 ## Device and carrier compatibility dimensions
 
@@ -112,3 +130,10 @@ Do not infer model support from a marketing family name. For Apple-native record
 - Audio interruption handling: https://developer.apple.com/documentation/avfaudio/handling-audio-interruptions
 - Apple Voice Memos with built-in/external microphones: https://support.apple.com/guide/iphone/make-a-recording-iph4d2a39a3b/27/ios
 - Apple Add Audio in Calls (injection, not capture): https://developer.apple.com/documentation/avfaudio/adding-synthesized-speech-to-calls
+- Apple AVAudioSession setActive limitations while another app hosts a call: https://developer.apple.com/documentation/AVFAudio/AVAudioSession/setActive(_:options:)
+- Apple Local Capture for app/browser capture: https://support.apple.com/guide/iphone/improve-audio-and-record-video-calls-iph8dc8a5c3c/27/ios
+- PLAUD Note call-recording mode and vibration-conduction sensor: https://support.plaud.ai/hc/en-us/articles/50837232018585-What-is-the-difference-between-Note-Recording-and-Phone-Call-Recording
+- PLAUD Note call-recording setup: https://support.plaud.ai/hc/en-us/articles/50826681209113-Start-recording
+- PLAUD Note earphone limitation: https://support.plaud.ai/hc/en-us/articles/50837313885337-Can-I-use-headphones-earphones-when-I-record-a-phone-call-with-Plaud-Note
+- PLAUD Note Pro contact sensor: https://support.plaud.ai/hc/en-us/articles/50947244050201-Start-recording
+- Tovel AI Card product description (manufacturer claims; not independent validation): https://launch.tovel.ai/call-recorder-iphone
