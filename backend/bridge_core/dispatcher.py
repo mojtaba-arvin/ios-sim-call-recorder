@@ -140,6 +140,8 @@ class OutboxCommandDispatcher:
                 # Reject malformed references before any provider reconciliation or
                 # side effect; otherwise an invalid command could create an orphan leg.
                 raise ProviderOperationError("participant_reference_invalid", retryable=False)
+            if command.command_type == "conference.create" and command.payload.get("recording_mode") != "from_start":
+                raise ProviderOperationError("conference_recording_mode_invalid", retryable=False)
 
             # Provider I/O occurs after the outbox lease transaction has committed.
             # If the mapping is absent (crash after remote create), the adapter must
@@ -172,6 +174,13 @@ class OutboxCommandDispatcher:
                 )
                 return DispatchResult(str(command.command_id), "reconciliation_required")
 
+            if (
+                command.command_type == "participant.add"
+                and reconciliation.state is ReconciliationState.NOT_APPLIED
+                and not conference_sid
+            ):
+                raise ProviderOperationError("provider_conference_sid_missing", retryable=True)
+
             if reconciliation.state is ReconciliationState.NOT_APPLIED:
                 execution = adapter.execute(
                     command, conference_sid=conference_sid, call_sid=call_sid,
@@ -182,10 +191,10 @@ class OutboxCommandDispatcher:
                 conference_sid = reconciliation.conference_sid or conference_sid
                 call_sid = reconciliation.call_sid or call_sid
 
-            if command.command_type == "conference.create" and not conference_sid:
-                raise ProviderOperationError("provider_conference_sid_missing", retryable=True)
-            if command.command_type == "participant.add" and (not isinstance(participant_ref, str) or not call_sid):
-                raise ProviderOperationError("provider_participant_sid_missing", retryable=True)
+            if command.command_type == "conference.create" and (not conference_sid or not call_sid):
+                raise ProviderOperationError("provider_conference_or_participant_sid_missing", retryable=True)
+            if command.command_type == "participant.add" and (not conference_sid or not call_sid):
+                raise ProviderOperationError("provider_conference_or_participant_sid_missing", retryable=True)
             if conference_sid:
                 self._repository.put_provider_resource(
                     command.provider, command.provider_account_id,
