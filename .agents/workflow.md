@@ -84,3 +84,11 @@ Do not promote evidence from one tier to another.
 - Inspect job steps and test summaries; distinguish setup, build, test execution and test success.
 - If a later documentation-only or metadata-only commit changes the PR head, either obtain fresh required checks or clearly state that the latest validation belongs to the previous code SHA.
 - A queued, pending, cancelled or skipped run is not a pass.
+
+
+## Machine-readable task contracts
+
+- Use `.agents/templates/task.example.json` as the starting schema for atomic work items.
+- Validate dependencies, cycles, status-specific fields and done-state evidence with `python3 scripts/validate_agent_tasks.py <task-files-or-directory>`.
+- The policy workflow validates the example contract and runs the task-validator regression suite.
+- The validator is structural: it does not execute tests, authenticate reviewers or query GitHub. The orchestrator must still verify exact-head CI and independent review before setting `done`.
