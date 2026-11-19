@@ -25,7 +25,9 @@
   "evidence": {
     "exact_head_sha": null,
     "tests_status": "not-run",
+    "ci_run_url": null,
     "independent_review": false,
+    "reviewer": null,
     "documentation_updated": false
   }
 }
