@@ -292,7 +292,7 @@ actor RecordingImportService {
             throw RecordingImportServiceError.storageUnavailable
         }
 
-        let directory = applicationSupport.appendingPathComponent(
+        var directory = applicationSupport.appendingPathComponent(
             "CallRecorder/\(name)",
             isDirectory: true
         )
