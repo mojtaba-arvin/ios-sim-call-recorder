@@ -2,7 +2,7 @@ name: Repository policy checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, chore/agent-git-engineering-governance]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Test workflow policy validator
+      - name: Test workflow and agent asset validators
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Validate workflow guardrails
         run: python3 scripts/validate_repo_policy.py
+      - name: Validate agent roles, skills and templates
+        run: python3 scripts/validate_agent_assets.py
