@@ -1,0 +1,103 @@
+import Foundation
+
+/// A privacy-safe summary of one consented physical validation attempt.
+/// It deliberately stores no audio, phone number, contact or media URL.
+public struct AccessoryCaptureTrial: Equatable, Sendable {
+    public let attemptIdentifier: String
+    public let observedAt: Date
+    public let consentConfirmed: Bool
+    public let recordingNoticeConfirmed: Bool
+    public let localSpeechIntelligible: Bool
+    public let remoteSpeechIntelligible: Bool
+    public let artifactIntegrityVerified: Bool
+
+    public init(
+        attemptIdentifier: String,
+        observedAt: Date,
+        consentConfirmed: Bool,
+        recordingNoticeConfirmed: Bool,
+        localSpeechIntelligible: Bool,
+        remoteSpeechIntelligible: Bool,
+        artifactIntegrityVerified: Bool
+    ) {
+        self.attemptIdentifier = attemptIdentifier
+        self.observedAt = observedAt
+        self.consentConfirmed = consentConfirmed
+        self.recordingNoticeConfirmed = recordingNoticeConfirmed
+        self.localSpeechIntelligible = localSpeechIntelligible
+        self.remoteSpeechIntelligible = remoteSpeechIntelligible
+        self.artifactIntegrityVerified = artifactIntegrityVerified
+    }
+
+    public var isPositive: Bool {
+        consentConfirmed
+            && recordingNoticeConfirmed
+            && localSpeechIntelligible
+            && remoteSpeechIntelligible
+            && artifactIntegrityVerified
+    }
+}
+
+public enum AccessoryEvidenceStatus: Equatable, Sendable {
+    case confirmed(positiveTrials: Int)
+    case insufficient(reason: String)
+}
+
+/// Evidence is scoped to one immutable device + OS + SIM + network + route
+/// context and one accessory model/firmware. Three successful calls are
+/// required; a single failed or incomplete attempt blocks promotion.
+public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
+    public static let requiredPositiveTrials = 3
+
+    public let context: DeviceCompatibilityContext
+    public let accessory: AccessoryCaptureProfile
+    public let trials: [AccessoryCaptureTrial]
+
+    public init(
+        context: DeviceCompatibilityContext,
+        accessory: AccessoryCaptureProfile,
+        trials: [AccessoryCaptureTrial]
+    ) {
+        self.context = context
+        self.accessory = accessory
+        self.trials = trials
+    }
+
+    public var status: AccessoryEvidenceStatus {
+        let model = accessory.modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firmware = accessory.firmwareVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, !firmware.isEmpty else {
+            return .insufficient(reason: "Exact accessory model and firmware are required.")
+        }
+
+        let device = context.deviceModelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let os = context.operatingSystemVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let build = context.operatingSystemBuild?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !device.isEmpty, !os.isEmpty, !build.isEmpty else {
+            return .insufficient(reason: "Exact iPhone model, iOS version and iOS build are required.")
+        }
+
+        guard trials.count >= Self.requiredPositiveTrials else {
+            return .insufficient(reason: "At least three repeated physical-device calls are required.")
+        }
+
+        let identifiers = trials.map {
+            $0.attemptIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard identifiers.allSatisfy({ !$0.isEmpty }),
+              Set(identifiers).count == identifiers.count else {
+            return .insufficient(reason: "Every physical attempt must have a unique, non-empty opaque identifier.")
+        }
+
+        guard trials.allSatisfy(\.isPositive) else {
+            return .insufficient(reason: "Every recorded attempt must confirm consent, notice, intelligible local and remote speech, and artifact integrity.")
+        }
+
+        return .confirmed(positiveTrials: trials.count)
+    }
+
+    public var isConfirmed: Bool {
+        if case .confirmed = status { return true }
+        return false
+    }
+}
