@@ -19,9 +19,10 @@ main
 │       │               └── #26 feat/ios-storage-integration-tests
 │       │                   └── #27 feat/ios-playback-controls-interruption-handling
 │       │                       ├── #31 feat/ios-library-accessibility-states
-││                       └── #32 fix/ios-import-full-decode-validation
+│                       └── #32 fix/ios-import-full-decode-validation
 │       ├── #29 test/audio-quality-analysis-tooling
 │       └── #30 feat/recording-session-cancellation
+│           └── #34 fix/core-adapter-failure-cleanup
 ├── #9  chore/agent-git-engineering-governance
 │   └── #28 chore/agent-rd-skills-and-templates
 └── #11 feat/conference-bridge-backend-core
@@ -53,14 +54,14 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
 | #32 | `fix/ios-import-full-decode-validation` | `80e8d4b59e007d9593e070d56c98d4d597dfb3b7` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
-| #35 | `docs/product-readme-and-status` | `e471d90221c386e6185f890abe07f7562ea076c8` | `main` | Independent product/release documentation |
-| #28 | `chore/agent-rd-skills-and-templates` | `99e949bf3a52ce43978ceb3cd765e17ece5c7861` | #9 | Governance stack |
+| #35 | `docs/product-readme-and-status` | `d0d8ed12f8a90ffb48c3a36613dcda488c1262a0` | `main` | Independent product/release documentation |
+| #28 | `chore/agent-rd-skills-and-templates` | `de44b1f48006bc8f5c928fb23587ea3796d04a82` | #9 | Governance stack |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
-| #30 | `feat/recording-session-cancellation` | `c399f35f6c416a5957e6f39d7191367e772c03d7` | #19 | Core lifecycle |
+| #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
 
 ## Integration order
 
-1. Review and integrate independent foundations only after their own CI/review gates: #1, #7, #9 and #11.
+1. Review and integrate independent foundations only after their own CI/review gates: #1, #7, #9, #11 and #35.
 2. Integrate governance extension #28 after #9.
 3. Integrate backend stack in order #13 → #15 → #17 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
