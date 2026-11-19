@@ -22,7 +22,7 @@ The machine-readable task contract in `.agents/templates/task.example.json` is t
 - failed → queued only after recording the corrective action
 - done is terminal; follow-up work receives a new task ID
 
-The validator checks status-specific fields, unique IDs, dependency existence and cycles. It does not execute work, authenticate a reviewer or verify a GitHub run itself; those remain orchestrator/CI responsibilities.
+The validator checks status-specific fields, unique IDs, dependency existence and cycles. Its `validate_state_transition(current, target, reset_reason=...)` function enforces the documented state machine and requires a corrective reason when resetting a running or failed task. It does not execute work, authenticate a reviewer or verify a GitHub run itself; those remain orchestrator/CI responsibilities.
 
 ## Atomicity and ownership
 
