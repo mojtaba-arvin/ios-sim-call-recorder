@@ -384,7 +384,7 @@ private actor GatedCancellationAdapter: RecordingPathwayAdapter {
     func connect(sessionID: UUID) async throws {}
 
     func startCapture(sessionID: UUID) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             startContinuation = continuation
             enteredContinuation?.resume()
             enteredContinuation = nil
