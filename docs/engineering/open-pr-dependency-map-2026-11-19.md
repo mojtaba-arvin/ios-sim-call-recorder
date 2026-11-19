@@ -56,7 +56,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #32 | `fix/ios-import-full-decode-validation` | `605063ab1b18f1fc4ec3f8f7ea3b220e26b47144` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
 | #35 | `docs/product-readme-and-status` | `d0d8ed12f8a90ffb48c3a36613dcda488c1262a0` | `main` | Independent product/release documentation |
-| #36 | `fix/backend-dispatcher-validate-command-inputs` | `a870e76fdb1b45585bc9cfff25f298e9f7270353` | #17 | Backend command validation |
+| #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
 | #28 | `chore/agent-rd-skills-and-templates` | `de44b1f48006bc8f5c928fb23587ea3796d04a82` | #9 | Governance stack |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
