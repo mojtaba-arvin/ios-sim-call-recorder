@@ -47,6 +47,39 @@ class PostgresPersistenceTests(unittest.TestCase):
         loaded = self.repo.get_session(self.session.session_id)
         self.assertEqual(loaded.expected_participant_refs, self.session.expected_participant_refs)
 
+
+    def test_consent_evidence_round_trips_with_provider_event_and_policy(self):
+        ringing = self.session.transition(SessionState.BRIDGE_LEG_RINGING)
+        self.repo.apply_event_once(
+            "twilio", "bridge-ringing", self.session.session_id,
+            lambda _: ringing, provider_account_id="account-test",
+        )
+        current = self.repo.get_session(self.session.session_id)
+        updated = current.participant_consented(
+            "participant-a",
+            provider="twilio",
+            provider_account_id="account-test",
+            event_id="consent-a",
+            policy_version="consent-v1",
+            consent_method="dtmf",
+            evidence_digest="sha256:consent-evidence",
+            at=__import__("datetime").datetime(2026, 11, 19, tzinfo=__import__("datetime").timezone.utc),
+        )
+        self.repo.apply_event_once(
+            "twilio", "consent-a", self.session.session_id,
+            lambda _: updated,
+            provider_account_id="account-test",
+            payload_digest="sha256:consent-evidence",
+        )
+        loaded = self.repo.get_session(self.session.session_id)
+        self.assertEqual(loaded.consented_participants, frozenset({"participant-a"}))
+        self.assertEqual(len(loaded.consent_evidence), 1)
+        evidence = loaded.consent_evidence[0]
+        self.assertEqual(evidence.event_id, "consent-a")
+        self.assertEqual(evidence.policy_version, "consent-v1")
+        self.assertEqual(evidence.consent_method, "dtmf")
+        self.assertEqual(evidence.evidence_digest, "sha256:consent-evidence")
+
     def test_event_receipt_session_and_outbox_commit_atomically(self):
         command = self.command("recording-start:atomic")
         updated = self.session.transition(SessionState.BRIDGE_LEG_RINGING)
