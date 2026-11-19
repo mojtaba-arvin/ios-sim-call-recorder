@@ -61,4 +61,6 @@ Positive physical configurations require at least three repeated runs and indepe
 
 This repository is under active engineering. There is no production release or universal cellular recording guarantee. The release gate is a complete, consent-compliant user journey with repeatable physical-device evidence for each advertised pathway, plus tested failure recovery, privacy controls and a documented compatibility matrix.
 
+Release numbering and first-release gates are defined in [the versioning policy](docs/release/versioning.md); the [changelog](CHANGELOG.md) records the current unreleased state. No version tag is created until the release gates are met.
+
 See the repository [license](LICENSE) for reuse terms.
