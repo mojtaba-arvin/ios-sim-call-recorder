@@ -225,6 +225,38 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(state, .failed)
     }
 
+    func testCancellationDuringAdapterStartPreventsLateRecordingTransition() async throws {
+        let adapter = GatedCancellationAdapter()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: adapter,
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+        let startTask = Task {
+            try await orchestrator.startRecording(
+                sessionID: sessionID,
+                consentEvidence: makeConsentEvidence()
+            )
+        }
+        await adapter.waitUntilStartCaptureIsSuspended()
+
+        try await orchestrator.cancel(sessionID: sessionID)
+
+        do {
+            try await startTask.value
+            XCTFail("A cancelled adapter start must not transition to recording")
+        } catch {
+            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .sessionCancelled)
+        }
+
+        let state = await orchestrator.state
+        let captureStarted = await adapter.captureStarted
+        XCTAssertEqual(state, .cancelled)
+        XCTAssertFalse(captureStarted)
+    }
+
     private func makeOrchestrator(
         artifact: RecordingArtifact?,
         consentVerified: Bool
@@ -336,4 +368,52 @@ private struct StubConsentVerifier: ConsentEvidenceVerifying {
 
 private enum StubError: Error {
     case missingArtifact
+}
+
+private actor GatedCancellationAdapter: RecordingPathwayAdapter {
+    let pathway: RecordingPathway = .conferenceBridge
+    private var startContinuation: CheckedContinuation<Void, Error>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private(set) var captureStarted = false
+
+    func capability(for context: DeviceCompatibilityContext) async -> PathwayCapability {
+        PathwayCapability(pathway: pathway, availability: .available)
+    }
+
+    func prepare(sessionID: UUID) async throws {}
+    func connect(sessionID: UUID) async throws {}
+
+    func startCapture(sessionID: UUID) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            startContinuation = continuation
+            enteredContinuation?.resume()
+            enteredContinuation = nil
+        }
+        captureStarted = true
+    }
+
+    func finishCapture(sessionID: UUID) async throws -> RecordingArtifact {
+        RecordingArtifact(
+            identifier: "gated",
+            durationSeconds: 1,
+            localAudioVerified: true,
+            remoteAudioVerified: true
+        )
+    }
+
+    func cancel(sessionID: UUID) async throws {
+        startContinuation?.resume(throwing: GatedAdapterError.cancelled)
+        startContinuation = nil
+    }
+
+    func waitUntilStartCaptureIsSuspended() async {
+        if startContinuation != nil { return }
+        await withCheckedContinuation { continuation in
+            enteredContinuation = continuation
+        }
+    }
+}
+
+private enum GatedAdapterError: Error {
+    case cancelled
 }
