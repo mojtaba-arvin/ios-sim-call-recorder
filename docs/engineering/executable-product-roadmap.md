@@ -131,8 +131,7 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Finish the iOS Simulator check and merge import-hardening PR #40; then close superseded PR #32.
-2. Finish CI and merge the mainline agent-tooling consolidation PR #42; then close stale PRs #9 and #28 if all their useful changes are represented.
-3. Verify repository ruleset and required-check behavior; keep current workflow optimizations intact.
-4. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
-5. In parallel, prepare M2 physical-device test protocol and a consented test matrix; keep it blocked until devices/SIMs/accessories are available.
+1. Finish CI and merge the mainline agent-tooling consolidation PR #42; then close stale PRs #9 and #28 because their useful assets are represented in #42.
+2. Verify repository ruleset and required-check behavior; keep current workflow optimizations intact.
+3. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
+4. In parallel, prepare M2 physical-device test protocol and a consented test matrix; keep it blocked until devices/SIMs/accessories are available.
