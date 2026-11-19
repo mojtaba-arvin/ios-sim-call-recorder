@@ -75,6 +75,9 @@ Conference SIDs and opaque participant-reference-to-Call-SID mappings. These ide
 are immutable for a given mapping; conflicts fail closed. Do not store phone numbers,
 provider credentials, media URLs, audio, or signatures in these tables or outbox payloads.
 
+The parallel provider/platform evidence and open questions are recorded in
+[`docs/research/provider-evaluation-2026-11.md`](../docs/research/provider-evaluation-2026-11.md).
+
 This is a dispatcher contract and persistence foundation, not a live Twilio adapter.
 Twilio participant creation does not have a documented general idempotency guarantee in
 the reviewed API reference. A concrete adapter must use a stable provider correlation
