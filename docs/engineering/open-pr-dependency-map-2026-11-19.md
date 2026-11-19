@@ -19,17 +19,19 @@ main
 │       │               └── #26 feat/ios-storage-integration-tests
 │       │                   └── #27 feat/ios-playback-controls-interruption-handling
 │       │                       ├── #31 feat/ios-library-accessibility-states
-│                       └── #32 fix/ios-import-full-decode-validation
+│       │                       ├── #32 fix/ios-import-full-decode-validation
+│       │                       └── #38 fix/ios-pending-playback-request-invalidation
 │       ├── #29 test/audio-quality-analysis-tooling
-│       └── #30 feat/recording-session-cancellation
-│           └── #34 fix/core-adapter-failure-cleanup
+│       ├── #30 feat/recording-session-cancellation
+│       │   └── #34 fix/core-adapter-failure-cleanup
+│       └── #37 feat/accessory-compatibility-assessment
 ├── #9  chore/agent-git-engineering-governance
 │   └── #28 chore/agent-rd-skills-and-templates
 └── #11 feat/conference-bridge-backend-core
     └── #13 feat/twilio-webhook-signature-adapter
         └── #15 feat/postgres-transactional-outbox
             └── #17 feat/provider-command-dispatcher-core
-            └── #36 fix/backend-dispatcher-validate-command-inputs
+                └── #36 fix/backend-dispatcher-validate-command-inputs
 ```
 
 PR #1 and #35 are independent research/product documentation baselines. PR #7, #9 and #11 are independent main-based foundations. The iOS/app stack is serial because later changes build on prior storage, UI and CI behavior. PRs #29 and #30 are independent side branches from #19; PR #28 extends the governance branch from #9.
@@ -44,7 +46,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #11 | `feat/conference-bridge-backend-core` | `ea1de3054afaf63930a9a623894e555dfd0412f4` | `main` | Independent |
 | #13 | `feat/twilio-webhook-signature-adapter` | `8b9297a27c0b0a4e575a2e56910f9ef61e37133c` | #11 | Backend stack |
 | #15 | `feat/postgres-transactional-outbox` | `ab22b8d79086cbb7e2ffb91f9a871dec024e42a6` | #13 | Backend stack |
-| #17 | `feat/provider-command-dispatcher-core` | `a1c630de8226948ae353af4de53aab422eec0e12` | #15 | Backend stack |
+| #17 | `feat/provider-command-dispatcher-core` | `b33c60680c8814e3b23b02b2ee4ef24bfab06247` | #15 | Backend stack |
 | #19 | `feat/iphone-capture-pathway-discovery` | `430ea6647ba04786e36df1ce57b683cfc30632dd` | #7 | iOS stack |
 | #21 | `feat/recording-import-validation` | `215a3bf314c0c55291b94dbc850c240ec416877e` | #19 | iOS stack |
 | #23 | `feat/ios-app-import-shell` | `e8370f033ad8b303b2724601c242d436c269578a` | #21 | iOS stack |
@@ -57,6 +59,8 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
 | #35 | `docs/product-readme-and-status` | `6bfd6c5c22c93934f411720ca599cd94b72effcf` | `main` | Independent product/release documentation |
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
+| #37 | `feat/accessory-compatibility-assessment` | `131474f9b4aaa8f142133eaee484d58e077e3bd3` | #19 | Accessory compatibility/evidence gate |
+| #38 | `fix/ios-pending-playback-request-invalidation` | `8952c356e8fed25704d2aef65ec935a5c7751e77` | #27 | Playback lifecycle race fix |
 | #28 | `chore/agent-rd-skills-and-templates` | `bb0b03d42f3fffd2de1e24dc63ef84faf5df673d` | #9 | Governance stack (head before this map update) |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
@@ -68,7 +72,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 3. Integrate backend stack in order #13 → #15 → #17 → #36 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
 5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility) and #32 (audio-payload validation) as separate PRs. PR #34 depends on #30 and adds failure-path adapter cleanup.
-6. Resolve Issue #18 and Issue #20 physical-device gates before enabling provider recording or advertising accessory compatibility.
+7. Resolve Issue #18 and Issue #20 physical-device gates before enabling provider recording or advertising accessory compatibility.
 
 ## Operational rules
 
@@ -78,3 +82,11 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 - If a workflow's `pull_request.branches` filter omits a stacked PR's base branch, the check may never run. Add the base branch to the workflow in the prerequisite branch and verify a new run.
 - Keep all PRs unmerged until independent review and exact-head required checks are complete. No direct main commits, auto-merge or force-push.
 - Physical-device and carrier tests cannot be substituted with CI, unit tests or Simulator runs.
+
+
+## 2026-11-19 execution refresh
+
+- PR #37 is stacked on #19 and adds accessory connector/route compatibility plus strict physical evidence promotion. Its exact-head Swift run #44511799963 passed 67 package tests (0 failures) on head `131474f9b4aaa8f142133eaee484d58e077e3bd3`.
+- PR #38 is stacked on #27 and prevents stale asynchronous playback lookups from reopening deleted/expired recordings. Exact-head Swift run #44511369730 passed; iOS Simulator app-hosted run #44511369716 passed 13 tests (0 failures) on head `8952c356e8fed25704d2aef65ec935a5c7751e77`.
+- Neither PR is merged. PR #37 has no physical-device evidence; PR #38 validates local playback lifecycle only.
+- This map refresh is being committed on the #28 governance branch; refresh its own head SHA after this commit and rerun the repository policy workflow.
