@@ -102,6 +102,8 @@ Do not infer model support from a marketing family name. For Apple-native record
 
 - Apple iPhone call recording guide: https://support.apple.com/guide/iphone/record-and-transcribe-a-call-iph57c6590e9/27/ios
 - Apple iOS 18.1 release notes: https://support.apple.com/en-us/121161
+- iPhone models compatible with iOS 18: https://support.apple.com/en-gb/104985
+- USB-C on iPhone 15 and later: https://support.apple.com/en-gb/105099
 - Apple iOS feature availability: https://www.apple.com/ios/feature-availability/
 - Apple DTS: no API to access a call not carried by the app: https://developer.apple.com/forums/thread/841340
 - Apple DTS: native Phone call interception boundary: https://developer.apple.com/forums/thread/835552
