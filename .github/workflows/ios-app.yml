@@ -27,4 +27,4 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build iOS simulator app
-        run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' -configuration Debug CODE_SIGNING_ALLOWED=NO test

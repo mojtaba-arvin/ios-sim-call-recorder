@@ -67,6 +67,11 @@ struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
 /// Owns user-mediated imports, app-private storage, catalog recovery and retention.
 actor RecordingImportService {
     private let fileManager = FileManager.default
+    private let storageRootURL: URL?
+
+    init(storageRootURL: URL? = nil) {
+        self.storageRootURL = storageRootURL
+    }
 
     func importRecording(
         from sourceURL: URL,
@@ -285,6 +290,15 @@ actor RecordingImportService {
     }
 
     private func privateDirectory(named name: String) throws -> URL {
+        if let storageRootURL {
+            let directory = storageRootURL.appendingPathComponent(name, isDirectory: true)
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            return directory
+        }
+
         guard let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -379,6 +393,9 @@ actor RecordingImportService {
             let current = try decodeAndValidateCatalog(at: primary)
             let backupData = try JSONEncoder().encode(current)
             try backupData.write(to: backup, options: .atomic)
+        } else {
+            // Seed recovery from the first committed catalog, not only later updates.
+            try data.write(to: backup, options: .atomic)
         }
         try data.write(to: primary, options: .atomic)
     }
