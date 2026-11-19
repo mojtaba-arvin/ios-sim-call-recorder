@@ -47,6 +47,14 @@ extension RecordingImportValidationError: LocalizedError {
     }
 }
 
+struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
+    let id: UUID
+    let fileExtension: String
+    let byteCount: Int64
+    let durationSeconds: Double
+    let importedAt: Date
+}
+
 /// Owns the user-initiated import boundary. Imported files are copied to
 /// app-private storage under opaque names; source filenames are not persisted.
 actor RecordingImportService {
@@ -55,7 +63,7 @@ actor RecordingImportService {
     func importRecording(
         from sourceURL: URL,
         source: RecordingImportSource
-    ) async throws {
+    ) async throws -> ImportedRecording {
         let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccess {
@@ -65,10 +73,9 @@ actor RecordingImportService {
 
         let stagingDirectory = try privateDirectory(named: "Staging")
         let recordingsDirectory = try privateDirectory(named: "Recordings")
-        let sourceExtension = sourceURL.pathExtension
         let stagedURL = stagingDirectory
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(sourceExtension)
+            .appendingPathExtension(sourceURL.pathExtension)
 
         var stagedFileExists = false
         defer {
@@ -135,11 +142,53 @@ actor RecordingImportService {
             throw error
         }
 
+        let entry = ImportedRecording(
+            id: UUID(),
+            fileExtension: container.rawValue,
+            byteCount: size,
+            durationSeconds: duration,
+            importedAt: Date()
+        )
         let finalURL = recordingsDirectory
-            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent(entry.id.uuidString)
             .appendingPathExtension(container.rawValue)
+
         try fileManager.moveItem(at: stagedURL, to: finalURL)
         stagedFileExists = false
+
+        do {
+            var entries = try loadCatalog()
+            entries.append(entry)
+            try saveCatalog(entries)
+        } catch {
+            try? fileManager.removeItem(at: finalURL)
+            throw error
+        }
+
+        return entry
+    }
+
+    func recordings() throws -> [ImportedRecording] {
+        let entries = try loadCatalog()
+        let validEntries = entries.filter {
+            fileManager.fileExists(atPath: recordingURL(for: $0).path)
+        }
+        if validEntries != entries {
+            try saveCatalog(validEntries)
+        }
+        return validEntries.sorted { $0.importedAt > $1.importedAt }
+    }
+
+    func deleteRecording(id: UUID) throws {
+        var entries = try loadCatalog()
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+
+        let url = recordingURL(for: entry)
+        if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
+        }
+        entries.removeAll { $0.id == id }
+        try saveCatalog(entries)
     }
 
     private func privateDirectory(named name: String) throws -> URL {
@@ -159,6 +208,31 @@ actor RecordingImportService {
             withIntermediateDirectories: true
         )
         return directory
+    }
+
+    private func catalogURL() throws -> URL {
+        try privateDirectory(named: "Catalog")
+            .appendingPathComponent("recordings.json")
+    }
+
+    private func loadCatalog() throws -> [ImportedRecording] {
+        let url = try catalogURL()
+        guard fileManager.fileExists(atPath: url.path) else { return [] }
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode([ImportedRecording].self, from: data)
+    }
+
+    private func saveCatalog(_ entries: [ImportedRecording]) throws {
+        let data = try JSONEncoder().encode(entries)
+        try data.write(to: catalogURL(), options: .atomic)
+    }
+
+    private func recordingURL(for entry: ImportedRecording) -> URL {
+        let directory = (try? privateDirectory(named: "Recordings"))
+            ?? fileManager.temporaryDirectory
+        return directory
+            .appendingPathComponent(entry.id.uuidString)
+            .appendingPathExtension(entry.fileExtension)
     }
 }
 
