@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct RecordingLibraryView: View {
@@ -9,6 +10,8 @@ struct RecordingLibraryView: View {
     @State private var player: AVPlayer?
     @State private var playingRecordingID: UUID?
     @State private var isPlaying = false
+    @State private var sharedRecordingURL: URL?
+    @State private var isShareSheetPresented = false
     @State private var statusMessage = "Import a recording exported from Phone, Notes, or an external recorder."
     @State private var isError = false
 
@@ -72,6 +75,15 @@ struct RecordingLibraryView: View {
                                     }
                                     Spacer(minLength: 8)
                                     Button {
+                                        shareRecording(recording)
+                                    } label: {
+                                        Image(systemName: "square.and.arrow.up")
+                                            .frame(width: 36, height: 36)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Share recording")
+
+                                    Button {
                                         togglePlayback(for: recording)
                                     } label: {
                                         Image(systemName: playingRecordingID == recording.id && isPlaying ? "pause.fill" : "play.fill")
@@ -101,6 +113,24 @@ struct RecordingLibraryView: View {
                 allowsMultipleSelection: false,
                 onCompletion: handleImportSelection
             )
+            .sheet(isPresented: $isShareSheetPresented, onDismiss: {
+                sharedRecordingURL = nil
+            }) {
+                if let sharedRecordingURL {
+                    ActivityView(activityItems: [sharedRecordingURL])
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
+                guard
+                    let currentItem = player?.currentItem,
+                    let finishedItem = notification.object as? AVPlayerItem,
+                    finishedItem === currentItem
+                else {
+                    return
+                }
+                player?.seek(to: .zero)
+                isPlaying = false
+            }
             .task {
                 await refreshRecordings()
             }
@@ -172,6 +202,21 @@ struct RecordingLibraryView: View {
         }
     }
 
+    private func shareRecording(_ recording: ImportedRecording) {
+        Task {
+            do {
+                let url = try await importService.playbackURL(for: recording.id)
+                sharedRecordingURL = url
+                isShareSheetPresented = true
+                statusMessage = "Choose an app or destination to export this recording."
+                isError = false
+            } catch {
+                statusMessage = error.localizedDescription
+                isError = true
+            }
+        }
+    }
+
     private func refreshRecordings() async {
         do {
             recordings = try await importService.recordings()
@@ -188,6 +233,16 @@ struct RecordingLibraryView: View {
             player = nil
             self.playingRecordingID = nil
             isPlaying = false
+        }
+        if let sharedRecordingURL,
+           ids.contains(where: { id in
+               // The URL is app-private and UUID-named; compare against the selected entry.
+               recordings.first(where: { $0.id == id }).map {
+                   sharedRecordingURL.deletingPathExtension().lastPathComponent == $0.id.uuidString
+               } ?? false
+           }) {
+            isShareSheetPresented = false
+            self.sharedRecordingURL = nil
         }
         Task {
             do {
@@ -212,4 +267,20 @@ struct RecordingLibraryView: View {
     private func formattedSize(_ byteCount: Int64) -> String {
         String(format: "%.1f MB", Double(byteCount) / 1_048_576)
     }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+    }
+
+    func updateUIViewController(
+        _ controller: UIActivityViewController,
+        context: Context
+    ) {}
 }
