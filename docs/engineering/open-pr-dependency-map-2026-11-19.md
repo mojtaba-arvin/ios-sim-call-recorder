@@ -53,7 +53,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #26 | `feat/ios-storage-integration-tests` | `cabda934c1f2e593d5efaae7934bcf30b12f2235` | #25 | iOS stack |
 | #27 | `feat/ios-playback-controls-interruption-handling` | `9517157e3dc48813ecede33a87d3c1d88105bf62` | #26 | iOS stack |
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
-| #32 | `fix/ios-import-full-decode-validation` | `605063ab1b18f1fc4ec3f8f7ea3b220e26b47144` | #27 | iOS import validation |
+| #32 | `fix/ios-import-full-decode-validation` | `ac345260f794e30dff030d11802eca41d4bdaee8` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
 | #35 | `docs/product-readme-and-status` | `6bfd6c5c22c93934f411720ca599cd94b72effcf` | `main` | Independent product/release documentation |
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
