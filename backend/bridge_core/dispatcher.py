@@ -50,6 +50,8 @@ class ProviderCommandAdapter(Protocol):
 
     Implementations must bound network timeouts below the dispatcher lease duration,
     reconcile uncertain outcomes, and wrap failures in sanitized ProviderOperationError.
+    A Twilio conference.create must use recording-from-start only after the session's
+    complete pre-join consent gate; participant.add may only add pre-consented refs.
     Never log command payloads or raw provider responses.
     """
 
@@ -128,7 +130,7 @@ class OutboxCommandDispatcher:
 
         try:
             participant_ref = command.payload.get("participant_ref")
-            if command.command_type == "participant.add" and (
+            if command.command_type in {"conference.create", "participant.add"} and (
                 not isinstance(participant_ref, str)
                 or not participant_ref
                 or participant_ref != participant_ref.strip()
