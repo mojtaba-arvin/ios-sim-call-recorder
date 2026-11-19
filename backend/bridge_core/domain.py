@@ -256,10 +256,10 @@ class BridgeSession:
         self._require_ref(participant_ref)
         if participant_ref not in self.expected_participant_refs:
             raise InvalidParticipant("joined participant is not expected for this session")
-        if self.state not in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
-            raise InvalidTransition(f"participants cannot join while {self.state.value}")
         if participant_ref not in self.consented_participants:
             raise ConsentRequired("participant must affirmatively consent before joining")
+        if self.state not in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
+            raise InvalidTransition(f"participants cannot join while {self.state.value}")
         if participant_ref in self.joined_participants:
             return self
         return replace(
