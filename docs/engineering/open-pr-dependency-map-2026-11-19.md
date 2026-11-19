@@ -50,7 +50,8 @@ PR #1 is an independent research baseline. PR #7, #9 and #11 are independent mai
 | #26 | `feat/ios-storage-integration-tests` | `cabda934c1f2e593d5efaae7934bcf30b12f2235` | #25 | iOS stack |
 | #27 | `feat/ios-playback-controls-interruption-handling` | `9517157e3dc48813ecede33a87d3c1d88105bf62` | #26 | iOS stack |
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
-| #32 | `fix/ios-import-full-decode-validation` | `019789cc7644bd540c49065c2c2133927aaed1b0` | #27 | iOS import validation |
+| #32 | `fix/ios-import-full-decode-validation` | `e680ed91d00fa558fc48db2dba810f90bd1c18de` | #27 | iOS import validation |
+| #34 | `fix/core-adapter-failure-cleanup` | `93c3abdfa782d3a3ce17f5201927615d97bf749e` | #30 | Core lifecycle cleanup |
 | #28 | `chore/agent-rd-skills-and-templates` | `99e949bf3a52ce43978ceb3cd765e17ece5c7861` | #9 | Governance stack |
 | #29 | `test/audio-quality-analysis-tooling` | `f67d27df1ced580202da90fcf3fb57dc920cae22` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `c399f35f6c416a5957e6f39d7191367e772c03d7` | #19 | Core lifecycle |
@@ -61,7 +62,7 @@ PR #1 is an independent research baseline. PR #7, #9 and #11 are independent mai
 2. Integrate governance extension #28 after #9.
 3. Integrate backend stack in order #13 → #15 → #17 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
-5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility) and #32 (full audio-payload validation) as separate dependent PRs.
+5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility) and #32 (audio-payload validation) as separate PRs. PR #34 depends on #30 and adds failure-path adapter cleanup.
 6. Resolve Issue #18 and Issue #20 physical-device gates before enabling provider recording or advertising accessory compatibility.
 
 ## Operational rules
