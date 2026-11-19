@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible app, import, playback or backend defect.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach raw call recordings, phone numbers, contact names, signed URLs, tokens or personal call content. Provide sanitized metadata only.
+  - type: input
+    id: version
+    attributes:
+      label: App version or exact commit SHA
+      placeholder: "0.x prerelease or 40-character SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Import and file validation
+        - Local storage and catalog
+        - Playback and export
+        - Swift recording core
+        - Conference bridge backend
+        - Audio analysis tooling
+        - Documentation or CI
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS version/build, device or runner, toolchain. Do not include account identifiers."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: "Numbered steps with sanitized sample data."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized error
+    validations:
+      required: true
+  - type: dropdown
+    id: repeatability
+    attributes:
+      label: Reproducibility
+      options:
+        - Every time
+        - Intermittent
+        - Happened once
+        - Not yet reproduced
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed recordings, phone numbers, contact names, tokens, signed URLs and personal content from this report.
+          required: true
