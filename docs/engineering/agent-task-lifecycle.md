@@ -41,4 +41,4 @@ python3 scripts/validate_agent_tasks.py .agents/templates/task.example.json
 python3 -m unittest discover -s scripts/tests -p 'test_validate_agent_tasks.py'
 ```
 
-A successful validator run proves only that the task records satisfy the structural contract. Exact-head CI, independent review and any required physical-device/carrier evidence must still be verified separately.
+A successful validator run proves only that the task records satisfy the structural contract. Exact-head CI URLs, reviewer identity and any required physical-device/carrier evidence must still be verified separately.
