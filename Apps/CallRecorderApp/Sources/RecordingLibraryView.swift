@@ -22,7 +22,7 @@ struct RecordingLibraryView: View {
 
                 Text(statusMessage)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(isError ? .red : .secondary)
+                    .foregroundColor(isError ? .red : .secondary)
 
                 if importedCount > 0 {
                     Label("\(importedCount) recording(s) imported", systemImage: "checkmark.circle")
