@@ -54,7 +54,7 @@ Positive physical configurations require at least three repeated runs and indepe
 
 - Read [`AGENTS.md`](AGENTS.md) before contributing; it defines branch, security, privacy, test and evidence requirements.
 - Work on a task-scoped branch and submit a pull request. Do not push directly to `main`, force-push shared branches or merge without owner authorization.
-- Use the [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml) for reproducible defects and the [capture evidence form](.github/ISSUE_TEMPLATE/capture_pathway_evidence.yml) for sanitized physical-device results. Never attach raw recordings or personal call data.
+- Use the [bug report form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=bug_report.yml) for reproducible defects and the [capture evidence form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=capture_pathway_evidence.yml) for sanitized physical-device results. Never attach raw recordings or personal call data.
 - Record the exact PR head SHA and inspect the individual test results. A queued, cancelled, skipped or stale run is not a pass.
 - Keep platform research, implementation and physical-device evidence separate. Link compatibility claims to the exact evidence that supports them.
 
