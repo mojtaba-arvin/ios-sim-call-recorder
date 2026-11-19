@@ -42,11 +42,14 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
 
     for task_id, task in by_id.items():
         status = task.get("status")
-        if status not in STATUSES:
+        status_valid = isinstance(status, str) and status in STATUSES
+        if not status_valid:
             errors.append(f"{task_id}: invalid status '{status}'")
-        if task.get("risk") not in RISKS:
+        risk = task.get("risk")
+        if not isinstance(risk, str) or risk not in RISKS:
             errors.append(f"{task_id}: invalid risk classification")
-        if task.get("required_evidence_tier") not in EVIDENCE_TIERS:
+        evidence_tier = task.get("required_evidence_tier")
+        if not isinstance(evidence_tier, str) or evidence_tier not in EVIDENCE_TIERS:
             errors.append(f"{task_id}: invalid evidence tier")
 
         dependencies = task.get("dependencies")
@@ -70,18 +73,18 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
         if not isinstance(criteria, list) or not criteria or any(not isinstance(item, str) or not item.strip() for item in criteria):
             errors.append(f"{task_id}: acceptance_criteria must contain observable criteria")
 
-        if status in {"running", "review"} and not task.get("owner"):
+        if status_valid and status in {"running", "review"} and not task.get("owner"):
             errors.append(f"{task_id}: {status} tasks require an owner")
-        if status in {"running", "review"} and not task.get("role"):
+        if status_valid and status in {"running", "review"} and not task.get("role"):
             errors.append(f"{task_id}: {status} tasks require an assigned role")
-        if status == "blocked" and not task.get("blocker"):
+        if status_valid and status == "blocked" and not task.get("blocker"):
             errors.append(f"{task_id}: blocked tasks require a blocker")
-        if status == "failed" and not task.get("failure_reason"):
+        if status_valid and status == "failed" and not task.get("failure_reason"):
             errors.append(f"{task_id}: failed tasks require a failure_reason")
-        if status == "review" and not task.get("pull_request_url"):
+        if status_valid and status == "review" and not task.get("pull_request_url"):
             errors.append(f"{task_id}: review tasks require a pull_request_url")
 
-        if status == "done":
+        if status_valid and status == "done":
             evidence = task.get("evidence")
             if not isinstance(evidence, dict):
                 errors.append(f"{task_id}: done tasks require an evidence object")
