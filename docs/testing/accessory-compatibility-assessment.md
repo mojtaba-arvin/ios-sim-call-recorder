@@ -71,3 +71,5 @@ Each physical call now carries separate local and remote audio-quality summaries
 - Background noise within an acceptable range.
 
 A positive local track cannot compensate for an unintelligible remote track, and a good average cannot hide a failure at the beginning, middle or end. The software model records reviewer outcomes only; it does not claim that these subjective checks are automated. The existing WAV analyzer can supply supplementary signal metrics, but waveform metrics alone cannot prove speaker identity or intelligibility.
+
+Evidence-ledger hygiene is enforced as well: attempt IDs must be unique, non-numeric-only, 1–64 ASCII characters from letters, digits, hyphen and underscore. This reduces the risk of accidentally using a phone number or other personal identifier as a test ID. Trials must be listed in strictly increasing observation-time order. The validator does not accept free-form identifiers.
