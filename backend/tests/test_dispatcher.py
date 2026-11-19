@@ -168,6 +168,34 @@ class DispatcherTests(unittest.TestCase):
             "CA" + "e" * 32,
         )
 
+    def test_malformed_reconciliation_state_is_never_treated_as_applied(self):
+        command = leased_command()
+
+        class MalformedAdapter:
+            def reconcile(self, command, *, conference_sid, call_sid):
+                return ReconciliationResult(
+                    "applied",
+                    conference_sid="CF" + "a" * 32,
+                )
+
+            def execute(self, command, *, conference_sid, call_sid):
+                raise AssertionError("malformed reconciliation must not execute")
+
+        repo = FakeRepository([command])
+        adapter = MalformedAdapter()
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo,
+            adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+
+        results = dispatcher.dispatch_once()
+
+        self.assertEqual(results[0].outcome, "deferred")
+        self.assertEqual(repo.acked, [])
+        self.assertEqual(repo.failed[0][2], "provider_reconciliation_invalid")
+        self.assertFalse(repo.terminals[0])
+
     def test_invalid_participant_reference_is_dead_lettered_before_provider_io(self):
         invalid_references = (None, "", "   ", "participant ref", "x" * 129)
         for participant_ref in invalid_references:
