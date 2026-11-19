@@ -3,8 +3,6 @@ name: iOS app build
 on:
   pull_request:
     branches: [feat/recording-import-validation]
-  push:
-    branches: [feat/ios-app-import-shell]
   workflow_dispatch:
 
 permissions:
