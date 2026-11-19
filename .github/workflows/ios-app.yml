@@ -2,7 +2,7 @@ name: iOS app build
 
 on:
   pull_request:
-    branches: [feat/recording-import-validation]
+    branches: [feat/recording-import-validation, feat/ios-app-import-shell]
   workflow_dispatch:
 
 permissions:
