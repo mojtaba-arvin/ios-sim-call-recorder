@@ -1,18 +1,16 @@
-name: Swift and audio tooling checks
+name: Swift core checks
 
 on:
   pull_request:
     paths:
       - "Packages/CallRecorderCore/**"
-      - "scripts/analyze_call_audio.py"
-      - "scripts/tests/test_analyze_call_audio.py"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: swift-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: swift-core-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,15 +27,3 @@ jobs:
           persist-credentials: false
       - name: Run package tests
         run: swift test --package-path Packages/CallRecorderCore
-
-  audio-quality-analysis:
-    name: Audio quality analyzer tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Run local WAV analyzer tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_analyze_call_audio.py'
