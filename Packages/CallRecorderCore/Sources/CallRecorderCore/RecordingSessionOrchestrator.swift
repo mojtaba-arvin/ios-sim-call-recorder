@@ -105,7 +105,9 @@ public actor RecordingSessionOrchestrator {
             try ensureConnectionStillActive(sessionID: sessionID)
             try machine.transition(to: .recording)
         } catch {
-            failUnlessCancellationIsInProgress()
+            if failUnlessCancellationIsInProgress() {
+                throw RecordingSessionOrchestratorError.sessionCancelled
+            }
             throw error
         }
     }
@@ -133,7 +135,9 @@ public actor RecordingSessionOrchestrator {
             try ensureConnectionStillActive(sessionID: sessionID)
             try machine.transition(to: .recording)
         } catch {
-            failUnlessCancellationIsInProgress()
+            if failUnlessCancellationIsInProgress() {
+                throw RecordingSessionOrchestratorError.sessionCancelled
+            }
             throw error
         }
     }
@@ -185,12 +189,13 @@ public actor RecordingSessionOrchestrator {
         }
     }
 
-    private func failUnlessCancellationIsInProgress() {
+    private func failUnlessCancellationIsInProgress() -> Bool {
         guard machine.state != .cancelling, machine.state != .cancelled else {
-            return
+            return true
         }
         try? machine.transition(to: .failed)
         activeSessionID = nil
+        return false
     }
 
     private func ensureConnectionStillActive(sessionID: UUID) throws {
