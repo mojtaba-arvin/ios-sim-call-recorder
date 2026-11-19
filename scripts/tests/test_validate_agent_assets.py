@@ -47,6 +47,15 @@ class AgentAssetValidatorTests(unittest.TestCase):
             self.make_valid_tree(root)
             self.assertEqual(validate_agent_assets(root), [])
 
+    def test_rejects_missing_research_or_review_template(self) -> None:
+        for missing_name in ("research-report.md", "pr-review.md"):
+            with self.subTest(template=missing_name), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                self.make_valid_tree(root)
+                (root / ".agents" / "templates" / missing_name).unlink()
+                errors = validate_agent_assets(root)
+                self.assertTrue(any(missing_name in error for error in errors))
+
     def test_rejects_skill_without_front_matter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
