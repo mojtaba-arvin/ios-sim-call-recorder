@@ -120,8 +120,8 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
                 observedAt: timestamp,
                 consentConfirmed: true,
                 recordingNoticeConfirmed: true,
-                localSpeechIntelligible: true,
-                remoteSpeechIntelligible: true,
+                localAudioQuality: passingAudioQuality(),
+                remoteAudioQuality: passingAudioQuality(),
                 artifactIntegrityVerified: true
             )
         }
@@ -226,6 +226,18 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
             return XCTFail("Firmware version is required")
         }
         XCTAssertTrue(reason.contains("firmware"))
+    }
+
+    private func passingAudioQuality() -> AccessoryAudioDirectionEvidence {
+        AccessoryAudioDirectionEvidence(
+            intelligibleAtBeginning: true,
+            intelligibleAtMiddle: true,
+            intelligibleAtEnd: true,
+            clippingAcceptable: true,
+            gapsAcceptable: true,
+            echoAcceptable: true,
+            noiseAcceptable: true
+        )
     }
 
     private var profile: AccessoryCaptureProfile {
