@@ -127,13 +127,24 @@ class OutboxCommandDispatcher:
             return DispatchResult(str(command.command_id), "deferred")
 
         try:
+            participant_ref = command.payload.get("participant_ref")
+            if command.command_type == "participant.add" and (
+                not isinstance(participant_ref, str)
+                or not participant_ref
+                or participant_ref != participant_ref.strip()
+                or any(character.isspace() for character in participant_ref)
+                or len(participant_ref) > 128
+            ):
+                # Reject malformed references before any provider reconciliation or
+                # side effect; otherwise an invalid command could create an orphan leg.
+                raise ProviderOperationError("participant_reference_invalid", retryable=False)
+
             # Provider I/O occurs after the outbox lease transaction has committed.
             # If the mapping is absent (crash after remote create), the adapter must
             # reconcile using the stable command correlation key before creating again.
             conference_sid = self._repository.get_provider_resource(
                 command.provider, command.provider_account_id, command.session_id,
             )
-            participant_ref = command.payload.get("participant_ref")
             call_sid = None
             if isinstance(participant_ref, str):
                 call_sid = self._repository.get_provider_participant_resource(
@@ -143,6 +154,14 @@ class OutboxCommandDispatcher:
             reconciliation = adapter.reconcile(
                 command, conference_sid=conference_sid, call_sid=call_sid,
             )
+            if (
+                not isinstance(reconciliation, ReconciliationResult)
+                or not isinstance(reconciliation.state, ReconciliationState)
+            ):
+                # Never treat an unknown/malformed enum value as APPLIED. That
+                # would acknowledge a command without establishing provider state.
+                raise ProviderOperationError("provider_reconciliation_invalid", retryable=True)
+
             if reconciliation.state is ReconciliationState.UNKNOWN:
                 self._repository.fail_outbox(
                     command.command_id, command.lease_token,

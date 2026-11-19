@@ -71,6 +71,8 @@ adapter must return `UNKNOWN` rather than execute when provider state cannot be 
 Only `NOT_APPLIED` permits execution; `APPLIED` is acknowledged without replaying the
 side effect. Provider I/O must never run inside a repository transaction.
 
+Before reconciliation, `participant.add` commands must contain a non-empty opaque `participant_ref` (at most 128 characters and no whitespace). Invalid references are dead-lettered before provider I/O so malformed outbox data cannot create an untracked provider leg.
+
 The `0002_provider_resources.sql` migration stores provider/account/session-scoped
 Conference SIDs and opaque participant-reference-to-Call-SID mappings. These identifiers
 are immutable for a given mapping; conflicts fail closed. Do not store phone numbers,
@@ -106,3 +108,6 @@ PYTHONPATH=backend python -m unittest discover -s backend/tests -v
 PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover rollback,
 duplicate/concurrent delivery, account-scoped event identity, atomic outbox
 insertion, concurrent claims, lease expiry, stale lease rejection and retries.
+
+
+The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.

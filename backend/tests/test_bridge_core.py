@@ -87,14 +87,20 @@ class BridgeCoreTests(unittest.TestCase):
         self.send(self.event("cb-replayed", EventType.PARTICIPANT_CONSENTED, "b"))
         self.assertEqual(len(self.repo.get_outbox_commands()), 1)
 
-    def test_outbox_payload_rejects_sensitive_fields(self):
+    def test_outbox_payload_rejects_sensitive_fields_and_telephony_aliases(self):
         from bridge_core.application import OutboxCommand
-        with self.assertRaises(ValueError):
-            OutboxCommand(
-                command_type="recording.start", idempotency_key="unsafe",
-                session_id="session-opaque-1", provider="test-provider",
-                payload={"metadata": {"phone_number": "+15555550123"}},
-            )
+        forbidden_keys = (
+            "phone_number", "from", "to", "source", "destination", "caller",
+            "callee", "number", "from_number", "to_number",
+            "destination_number", "e164", "telephone",
+        )
+        for key in forbidden_keys:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                OutboxCommand(
+                    command_type="recording.start", idempotency_key=f"unsafe-{key}",
+                    session_id="session-opaque-1", provider="test-provider",
+                    payload={"nested": [{"metadata": {key: "+15555550123"}}]},
+                )
 
     def test_decoder_receives_the_exact_verified_request(self):
         event = self.event("same-request", EventType.BRIDGE_RINGING)
