@@ -1,4 +1,4 @@
-name: Swift package checks
+name: Swift and audio tooling checks
 
 on:
   pull_request:
@@ -26,3 +26,15 @@ jobs:
           persist-credentials: false
       - name: Run package tests
         run: swift test --package-path Packages/CallRecorderCore
+
+  audio-quality-analysis:
+    name: Audio quality analyzer tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run local WAV analyzer tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_analyze_call_audio.py'
