@@ -24,6 +24,7 @@
   "rollback": "Revert the task-scoped commit or close the PR without merging.",
   "evidence": {
     "exact_head_sha": null,
+    "ci_run_sha": null,
     "tests_status": "not-run",
     "ci_run_url": null,
     "independent_review": false,
