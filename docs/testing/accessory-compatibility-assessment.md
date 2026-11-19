@@ -46,3 +46,16 @@ Never upload raw recordings, phone numbers, contacts, signatures or media URLs t
 The Swift core now models each physical attempt as a privacy-safe trial summary. It stores only an opaque attempt ID, timestamp, consent/notice confirmations, independent local/remote intelligibility results and artifact-integrity result—never audio, phone numbers, contacts or media URLs.
 
 `AccessoryCompatibilityEvidence` is scoped to the exact device/OS/build/SIM/network/route context and accessory model/firmware. Its status remains insufficient unless at least three attempts have unique opaque IDs and every attempt confirms consent, recording notice, intelligible local speech, intelligible remote speech and artifact integrity. Any failed or incomplete attempt blocks promotion. This is a software gate over human-observed physical evidence; it cannot create or simulate that evidence.
+
+## Route observation and carrier identity are separate proof requirements
+
+A third-party app must not treat its own `AVAudioSession` route as proof of the active route used by Phone.app's private cellular-call session. The core now records the provenance of a route observation:
+
+- `userReported`: useful only as a setup hint; never sufficient for physical evidence promotion.
+- `appOwnedSessionObserved`: describes the app's own audio session (for example, app-owned VoIP); it does not prove the Phone.app route.
+- `physicalTestObserved`: a route independently observed and recorded during the actual physical call test.
+- `unknown`: no route evidence.
+
+The three-call promotion gate requires `physicalTestObserved`. A user-selected "speaker" value or an app audio-route notification cannot promote a cellular accessory tuple.
+
+Physical evidence also requires exact device region, physical test country, language, carrier identity, carrier bundle version, SIM configuration and network type. This prevents a result from one carrier bundle, SIM mode or network from being generalized to another. Do not put subscriber identifiers, phone numbers or raw call media in this tuple; carrier identity must be a non-personal carrier/bundle identifier.
