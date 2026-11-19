@@ -16,14 +16,14 @@ This repository may be changed by humans, coding agents, automated workflows and
 
 Every non-trivial task follows this sequence:
 
-1. **Discover:** read this file, relevant package instructions, open issues, active PRs, branch state and existing architecture decisions.
+1. **Discover:** read this file, relevant package instructions, open issues, active PRs, branch state and existing architecture decisions. Inspect the relevant commit/PR history and failed CI runs for repeated corrections or stale assumptions.
 2. **Scope:** write the intended outcome, acceptance criteria, affected paths, risks and explicit non-goals before editing.
 3. **Isolate:** create one task branch from the current intended base. Do not let concurrent agents edit the same branch or files.
 4. **Implement:** make the smallest coherent change. Preserve adapter boundaries and backwards compatibility where practical.
-5. **Verify:** run focused tests, full relevant tests, static checks and security checks. Record exact commands, toolchain versions and results.
+5. **Verify:** run a preflight before the first commit where the local toolchain permits it, then focused tests, full relevant tests, static checks and security checks. Independently validate generated fixtures before using them. Record exact commands, toolchain versions and results.
 6. **Review:** inspect the final diff as a reviewer, not only as the author. Check error paths, cancellation, actor reentrancy, concurrency, privacy and stale documentation.
 7. **Publish:** open/update a PR with evidence, limitations, risks and linked issues. Keep it unmerged until required review and checks are satisfied.
-8. **Report:** state commit SHA, PR URL, checks and any remaining uncertainty. Never equate a queued run with a passing run.
+8. **Report:** re-read the current PR head SHA and state it with the PR URL, checks and remaining uncertainty. Inspect job steps and test summaries. A passing run on an earlier SHA, or a queued/pending/cancelled/skipped run, is not a pass. Never equate a build with a test pass.
 
 ## Multi-agent work allocation
 
