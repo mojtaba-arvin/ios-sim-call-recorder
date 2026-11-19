@@ -38,6 +38,16 @@ public enum RecordingPathwayAssessment {
     public static func appleSystemCallRecording(
         for context: DeviceCompatibilityContext
     ) -> PathwayCapability {
+        guard context.callParticipantCount == 2 else {
+            return PathwayCapability(
+                pathway: .appleSystemCallRecording,
+                availability: .unavailable(
+                    reason: "Apple documents this Phone.app recording flow for a call with one other person; group calls are not assumed supported."
+                ),
+                evidenceReference: appleCallRecordingEvidence
+            )
+        }
+
         let version = parseVersion(context.operatingSystemVersion)
         guard version.major > minimumAppleCallRecordingVersion.major
                 || (version.major == minimumAppleCallRecordingVersion.major
