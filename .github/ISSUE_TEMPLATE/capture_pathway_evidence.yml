@@ -1,7 +1,6 @@
 name: Capture pathway test evidence
 description: Submit sanitized results for one exact physical-device or carrier configuration.
 title: "[Capture evidence]: "
-labels: ["research", "device-validation"]
 body:
   - type: markdown
     attributes:
