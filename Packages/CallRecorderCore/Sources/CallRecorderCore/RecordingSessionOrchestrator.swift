@@ -71,6 +71,9 @@ public actor RecordingSessionOrchestrator {
         } catch {
             try? machine.transition(to: .failed)
             activeSessionID = nil
+            // prepare may have allocated partial local or remote resources
+            // before throwing; always ask the adapter to release them.
+            try? await adapter.cancel(sessionID: sessionID)
             throw error
         }
     }
@@ -108,6 +111,9 @@ public actor RecordingSessionOrchestrator {
             if failUnlessCancellationIsInProgress() {
                 throw RecordingSessionOrchestratorError.sessionCancelled
             }
+            // Consent, connect or start may fail after resources were created.
+            // Cleanup is best-effort; the original failure remains authoritative.
+            try? await adapter.cancel(sessionID: sessionID)
             throw error
         }
     }
@@ -138,6 +144,7 @@ public actor RecordingSessionOrchestrator {
             if failUnlessCancellationIsInProgress() {
                 throw RecordingSessionOrchestratorError.sessionCancelled
             }
+            try? await adapter.cancel(sessionID: sessionID)
             throw error
         }
     }
@@ -185,12 +192,17 @@ public actor RecordingSessionOrchestrator {
         } catch {
             try? machine.transition(to: .failed)
             activeSessionID = nil
+            // A failed finalization may leave a provider session or local
+            // capture resource active; request idempotent cleanup as well.
+            try? await adapter.cancel(sessionID: sessionID)
             throw error
         }
     }
 
     private func failUnlessCancellationIsInProgress() -> Bool {
-        guard machine.state != .cancelling, machine.state != .cancelled else {
+        guard activeSessionID != nil,
+              machine.state != .cancelling,
+              machine.state != .cancelled else {
             return true
         }
         try? machine.transition(to: .failed)

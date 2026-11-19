@@ -67,6 +67,156 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(state, .failed)
     }
 
+    func testPrepareFailureCancelsPartiallyPreparedAdapter() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe,
+                prepareFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+
+        do {
+            _ = try await orchestrator.prepare(sessionID: UUID(), context: makeContext())
+            XCTFail("A failed adapter preparation must fail the session")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testConsentRejectionCancelsPreparedAdapterResources() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe
+            ),
+            consentVerifier: StubConsentVerifier(verified: false)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+
+        do {
+            try await orchestrator.startRecording(
+                sessionID: sessionID,
+                consentEvidence: makeConsentEvidence()
+            )
+            XCTFail("Rejected consent must fail closed")
+        } catch {
+            XCTAssertEqual(error as? RecordingSessionOrchestratorError, .consentEvidenceRejected)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testAdapterConnectFailureCancelsPartiallyAllocatedResources() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe,
+                connectFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+
+        do {
+            try await orchestrator.startRecording(
+                sessionID: sessionID,
+                consentEvidence: makeConsentEvidence()
+            )
+            XCTFail("Adapter connect failure must fail the session")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testAdapterStartFailureCancelsPartiallyConnectedResources() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe,
+                startFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+
+        do {
+            try await orchestrator.startRecording(
+                sessionID: sessionID,
+                consentEvidence: makeConsentEvidence()
+            )
+            XCTFail("Adapter start failure must fail the session")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
+    func testFinalizationFailureCancelsRemainingAdapterResources() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe,
+                finishFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+        try await orchestrator.startRecording(
+            sessionID: sessionID,
+            consentEvidence: makeConsentEvidence()
+        )
+
+        do {
+            _ = try await orchestrator.finish(sessionID: sessionID)
+            XCTFail("A failed finalization must not be reported as completed")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
     func testAdapterCannotAdvertiseAnotherPathway() async throws {
         let orchestrator = RecordingSessionOrchestrator(
             adapter: makeAdapter(
@@ -148,6 +298,34 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? RecordingSessionOrchestratorError, .noActiveSession)
         }
+    }
+
+    func testCancellationFailureLeavesSessionFailedForReconciliation() async throws {
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: verifiedArtifact(),
+                cancelFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+        try await orchestrator.startRecording(
+            sessionID: sessionID,
+            consentEvidence: makeConsentEvidence()
+        )
+
+        do {
+            try await orchestrator.cancel(sessionID: sessionID)
+            XCTFail("A failed adapter cancellation must not be reported as cancelled")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let state = await orchestrator.state
+        XCTAssertEqual(state, .failed)
     }
 
     func testCancelBeforeConsentPreventsRecordingFromStarting() async throws {
@@ -275,14 +453,24 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         advertisedPathway: RecordingPathway,
         availability: PathwayAvailability,
         artifact: RecordingArtifact?,
-        cancellationProbe: CancellationProbe? = nil
+        cancellationProbe: CancellationProbe? = nil,
+        prepareFails: Bool = false,
+        connectFails: Bool = false,
+        startFails: Bool = false,
+        finishFails: Bool = false,
+        cancelFails: Bool = false
     ) -> StubAdapter {
         StubAdapter(
             pathway: .conferenceBridge,
             advertisedPathway: advertisedPathway,
             availability: availability,
             artifact: artifact,
-            cancellationProbe: cancellationProbe
+            cancellationProbe: cancellationProbe,
+            prepareFails: prepareFails,
+            connectFails: connectFails,
+            startFails: startFails,
+            finishFails: finishFails,
+            cancelFails: cancelFails
         )
     }
 
@@ -331,22 +519,35 @@ private struct StubAdapter: RecordingPathwayAdapter {
     let availability: PathwayAvailability
     let artifact: RecordingArtifact?
     let cancellationProbe: CancellationProbe?
+    let prepareFails: Bool
+    let connectFails: Bool
+    let startFails: Bool
+    let finishFails: Bool
+    let cancelFails: Bool
 
     func capability(for context: DeviceCompatibilityContext) async -> PathwayCapability {
         PathwayCapability(pathway: advertisedPathway, availability: availability)
     }
 
-    func prepare(sessionID: UUID) async throws {}
-    func connect(sessionID: UUID) async throws {}
-    func startCapture(sessionID: UUID) async throws {}
+    func prepare(sessionID: UUID) async throws {
+        if prepareFails { throw StubError.prepareFailed }
+    }
+    func connect(sessionID: UUID) async throws {
+        if connectFails { throw StubError.connectFailed }
+    }
+    func startCapture(sessionID: UUID) async throws {
+        if startFails { throw StubError.startFailed }
+    }
 
     func finishCapture(sessionID: UUID) async throws -> RecordingArtifact {
+        if finishFails { throw StubError.finishFailed }
         guard let artifact else { throw StubError.missingArtifact }
         return artifact
     }
 
     func cancel(sessionID: UUID) async throws {
         await cancellationProbe?.markCancelled()
+        if cancelFails { throw StubError.cancelFailed }
     }
 }
 
@@ -368,6 +569,11 @@ private struct StubConsentVerifier: ConsentEvidenceVerifying {
 
 private enum StubError: Error {
     case missingArtifact
+    case prepareFailed
+    case connectFailed
+    case startFailed
+    case finishFailed
+    case cancelFailed
 }
 
 private actor GatedCancellationAdapter: RecordingPathwayAdapter {
