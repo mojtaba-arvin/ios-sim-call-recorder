@@ -32,7 +32,8 @@ final class RecordingImportServiceTests: XCTestCase {
         try writeValidWAV(to: sourceURL)
 
         let service = RecordingImportService(storageRootURL: temporaryRoot)
-        _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+        let imported = try await service.importRecording(from: sourceURL, source: .filesApp)
+        XCTAssertGreaterThanOrEqual(imported.durationSeconds, 1.0)
 
         let primary = try Data(contentsOf: catalogDirectory.appendingPathComponent("recordings.json"))
         let backup = try Data(contentsOf: catalogDirectory.appendingPathComponent("recordings.json.backup"))
