@@ -6,7 +6,6 @@ on:
       - "Packages/CallRecorderCore/**"
       - "scripts/analyze_call_audio.py"
       - "scripts/tests/test_analyze_call_audio.py"
-      - ".github/workflows/swift.yml"
   workflow_dispatch:
 
 permissions:
