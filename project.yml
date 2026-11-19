@@ -31,7 +31,8 @@ targets:
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         CODE_SIGNING_ALLOWED: NO
     scheme:
-      testTargets:\n        - CallRecorderAppTests
+      testTargets:
+        - CallRecorderAppTests
       gatherCoverageData: false
 
   CallRecorderAppTests:
