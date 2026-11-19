@@ -148,14 +148,17 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
         let identifiers = trials.map {
             $0.attemptIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard identifiers.allSatisfy({ !$0.isEmpty }),
+        guard identifiers.allSatisfy(Self.isValidOpaqueIdentifier),
               Set(identifiers).count == identifiers.count else {
-            return .insufficient(reason: "Every physical attempt must have a unique, non-empty opaque identifier.")
+            return .insufficient(reason: "Every physical attempt must have a unique opaque identifier of 1–64 ASCII letters, digits, hyphens or underscores; numeric-only identifiers are rejected.")
         }
 
         let timestamps = trials.map(\.observedAt)
         guard Set(timestamps).count == timestamps.count else {
             return .insufficient(reason: "Each physical attempt must have a distinct observation timestamp.")
+        }
+        guard zip(timestamps, timestamps.dropFirst()).allSatisfy({ $0 < $1 }) else {
+            return .insufficient(reason: "Physical attempts must be listed in strictly increasing observation-time order.")
         }
 
         guard trials.allSatisfy(\.isPositive) else {
@@ -163,6 +166,21 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
         }
 
         return .confirmed(positiveTrials: trials.count)
+    }
+
+    private static func isValidOpaqueIdentifier(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty, bytes.count <= 64,
+              bytes.contains(where: { ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) }) else {
+            return false
+        }
+        return bytes.allSatisfy {
+            ($0 >= 48 && $0 <= 57)
+                || ($0 >= 65 && $0 <= 90)
+                || ($0 >= 97 && $0 <= 122)
+                || $0 == 45
+                || $0 == 95
+        }
     }
 
     public var isConfirmed: Bool {
