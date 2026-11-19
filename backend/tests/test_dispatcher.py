@@ -21,6 +21,7 @@ class FakeRepository:
         self.participant_resources = {}
         self.acked = []
         self.failed = []
+        self.terminals = []
 
     def claim_outbox(self, **kwargs):
         commands, self.commands = self.commands, ()
@@ -49,8 +50,9 @@ class FakeRepository:
     def acknowledge_outbox(self, command_id, lease_token):
         self.acked.append((command_id, lease_token))
 
-    def fail_outbox(self, command_id, lease_token, *, error_code, retry_delay_seconds):
+    def fail_outbox(self, command_id, lease_token, *, error_code, retry_delay_seconds, terminal=False):
         self.failed.append((command_id, lease_token, error_code, retry_delay_seconds))
+        self.terminals.append(terminal)
         return "pending"
 
 
@@ -207,6 +209,28 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(results[0].outcome, "deferred")
         self.assertEqual(repo.failed[0][2], "provider_adapter_unavailable")
         self.assertEqual(repo.acked, [])
+
+    def test_permanent_provider_error_is_dead_lettered_without_retry(self):
+        command = leased_command()
+
+        class PermanentFailureAdapter:
+            def reconcile(self, command, *, conference_sid, call_sid):
+                raise ProviderOperationError("provider_request_rejected", retryable=False)
+
+            def execute(self, command, *, conference_sid, call_sid):
+                raise AssertionError("execute must not run after permanent reconciliation failure")
+
+        repo = FakeRepository([command])
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo, adapters={("twilio", "account-opaque"): PermanentFailureAdapter()},
+            worker_id="worker-test",
+        )
+
+        results = dispatcher.dispatch_once()
+
+        self.assertEqual(results[0].outcome, "deferred")
+        self.assertEqual(repo.failed[0][2], "provider_request_rejected")
+        self.assertTrue(repo.terminals[0])
 
     def test_provider_errors_use_sanitized_codes_and_retry_classification(self):
         command = leased_command()
