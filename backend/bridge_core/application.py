@@ -11,6 +11,10 @@ _SENSITIVE_KEYS = {
     "phone", "phonenumber", "callerid", "authorization", "authtoken",
     "token", "signature", "mediaurl", "audiourl", "recordingurl",
     "password", "secret", "audio", "transcript",
+    # Common telephony aliases must not bypass the outbox PII boundary.
+    "from", "to", "source", "destination", "caller", "callee", "number",
+    "fromnumber", "tonumber", "sourcenumber", "destinationnumber",
+    "dialednumber", "recipient", "e164", "telephone",
 }
 
 def _validate_payload(value: object) -> None:
