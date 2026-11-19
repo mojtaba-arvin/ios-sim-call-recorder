@@ -18,6 +18,24 @@ REQUIRED = {
     "scope", "acceptance_criteria", "risk", "required_evidence_tier",
     "validation", "evidence", "rollback",
 }
+ALLOWED_TRANSITIONS = {
+    "queued": {"running", "blocked"},
+    "running": {"blocked", "review", "failed", "queued"},
+    "blocked": {"queued", "running"},
+    "review": {"done", "running", "failed"},
+    "failed": {"queued"},
+    "done": set(),
+}
+
+
+def validate_state_transition(current: str, target: str, *, reset_reason: str | None = None) -> bool:
+    if current not in STATUSES or target not in STATUSES:
+        raise ValueError("current and target must be known task states")
+    if target not in ALLOWED_TRANSITIONS[current]:
+        raise ValueError(f"task state transition '{current}' -> '{target}' is not allowed")
+    if target == "queued" and current in {"running", "failed"} and not (reset_reason and reset_reason.strip()):
+        raise ValueError("resetting a running or failed task requires a corrective reset_reason")
+    return True
 
 
 def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
