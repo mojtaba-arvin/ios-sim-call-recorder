@@ -72,10 +72,17 @@ class FakeAdapter:
         return self.execution
 
 
-def leased_command(*, participant_ref=None, command_type="recording.start"):
+_DEFAULT_PARTICIPANT = object()
+
+
+def leased_command(*, participant_ref=_DEFAULT_PARTICIPANT, command_type="recording.start"):
     payload = {"session_id": "session-opaque"}
-    if command_type in {"conference.create", "participant.add"} and participant_ref is None:
-        participant_ref = "participant-opaque-1"
+    if participant_ref is _DEFAULT_PARTICIPANT:
+        participant_ref = (
+            "participant-opaque-1"
+            if command_type in {"conference.create", "participant.add"}
+            else None
+        )
     if participant_ref is not None:
         payload["participant_ref"] = participant_ref
     if command_type == "conference.create":
