@@ -31,7 +31,7 @@ Role contracts live in `.agents/roles/`; reusable, task-oriented skills live in 
 
 - Roles define responsibility, authority boundaries and deliverables.
 - Skills define repeatable procedures, inputs, outputs and completion gates.
-- Templates in `.agents/templates/` define task, ADR and validation-report structure.
+- Templates in `.agents/templates/` define task, ADR, research-report, independent PR-review and validation-report structure.
 - Policies in `.agents/policies/` are the canonical privacy, branch and evidence rules.
 - `scripts/validate_agent_assets.py` checks required role/skill/template/policy structure; it does not prove that an agent executed a skill correctly.
 
