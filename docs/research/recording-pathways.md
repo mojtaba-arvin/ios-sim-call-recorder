@@ -20,7 +20,7 @@ A pathway is not supported based on API availability, marketing claims, simulato
 
 ### 2.1 Native iOS recording
 
-Apple introduced native Phone and FaceTime audio call recording in iOS 18.1. Availability is region-dependent. Apple's current support documentation lists multiple excluded regions, including the European Union, Iran and Oman. When native recording is available and enabled, participants receive an audible announcement and the recording is saved to Notes.
+Apple added native Phone and FaceTime audio call recording in iOS 18. Availability is region-dependent. Apple's current support documentation lists multiple excluded regions, including the European Union, Iran and Oman. When native recording is available and enabled, participants receive an audible announcement and the recording is saved to Notes.
 
 This is a user-facing system feature. No public third-party API has been identified that gives an arbitrary App Store application access to the Phone app's live cellular-call audio stream or native recording pipeline.
 
@@ -173,7 +173,7 @@ A pathway is not production-supported until it passes all applicable gates:
 
 Primary sources:
 
-1. Apple Support — Record and transcribe a call on iPhone: https://support.apple.com/en-asia/guide/iphone/iph57c6590e9/ios
+1. Apple Support — Record and transcribe a call on iPhone: https://support.apple.com/guide/iphone/iph57c6590e9/27/ios/27
 2. Apple Developer — CallKit: https://developer.apple.com/documentation/callkit
 3. Apple App Review Guidelines (recording consent, privacy and user data): https://developer.apple.com/app-store/review/guidelines/
 4. Apple Developer Forums — DTS discussion of native cellular call audio access: https://developer.apple.com/forums/thread/841340
