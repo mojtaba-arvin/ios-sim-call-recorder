@@ -96,6 +96,17 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
         if not isinstance(criteria, list) or not criteria or any(not isinstance(item, str) or not item.strip() for item in criteria):
             errors.append(f"{task_id}: acceptance_criteria must contain observable criteria")
 
+        validation = task.get("validation")
+        if not isinstance(validation, dict):
+            errors.append(f"{task_id}: validation must be an object")
+        else:
+            for field in ("commands", "scenarios"):
+                values = validation.get(field)
+                if not isinstance(values, list) or not values or any(
+                    not isinstance(item, str) or not item.strip() for item in values
+                ):
+                    errors.append(f"{task_id}: validation.{field} must contain non-empty entries")
+
         if status_valid and status in {"running", "review"} and not task.get("owner"):
             errors.append(f"{task_id}: {status} tasks require an owner")
         if status_valid and status in {"running", "review"} and not task.get("role"):
@@ -123,6 +134,16 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
                 errors.append(f"{task_id}: done tasks require successful exact-head tests")
             if evidence.get("independent_review") is not True:
                 errors.append(f"{task_id}: done tasks require independent review")
+            reviewer = evidence.get("reviewer")
+            if not isinstance(reviewer, str) or not reviewer.strip():
+                errors.append(f"{task_id}: done tasks require the independent reviewer identity")
+            ci_run_url = evidence.get("ci_run_url")
+            if (
+                not isinstance(ci_run_url, str)
+                or not ci_run_url.startswith("https://github.com/")
+                or "/actions/runs/" not in ci_run_url
+            ):
+                errors.append(f"{task_id}: done tasks require an exact GitHub Actions run URL")
             if evidence.get("documentation_updated") is not True:
                 errors.append(f"{task_id}: done tasks require documentation status")
 
