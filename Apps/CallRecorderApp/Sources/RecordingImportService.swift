@@ -414,6 +414,19 @@ actor RecordingImportService {
                 try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
                 return recovered
             }
+
+            // A genuinely new install has no catalog and no managed media.
+            // If media exists without either catalog copy, do not treat data loss
+            // as an empty library: fail closed and preserve every file for recovery.
+            let recordingsDirectory = try privateDirectory(named: "Recordings")
+            let existingMedia = try fileManager.contentsOfDirectory(
+                at: recordingsDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            guard existingMedia.isEmpty else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
             return []
         }
 
