@@ -73,16 +73,16 @@ class BridgeCoreTests(unittest.TestCase):
         self.send(self.event("consent-a", EventType.PARTICIPANT_CONSENTED, "a"))
         self.send(self.event("consent-b", EventType.PARTICIPANT_CONSENTED, "b"))
 
-    def test_recording_requires_all_preconsents_and_at_least_one_joined_participant(self):
+    def test_provider_join_phase_requires_all_preconsents(self):
         session = BridgeSession(
             "s",
             2,
             expected_participant_refs=frozenset({"p1", "p2"}),
-            state=SessionState.PARTICIPANTS_JOINING,
+            state=SessionState.AWAITING_CONSENT,
             consented_participants=frozenset({"p1"}),
         )
         with self.assertRaises(ConsentRequired):
-            session.transition(SessionState.RECORDING)
+            session.transition(SessionState.PARTICIPANTS_JOINING)
 
     def test_consent_is_collected_before_any_conference_participant_joins(self):
         self.send(self.event("ring", EventType.BRIDGE_RINGING))
