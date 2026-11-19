@@ -17,6 +17,8 @@
 - [Apple CallKit](https://developer.apple.com/documentation/callkit) provides the system calling interface and coordinates an app's VoIP services. It is not a public native Phone-call recording API.
 - [UIKit URL opening](https://developer.apple.com/documentation/uikit/uiscene/open%28_%3Aoptions%3Acompletionhandler%3A%29) supports the `tel` scheme by handing the URL to the system app. It does not expose an API to merge calls or read Phone-call audio.
 - [Default calling app guidance](https://developer.apple.com/documentation/CallKit/Preparing-your-app-to-be-the-default-calling-app) describes the iOS 18.2+ default-calling-app entitlement and VoIP fallback behavior; it is not a permission to intercept the native Phone app.
+- [UIKit URL opening](https://developer.apple.com/documentation/uikit/uiscene/open%28_%3Aoptions%3Acompletionhandler%3A%29) supports the `tel` scheme by handing the URL to the system app. It does not expose an API to merge calls or read Phone-call audio.
+- [Default calling app guidance](https://developer.apple.com/documentation/CallKit/Preparing-your-app-to-be-the-default-calling-app) describes the iOS 18.2+ default-calling-app entitlement and VoIP fallback behavior; it is not a permission to intercept the native Phone app.
 - [Apple iPhone call recording guide](https://support.apple.com/guide/iphone/record-and-transcribe-a-call-iph57c6590e9/27/ios/27) documents built-in recording in select regions and explicitly excludes the EU, Iran and Oman in the current guide.
 - [App Store Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) section 2.5.14 requires explicit consent and a clear visual and/or audible indication when recording user activity.
 
