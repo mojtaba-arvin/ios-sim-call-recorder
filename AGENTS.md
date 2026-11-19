@@ -46,6 +46,7 @@ Use the role contracts in `.agents/roles/`. Each task has one accountable implem
 - Shared branches are not shared workspaces: do not have multiple agents commit to the same branch concurrently.
 - Integrate work through separate branches/PRs or sequential cherry-picks after validation.
 - The reviewer must inspect the actual diff and test evidence; it must not rely on the implementer's summary.
+- Record review evidence honestly: an independent human review and an owner-authorized automated review are different modes. Never claim an automated review was an independent human approval or fabricate a GitHub review.
 - If no independent agent runtime is available, do not pretend one was spawned. Execute the role separation sequentially and document that limitation.
 
 ## Git policy
