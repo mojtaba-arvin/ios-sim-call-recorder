@@ -45,6 +45,7 @@ def _read_window(
     sumsquares = [0.0] * channels
     peaks = [0.0] * channels
     clipped = [0] * channels
+    clipping_threshold = 1.0 - 1.0 / (1 << (sample_width * 8 - 1))
 
     for frame_index in range(complete_frames):
         frame_offset = frame_index * frame_size
@@ -54,7 +55,7 @@ def _read_window(
             magnitude = abs(sample)
             sumsquares[channel] += sample * sample
             peaks[channel] = max(peaks[channel], magnitude)
-            if magnitude >= 0.999:
+            if magnitude >= clipping_threshold:
                 clipped[channel] += 1
 
     rms = [
