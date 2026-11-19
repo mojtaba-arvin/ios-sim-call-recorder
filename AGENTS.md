@@ -34,6 +34,7 @@ Role contracts live in `.agents/roles/`; reusable, task-oriented skills live in 
 - Templates in `.agents/templates/` define task, ADR, research-report, independent PR-review and validation-report structure.
 - Policies in `.agents/policies/` are the canonical privacy, branch and evidence rules.
 - `scripts/validate_agent_assets.py` checks required role/skill/template/policy structure; it does not prove that an agent executed a skill correctly.
+- `scripts/validate_agent_tasks.py` checks machine-readable task contracts, dependency existence/cycles and done-state evidence fields; it does not query GitHub or execute work.
 
 ## Multi-agent work allocation
 
