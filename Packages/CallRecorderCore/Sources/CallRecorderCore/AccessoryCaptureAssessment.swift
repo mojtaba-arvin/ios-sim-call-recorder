@@ -106,6 +106,29 @@ public enum AccessoryCaptureAssessment {
         )
     }
 
+    /// True only when the declared hardware identity, iPhone connector
+    /// generation (where applicable) and active call route agree.
+    public static func isCandidateTuple(
+        context: DeviceCompatibilityContext,
+        accessory: AccessoryCaptureProfile
+    ) -> Bool {
+        let model = accessory.modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firmware = accessory.firmwareVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let device = context.deviceModelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let os = context.operatingSystemVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, !firmware.isEmpty, !device.isEmpty, !os.isEmpty,
+              routeMatches(accessory.transport, route: context.audioRoute) else {
+            return false
+        }
+
+        if accessory.transport == .lightning || accessory.transport == .usbC {
+            guard let connector = inferredConnector(for: device) else { return false }
+            let expected: AccessoryCaptureTransport = connector == .lightning ? .lightning : .usbC
+            guard accessory.transport == expected else { return false }
+        }
+        return true
+    }
+
     private enum IPhoneConnector {
         case lightning
         case usbC
