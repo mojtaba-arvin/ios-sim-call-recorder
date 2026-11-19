@@ -23,7 +23,7 @@ for path in WORKFLOWS:
     top_level_permissions_found = False
     lines = text.splitlines()
     for line_number, line in enumerate(lines):
-        match = re.match(r"^( *)permissions:\\s*(.*?)\\s*$", line)
+        match = re.match(r"^( *)permissions:\s*(.*?)\s*$", line)
         if not match:
             continue
 
@@ -55,7 +55,7 @@ for path in WORKFLOWS:
 
             if child_indentation == indentation + 2 and not child_line.lstrip().startswith("#"):
                 permission = re.match(
-                    r"^ *([A-Za-z0-9_-]+):\\s*(read|write|none)\\s*(?:#.*)?$",
+                    r"^ *([A-Za-z0-9_-]+):\s*(read|write|none)\s*(?:#.*)?$",
                     child_line,
                 )
                 if permission:
