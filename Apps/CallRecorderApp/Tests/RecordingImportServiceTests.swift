@@ -29,21 +29,7 @@ final class RecordingImportServiceTests: XCTestCase {
 
     func testFirstImportSeedsKnownGoodBackup() async throws {
         let sourceURL = temporaryRoot.appendingPathComponent("sample.wav")
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 44_100,
-            channels: 1,
-            interleaved: false
-        )!
-        let audioFile = try AVAudioFile(
-            forWriting: sourceURL,
-            settings: format.settings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4_410)!
-        buffer.frameLength = 4_410
-        try audioFile.write(from: buffer)
+        try writeValidWAV(to: sourceURL)
 
         let service = RecordingImportService(storageRootURL: temporaryRoot)
         _ = try await service.importRecording(from: sourceURL, source: .filesApp)
@@ -146,6 +132,32 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: unknown.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: directoryNamedLikeAudio.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
+    }
+
+    private func writeValidWAV(to url: URL) throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 44_100,
+            channels: 1,
+            interleaved: false
+        ))
+
+        // Keep the writer's lifetime inside this helper so AVAudioFile is
+        // deallocated and its WAV header is finalized before the importer reads it.
+        do {
+            let audioFile = try AVAudioFile(
+                forWriting: url,
+                settings: format.settings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100))
+            buffer.frameLength = 44_100
+            try audioFile.write(from: buffer)
+        }
+
+        let decodedFile = try AVAudioFile(forReading: url)
+        XCTAssertGreaterThanOrEqual(decodedFile.duration, 1.0, "The generated fixture must contain at least one second of decodable audio")
     }
 
     private func makeEntry(importedAt: Date = Date()) -> ImportedRecording {
