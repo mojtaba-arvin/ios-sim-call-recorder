@@ -52,7 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@{VALID_ACTION_SHA}
+      - name: Checkout
+        uses: actions/checkout@{VALID_ACTION_SHA}
 """
 
     def test_accepts_explicit_read_only_permissions_and_pinned_actions(self) -> None:
