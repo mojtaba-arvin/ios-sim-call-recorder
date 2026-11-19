@@ -77,6 +77,22 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
             return .insufficient(reason: "Exact iPhone model, iOS version and iOS build are required.")
         }
 
+        let region = context.deviceRegionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let country = context.physicalTestCountryCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let language = context.languageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let carrier = context.carrierIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let carrierBundle = context.carrierBundleVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !region.isEmpty, !country.isEmpty, !language.isEmpty,
+              !carrier.isEmpty, !carrierBundle.isEmpty,
+              context.simConfiguration != .unknown,
+              context.networkType != .unknown else {
+            return .insufficient(reason: "Exact device region, test country, language, carrier, carrier bundle, SIM configuration and network type are required.")
+        }
+
+        guard context.audioRouteEvidence == .physicalTestObserved else {
+            return .insufficient(reason: "The active Phone call route must be observed during a physical-device test; a user report or app-owned audio-session route is not sufficient.")
+        }
+
         guard AccessoryCaptureAssessment.isCandidateTuple(
             context: context,
             accessory: accessory
