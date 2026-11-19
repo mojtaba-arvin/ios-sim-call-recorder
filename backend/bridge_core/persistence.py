@@ -113,7 +113,7 @@ class PostgresBridgeRepository:
 
                 cur.execute(
                     """SELECT session_id, expected_participants, expected_participant_refs, state,
-                    joined_participants, consented_participants, failure_code, updated_at
+                    joined_participants, consented_participants, consent_evidence, failure_code, updated_at
                     FROM bridge_sessions WHERE session_id = %s FOR UPDATE""", (session_id,))
                 row = cur.fetchone()
                 if row is None:
