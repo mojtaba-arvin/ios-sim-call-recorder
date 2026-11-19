@@ -3,6 +3,9 @@ import Foundation
 /// A capture or companion route investigated by the product.
 public enum RecordingPathway: String, CaseIterable, Hashable, Sendable {
     case nativeCompanion
+    case appleSystemCallRecording
+    case independentExternalRecorder
+    case replayKitAppCapture
     case conferenceBridge
     case carrierService
     case appOwnedVoIP
