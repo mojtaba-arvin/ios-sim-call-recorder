@@ -6,7 +6,6 @@ on:
       - "Apps/CallRecorderApp/**"
       - "Packages/CallRecorderCore/**"
       - "project.yml"
-      - ".github/workflows/ios-app.yml"
   workflow_dispatch:
 
 permissions:
