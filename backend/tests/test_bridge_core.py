@@ -79,7 +79,7 @@ class BridgeCoreTests(unittest.TestCase):
             2,
             expected_participant_refs=frozenset({"p1", "p2"}),
             state=SessionState.PARTICIPANTS_JOINING,
-            consented_participants=frozenset({"p1", "p2"}),
+            consented_participants=frozenset({"p1"}),
         )
         with self.assertRaises(ConsentRequired):
             session.transition(SessionState.RECORDING)
@@ -96,10 +96,13 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(session.state, SessionState.PARTICIPANTS_JOINING)
         self.assertEqual(session.joined_participants, frozenset())
         with self.assertRaises(ConsentRequired):
-            self.send(self.event("recording-too-early", EventType.RECORDING_STARTED))
+            self.send(self.event("recording-before-consent", EventType.RECORDING_STARTED))
 
-        self.send(self.event("join-a", EventType.PARTICIPANT_JOINED, "a"))
+        # Provider recording callbacks can race ahead of the participant-joined
+        # callback. Once every participant has pre-consented, the provider's
+        # recording.started event is authoritative even if join webhooks lag.
         self.send(self.event("recording-started", EventType.RECORDING_STARTED))
+        self.send(self.event("join-a", EventType.PARTICIPANT_JOINED, "a"))
         self.send(self.event("join-b", EventType.PARTICIPANT_JOINED, "b"))
         session = self.repo.get_session("session-opaque-1")
         self.assertEqual(session.state, SessionState.RECORDING)
