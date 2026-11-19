@@ -55,3 +55,6 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings. If both catalog files are missing but managed media already exists, it also fails closed rather than treating the installation as new and deleting those files as orphans.
 - On library maintenance, abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
 - The Swift core package tests cover retention boundaries. The app-target XCTest suite exercises catalog recovery, fail-closed behavior, retention deletion and filesystem maintenance on an isolated temporary storage root. Simulator tests do not replace physical-device validation.
+
+
+Catalog recovery/validation is performed before moving staged media into the managed recordings directory. This preserves the missing-catalog fail-closed guard without misclassifying a first import as an orphan.
