@@ -75,13 +75,15 @@ struct RecordingLibraryView: View {
                 Image(systemName: "waveform")
                     .font(.system(size: 42, weight: .regular))
                     .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
 
                 Text("Call Recordings")
                     .font(.largeTitle.weight(.semibold))
 
-                Text(statusMessage)
+                Text(isError ? "Error: \(statusMessage)" : statusMessage)
                     .multilineTextAlignment(.center)
                     .foregroundColor(isError ? .red : .secondary)
+                    .accessibilityAddTraits(.updatesFrequently)
 
                 Button {
                     isImporterPresented = true
@@ -90,10 +92,13 @@ struct RecordingLibraryView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityHint("Opens the file picker so you can select an audio recording you exported.")
                 .disabled(isImporting)
 
                 if isImporting {
                     ProgressView("Validating and importing…")
+                        .accessibilityLabel("Importing recording")
+                        .accessibilityValue("Validating and copying the selected audio file")
                 }
 
                 if recordings.isEmpty {
@@ -101,6 +106,7 @@ struct RecordingLibraryView: View {
                         Image(systemName: "waveform")
                             .font(.title)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Text("No recordings yet")
                             .font(.headline)
                         Text("Select an audio file to add it to your library.")
@@ -115,6 +121,7 @@ struct RecordingLibraryView: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: "waveform")
                                         .foregroundStyle(.tint)
+                                        .accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Recording")
                                             .font(.body.weight(.medium))
@@ -125,6 +132,8 @@ struct RecordingLibraryView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(recordingAccessibilitySummary(recording))
                                     Spacer(minLength: 8)
                                     Button {
                                         shareRecording(recording)
@@ -133,7 +142,7 @@ struct RecordingLibraryView: View {
                                             .frame(width: 36, height: 36)
                                     }
                                     .buttonStyle(.borderless)
-                                    .accessibilityLabel("Share recording")
+                                    .accessibilityLabel("Share \(recordingAccessibilityDate(recording))")
 
                                     Button {
                                         togglePlayback(for: recording)
@@ -142,7 +151,7 @@ struct RecordingLibraryView: View {
                                             .frame(width: 36, height: 36)
                                     }
                                     .buttonStyle(.borderless)
-                                    .accessibilityLabel(playingRecordingID == recording.id && isPlaying ? "Pause recording" : "Play recording")
+                                    .accessibilityLabel(playingRecordingID == recording.id && isPlaying ? "Pause \(recordingAccessibilityDate(recording))" : "Play \(recordingAccessibilityDate(recording))")
                                 }
                             }
                             .onDelete(perform: deleteRecordings)
@@ -247,9 +256,11 @@ struct RecordingLibraryView: View {
             )
             .accessibilityLabel("Playback position")
             .accessibilityValue("\(formattedDuration(playbackCurrentTime)) of \(formattedDuration(playbackDuration))")
+            .accessibilityHint("Adjust to move to a different position in the recording.")
 
             HStack {
                 Text(formattedDuration(playbackCurrentTime))
+                    .accessibilityLabel("Elapsed time")
                 Spacer()
                 Button {
                     toggleCurrentPlayback()
@@ -260,6 +271,7 @@ struct RecordingLibraryView: View {
                 .accessibilityLabel(isPlaying ? "Pause playback" : "Resume playback")
                 Spacer()
                 Text(formattedDuration(playbackDuration))
+                    .accessibilityLabel("Total duration")
             }
             .font(.caption.monospacedDigit())
         }
@@ -505,6 +517,14 @@ struct RecordingLibraryView: View {
                 isError = true
             }
         }
+    }
+
+    private func recordingAccessibilityDate(_ recording: ImportedRecording) -> String {
+        "recording from \(recording.importedAt.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func recordingAccessibilitySummary(_ recording: ImportedRecording) -> String {
+        "\(recordingAccessibilityDate(recording)), duration \(formattedDuration(recording.durationSeconds)), size \(formattedSize(recording.byteCount))"
     }
 
     private func formattedDuration(_ duration: Double) -> String {
