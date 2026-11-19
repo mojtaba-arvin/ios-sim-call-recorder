@@ -6,6 +6,7 @@ enum RecordingImportServiceError: LocalizedError {
     case unsupportedContainer
     case unreadableAudio
     case missingFileSize
+    case sourceChangedDuringImport
     case storageUnavailable
 
     var errorDescription: String? {
@@ -16,6 +17,8 @@ enum RecordingImportServiceError: LocalizedError {
             return "The selected file could not be decoded as audio."
         case .missingFileSize:
             return "The selected file size could not be determined."
+        case .sourceChangedDuringImport:
+            return "The selected file changed while it was being imported. Please try again."
         case .storageUnavailable:
             return "Private recording storage is unavailable."
         }
@@ -88,6 +91,7 @@ actor RecordingImportService {
         // All later probing happens against our app-private staged copy.
         var coordinationError: NSError?
         var copyError: Error?
+        var sourceByteCount: Int64?
         let coordinator = NSFileCoordinator()
         coordinator.coordinate(
             readingItemAt: sourceURL,
@@ -95,6 +99,21 @@ actor RecordingImportService {
             error: &coordinationError
         ) { coordinatedURL in
             do {
+                let sourceAttributes = try fileManager.attributesOfItem(
+                    atPath: coordinatedURL.path
+                )
+                guard let byteCount = (sourceAttributes[.size] as? NSNumber)?.int64Value else {
+                    throw RecordingImportServiceError.missingFileSize
+                }
+                guard byteCount > 0 else {
+                    throw RecordingImportValidationError.emptyFile
+                }
+                guard byteCount <= RecordingImportValidator.maximumFileSizeBytes else {
+                    throw RecordingImportValidationError.fileTooLarge(
+                        maximumBytes: RecordingImportValidator.maximumFileSizeBytes
+                    )
+                }
+                sourceByteCount = byteCount
                 try fileManager.copyItem(at: coordinatedURL, to: stagedURL)
                 stagedFileExists = true
             } catch {
@@ -110,8 +129,12 @@ actor RecordingImportService {
 
         let container = try AudioContainerProbe.detect(at: stagedURL)
         let attributes = try fileManager.attributesOfItem(atPath: stagedURL.path)
-        guard let size = (attributes[.size] as? NSNumber)?.int64Value else {
+        guard let size = (attributes[.size] as? NSNumber)?.int64Value,
+              let sourceByteCount else {
             throw RecordingImportServiceError.missingFileSize
+        }
+        guard size == sourceByteCount else {
+            throw RecordingImportServiceError.sourceChangedDuringImport
         }
 
         let audioFile: AVAudioFile
