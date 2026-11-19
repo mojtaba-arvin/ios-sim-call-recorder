@@ -50,6 +50,9 @@ final class RecordingSessionStateMachineTests: XCTestCase {
 
     func testTerminalStateCannotBeReopened() throws {
         var machine = RecordingSessionStateMachine()
+        try machine.transition(to: .preparing)
+        try machine.transition(to: .awaitingConsent)
+        try machine.transition(to: .cancelling)
         try machine.transition(to: .cancelled)
         XCTAssertThrowsError(try machine.transition(to: .preparing))
         XCTAssertEqual(machine.state, .cancelled)
