@@ -18,6 +18,7 @@ class FakeRepository:
     def __init__(self, commands):
         self.commands = tuple(commands)
         self.resources = {}
+        self.participant_resources = {}
         self.acked = []
         self.failed = []
 
@@ -35,6 +36,16 @@ class FakeRepository:
             raise AssertionError("resource mapping must be immutable")
         self.resources[key] = conference_sid
 
+    def get_provider_participant_resource(self, provider, account, session, participant_ref):
+        return self.participant_resources.get((provider, account, session, participant_ref))
+
+    def put_provider_participant_resource(self, provider, account, session, participant_ref, call_sid):
+        key = (provider, account, session, participant_ref)
+        existing = self.participant_resources.get(key)
+        if existing is not None and existing != call_sid:
+            raise AssertionError("participant mapping must be immutable")
+        self.participant_resources[key] = call_sid
+
     def acknowledge_outbox(self, command_id, lease_token):
         self.acked.append((command_id, lease_token))
 
@@ -50,12 +61,12 @@ class FakeAdapter:
         self.reconcile_calls = []
         self.execute_calls = []
 
-    def reconcile(self, command, conference_sid):
-        self.reconcile_calls.append((command, conference_sid))
+    def reconcile(self, command, *, conference_sid, call_sid):
+        self.reconcile_calls.append((command, conference_sid, call_sid))
         return self.reconciliation
 
-    def execute(self, command, conference_sid):
-        self.execute_calls.append((command, conference_sid))
+    def execute(self, command, *, conference_sid, call_sid):
+        self.execute_calls.append((command, conference_sid, call_sid))
         return self.execution
 
 
@@ -162,10 +173,10 @@ class DispatcherTests(unittest.TestCase):
         command = leased_command()
 
         class FailingAdapter:
-            def reconcile(self, command, conference_sid):
+            def reconcile(self, command, *, conference_sid, call_sid):
                 raise ProviderOperationError("provider_rate_limited", retryable=True)
 
-            def execute(self, command, conference_sid):
+            def execute(self, command, *, conference_sid, call_sid):
                 raise AssertionError("execute must not run after reconciliation failure")
 
         repo = FakeRepository([command])
