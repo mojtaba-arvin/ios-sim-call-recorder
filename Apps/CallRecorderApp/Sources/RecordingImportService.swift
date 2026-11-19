@@ -9,6 +9,8 @@ enum RecordingImportServiceError: LocalizedError {
     case sourceChangedDuringImport
     case validation(RecordingImportValidationError)
     case storageUnavailable
+    case recordingNotFound
+    case recordingFileMissing
 
     var errorDescription: String? {
         switch self {
@@ -43,6 +45,10 @@ enum RecordingImportServiceError: LocalizedError {
             }
         case .storageUnavailable:
             return "Private recording storage is unavailable."
+        case .recordingNotFound:
+            return "This recording is no longer in your library."
+        case .recordingFileMissing:
+            return "The audio file for this recording is missing."
         }
     }
 }
@@ -200,6 +206,19 @@ actor RecordingImportService {
             try saveCatalog(validEntries)
         }
         return validEntries.sorted { $0.importedAt > $1.importedAt }
+    }
+
+    /// Returns only a URL belonging to a catalog entry in app-private storage.
+    func playbackURL(for id: UUID) throws -> URL {
+        let entries = try loadCatalog()
+        guard let entry = entries.first(where: { $0.id == id }) else {
+            throw RecordingImportServiceError.recordingNotFound
+        }
+        let url = try recordingURL(for: entry)
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw RecordingImportServiceError.recordingFileMissing
+        }
+        return url
     }
 
     func deleteRecording(id: UUID) throws {
