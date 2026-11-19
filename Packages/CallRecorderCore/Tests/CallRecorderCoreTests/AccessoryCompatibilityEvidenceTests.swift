@@ -84,6 +84,26 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertFalse(evidence.isConfirmed)
     }
 
+    func testDuplicateObservationTimestampsBlockConfirmation() {
+        let timestamp = Date(timeIntervalSince1970: 1_800_000_000)
+        let repeated = (1...3).map { index in
+            AccessoryCaptureTrial(
+                attemptIdentifier: "attempt-\\(index)",
+                observedAt: timestamp,
+                consentConfirmed: true,
+                recordingNoticeConfirmed: true,
+                localSpeechIntelligible: true,
+                remoteSpeechIntelligible: true,
+                artifactIntegrityVerified: true
+            )
+        }
+        let evidence = makeEvidence(trials: repeated)
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("One timestamp must not stand in for three distinct physical calls")
+        }
+        XCTAssertTrue(reason.contains("distinct observation timestamp"))
+    }
+
     func testMissingOSBuildBlocksConfirmation() {
         let context = makeContext(build: nil)
         let evidence = AccessoryCompatibilityEvidence(
