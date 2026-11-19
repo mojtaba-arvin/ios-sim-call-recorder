@@ -77,6 +77,13 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
             return .insufficient(reason: "Exact iPhone model, iOS version and iOS build are required.")
         }
 
+        guard AccessoryCaptureAssessment.isCandidateTuple(
+            context: context,
+            accessory: accessory
+        ) else {
+            return .insufficient(reason: "The active route, iPhone connector generation or accessory identity does not match this evidence tuple.")
+        }
+
         guard trials.count >= Self.requiredPositiveTrials else {
             return .insufficient(reason: "At least three repeated physical-device calls are required.")
         }
