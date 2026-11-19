@@ -192,6 +192,9 @@ public actor RecordingSessionOrchestrator {
         } catch {
             try? machine.transition(to: .failed)
             activeSessionID = nil
+            // A failed finalization may leave a provider session or local
+            // capture resource active; request idempotent cleanup as well.
+            try? await adapter.cancel(sessionID: sessionID)
             throw error
         }
     }
