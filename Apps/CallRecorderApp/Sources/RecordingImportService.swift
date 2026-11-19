@@ -178,6 +178,10 @@ actor RecordingImportService {
         // truncated tail cannot be committed as a playable library item.
         try validateAudioPayload(audioFile)
 
+        // Resolve/recover the catalog before moving staged media into the
+        // managed directory. Otherwise a first import would look like an
+        // unexplained orphan to the missing-catalog fail-closed guard.
+        var entries = try loadCatalog()
         let entry = ImportedRecording(
             id: UUID(),
             fileExtension: container.rawValue,
@@ -191,7 +195,6 @@ actor RecordingImportService {
         stagedFileExists = false
 
         do {
-            var entries = try loadCatalog()
             entries.append(entry)
             try saveCatalog(entries)
         } catch {
