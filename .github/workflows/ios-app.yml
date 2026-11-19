@@ -44,7 +44,7 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-    simulator-build:
+  simulator-build:
     name: CallRecorderApp simulator build
     needs: detect-changes
     if: needs.detect-changes.outputs.run == 'true'
