@@ -210,6 +210,13 @@ actor RecordingImportService {
             at: directory,
             withIntermediateDirectories: true
         )
+        try fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directory.path
+        )
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try directory.setResourceValues(resourceValues)
         return directory
     }
 
