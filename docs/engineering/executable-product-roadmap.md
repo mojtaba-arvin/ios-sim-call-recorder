@@ -37,8 +37,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 ### M0 — Stabilize the integration baseline
 
 - [ ] Merge the import payload hardening only after fresh Swift, iOS Simulator and backend checks pass on its mainline PR head.
-- [ ] Resolve or supersede the stale stacked import PR; leave one canonical implementation path.
-- [ ] Review and merge the product README, evidence templates and provider session contract after documentation checks.
+- [x] Resolve the stale stacked import PR; PR #32 was closed after the clean mainline implementation in PR #40.
 - [ ] Consolidate the governance/agent-tooling PRs without reverting current CI path filters, permissions, action pins or cache improvements.
 - [ ] Verify default-branch checks and ruleset behavior; document any settings that the repository integration cannot change.
 - [ ] Publish one dependency map and close obsolete/orphan branches only after confirming their changes are represented.
@@ -50,7 +49,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - [x] User-mediated import and private local storage.
 - [x] Local playback, seeking, interruptions/output-route handling and user-initiated export.
 - [x] Opt-in retention, backup catalog recovery and fail-closed storage behavior.
-- [ ] Complete import adversarial cases on the current mainline and keep format-specific claims bounded by decoder evidence.
+- [x] Complete import adversarial cases on the current mainline with PR #40; keep format-specific claims bounded by decoder evidence.
 - [ ] Run VoiceOver and Dynamic Type review on physical devices; record OS/device tuples.
 - [ ] Add app lifecycle/background/low-storage recovery checks and verify file protection after device lock/reboot.
 - [ ] Add release signing, privacy manifest/permission review, app icon/metadata and a reproducible archive build.
@@ -135,3 +134,10 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 2. Verify repository ruleset and required-check behavior; keep current workflow optimizations intact.
 3. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
 4. In parallel, prepare M2 physical-device test protocol and a consented test matrix; keep it blocked until devices/SIMs/accessories are available.
+
+
+## Verified repository controls (2026-11-19)
+
+The active ruleset `protect main` targets the default branch and contains only `deletion` and `non_fast_forward` rules. It does not require pull requests, reviews or CI status checks. The GitHub integration could read the ruleset but received HTTP 403 for the legacy branch-protection endpoint, so no claim is made about additional legacy settings. No protection settings were changed. If stronger enforcement is desired, add a pull-request requirement and one always-present aggregate CI gate after its path-filtered job semantics are verified; do not require a workflow that is intentionally skipped for unrelated changes.
+
+The active PR queue is empty. Superseded PRs #1, #9, #28 and #32 are closed after their useful changes were integrated. The old orphan branch `feat/ios-recording-retention-catalog-recovery` remains unpruned because this GitHub integration does not expose branch deletion; its functionality is represented by the merged v2 retention/catalog implementation.
