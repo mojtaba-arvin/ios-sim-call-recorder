@@ -73,6 +73,38 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertTrue(importedFiles.isEmpty)
     }
 
+    func testWAVDeclaredDataChunkBeyondPhysicalFileIsRejected() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid-header.wav")
+        try writeValidWAV(to: validURL)
+        var data = try Data(contentsOf: validURL)
+        let dataChunk = try XCTUnwrap(data.range(of: Data("data".utf8)))
+        let lengthOffset = dataChunk.upperBound
+        data.replaceSubrange(lengthOffset..<(lengthOffset + 4), with: [0xFF, 0xFF, 0xFF, 0x7F])
+        let malformedURL = temporaryRoot.appendingPathComponent("invalid-chunk-length.wav")
+        try data.write(to: malformedURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: malformedURL, source: .filesApp)
+            XCTFail("A WAV data chunk extending beyond the physical file must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .unreadableAudio = error else {
+                return XCTFail("Expected unreadableAudio, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
     func testLongAudioIsDecodedInBoundedChunks() async throws {
         let sourceURL = temporaryRoot.appendingPathComponent("long.wav")
         try writeValidWAV(to: sourceURL, durationSeconds: 60)
