@@ -48,6 +48,13 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertFalse(evidence.isConfirmed)
     }
 
+    func testExcessiveBackgroundNoiseBlocksEvidencePromotion() {
+        let evidence = makeEvidence(trials: [
+            trial("a"), trial("b"), trial("c", remoteNoise: false)
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
     func testSpeechMustBeIntelligibleAtBeginningMiddleAndEnd() {
         let evidence = makeEvidence(trials: [
             trial("a"), trial("b"), trial("c", remoteMiddle: false)
@@ -258,14 +265,16 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         remoteMiddle: Bool = true,
         localClipping: Bool = true,
         remoteGaps: Bool = true,
-        remoteEcho: Bool = true
+        remoteEcho: Bool = true,
+        remoteNoise: Bool = true
     ) -> AccessoryCaptureTrial {
         func quality(
             speech: Bool,
             middle: Bool = true,
             clipping: Bool = true,
             gaps: Bool = true,
-            echo: Bool = true
+            echo: Bool = true,
+            noise: Bool = true
         ) -> AccessoryAudioDirectionEvidence {
             AccessoryAudioDirectionEvidence(
                 intelligibleAtBeginning: speech,
@@ -274,7 +283,7 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
                 clippingAcceptable: clipping,
                 gapsAcceptable: gaps,
                 echoAcceptable: echo,
-                noiseAcceptable: true
+                noiseAcceptable: noise
             )
         }
 
@@ -291,7 +300,8 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
                 speech: remote,
                 middle: remoteMiddle,
                 gaps: remoteGaps,
-                echo: remoteEcho
+                echo: remoteEcho,
+                noise: remoteNoise
             ),
             artifactIntegrityVerified: integrity
         )
