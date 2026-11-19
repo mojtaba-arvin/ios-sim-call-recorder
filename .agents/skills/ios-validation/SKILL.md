@@ -16,7 +16,8 @@ description: Validate iOS app changes using exact-head builds and tests, with cl
 8. For audio features, test interruption, route changes, seek, completion, cancellation and repeated start/stop.
 9. Record simulator limitations. Do not infer Phone.app audio access, carrier merge behavior or hardware compatibility from Simulator.
 10. Physical-device runs must record exact model identifier, iOS version/build, region/country/language, carrier, SIM, network, call direction, route and accessory firmware.
-11. Require three repeated runs for each claimed positive physical configuration and verify both speech directions.
+11. Exercise failure cleanup at every adapter boundary: partial prepare, consent rejection, connect failure, capture-start failure, cancellation race and finalization failure. Assert idempotent cleanup and verify no late completion can reactivate a terminal session.
+12. Require three repeated runs for each claimed positive physical configuration and verify both speech directions.
 
 ## Output
 - Exact SHA, commands, environment and test counts.
