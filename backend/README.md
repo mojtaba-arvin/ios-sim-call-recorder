@@ -22,9 +22,8 @@ PostgreSQL 16 is the CI integration-test target. Install the pinned backend depe
 python -m pip install -r backend/requirements.txt
 ```
 
-Apply SQL migrations with the deployment migration runner before starting the
-service. The initial schema is
-`backend/migrations/0001_bridge_persistence.sql`. The repository deliberately
+Apply SQL migrations in numeric order with the deployment migration runner before starting the
+service: `0001_bridge_persistence.sql`, then `0002_provider_resources.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -60,6 +59,27 @@ Persist only stable error codes, never exception text or raw provider payloads.
 This is at-least-once command delivery, not exactly-once remote execution. A
 worker can crash after a provider side effect and before acknowledgement commits.
 Provider-side idempotency/reconciliation is mandatory before enabling live calls.
+
+## Provider command dispatcher foundation
+
+`bridge_core.dispatcher.OutboxCommandDispatcher` leases commands and invokes a configured
+provider/account adapter only after the lease transaction has committed. Every delivery
+attempt first calls the adapter's `reconcile` method with the persisted Conference SID
+and, when the command carries an opaque `participant_ref`, its mapped Call SID. The
+adapter must return `UNKNOWN` rather than execute when provider state cannot be established.
+Only `NOT_APPLIED` permits execution; `APPLIED` is acknowledged without replaying the
+side effect. Provider I/O must never run inside a repository transaction.
+
+The `0002_provider_resources.sql` migration stores provider/account/session-scoped
+Conference SIDs and opaque participant-reference-to-Call-SID mappings. These identifiers
+are immutable for a given mapping; conflicts fail closed. Do not store phone numbers,
+provider credentials, media URLs, audio, or signatures in these tables or outbox payloads.
+
+This is a dispatcher contract and persistence foundation, not a live Twilio adapter.
+Twilio participant creation does not have a documented general idempotency guarantee in
+the reviewed API reference. A concrete adapter must use a stable provider correlation
+strategy and query provider state before retrying ambiguous operations. No real provider
+calls or carrier-compatibility claims are made by these tests.
 
 ## Security and deliberate production gaps
 
