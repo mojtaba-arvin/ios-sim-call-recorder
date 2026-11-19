@@ -200,6 +200,39 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertTrue(reason.contains("carrier"))
     }
 
+    func testUnknownSIMConfigurationBlocksEvidencePromotion() {
+        let context = makeContext(sim: .unknown)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testUnknownNetworkTypeBlocksEvidencePromotion() {
+        let context = makeContext(network: .unknown)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testMissingRegionOrLanguageBlocksEvidencePromotion() {
+        let missingRegion = makeContext(region: " ")
+        let missingLanguage = makeContext(language: " ")
+        for context in [missingRegion, missingLanguage] {
+            let evidence = AccessoryCompatibilityEvidence(
+                context: context,
+                accessory: profile,
+                trials: [trial("a"), trial("b"), trial("c")]
+            )
+            XCTAssertFalse(evidence.isConfirmed)
+        }
+    }
+
     func testMissingCarrierBundleVersionBlocksEvidencePromotion() {
         let context = makeContext(carrierBundle: nil)
         let evidence = AccessoryCompatibilityEvidence(
@@ -346,20 +379,24 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         route: CallAudioRoute = .speaker,
         routeEvidence: CallAudioRouteEvidence = .physicalTestObserved,
         carrier: String? = "carrier.example",
-        carrierBundle: String? = "bundle-1.0"
+        carrierBundle: String? = "bundle-1.0",
+        sim: SIMConfiguration = .physicalAndESIM,
+        network: NetworkType = .cellular5G,
+        region: String = "US",
+        language: String = "en-US"
     ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
             deviceModelIdentifier: model,
             operatingSystemVersion: "18.7.1",
             operatingSystemBuild: build,
-            deviceRegionCode: "US",
+            deviceRegionCode: region,
             physicalTestCountryCode: "US",
-            languageCode: "en-US",
+            languageCode: language,
             carrierIdentifier: carrier,
             carrierBundleVersion: carrierBundle,
-            simConfiguration: .physicalAndESIM,
+            simConfiguration: sim,
             isRoaming: false,
-            networkType: .cellular5G,
+            networkType: network,
             wifiCallingEnabled: false,
             volteEnabled: true,
             callDirection: .incoming,
