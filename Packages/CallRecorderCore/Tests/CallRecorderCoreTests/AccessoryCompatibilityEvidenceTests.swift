@@ -88,7 +88,7 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         let timestamp = Date(timeIntervalSince1970: 1_800_000_000)
         let repeated = (1...3).map { index in
             AccessoryCaptureTrial(
-                attemptIdentifier: "attempt-\\(index)",
+                attemptIdentifier: "attempt-\(index)",
                 observedAt: timestamp,
                 consentConfirmed: true,
                 recordingNoticeConfirmed: true,
