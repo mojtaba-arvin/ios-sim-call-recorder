@@ -31,7 +31,7 @@ enum RecordingImportServiceError: LocalizedError {
             case .fileTooLarge(let maximumBytes):
                 return "The selected file exceeds the maximum size of \(maximumBytes / 1_048_576) MiB."
             case .invalidDuration:
-                return "The selected file has an invalid audio duration."
+                return "The selected recording has an invalid audio duration."
             case .durationTooLong(let maximumSeconds):
                 return "The selected recording exceeds the maximum duration of \(Int(maximumSeconds / 3_600)) hours."
             case .invalidSampleRate:
@@ -222,7 +222,7 @@ actor RecordingImportService {
             throw RecordingImportServiceError.storageUnavailable
         }
 
-        let directory = applicationSupport.appendingPathComponent(
+        var directory = applicationSupport.appendingPathComponent(
             "CallRecorder/\(name)",
             isDirectory: true
         )
