@@ -61,7 +61,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
 | #37 | `feat/accessory-compatibility-assessment` | `131474f9b4aaa8f142133eaee484d58e077e3bd3` | #19 | Accessory compatibility/evidence gate |
 | #38 | `fix/ios-pending-playback-request-invalidation` | `8952c356e8fed25704d2aef65ec935a5c7751e77` | #27 | Playback lifecycle race fix |
-| #28 | `chore/agent-rd-skills-and-templates` | `bb0b03d42f3fffd2de1e24dc63ef84faf5df673d` | #9 | Governance stack (head before this map update) |
+| #28 | `chore/agent-rd-skills-and-templates` | `eb2da7e697b05adbdf360b5fd696900801e80f3f` | #9 | Governance stack (head before this map refresh) |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
 
@@ -71,7 +71,8 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 2. Integrate governance extension #28 after #9.
 3. Integrate backend stack in order #13 → #15 → #17 → #36 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
-5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility) and #32 (audio-payload validation) as separate PRs. PR #34 depends on #30 and adds failure-path adapter cleanup.
+5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility), #32 (audio-payload validation) and #38 (pending playback lookup invalidation) as separate PRs. PR #34 depends on #30 and adds failure-path adapter cleanup.
+6. Review #37 after #19; it adds accessory connector/route compatibility and strict physical-evidence promotion gates.
 7. Resolve Issue #18 and Issue #20 physical-device gates before enabling provider recording or advertising accessory compatibility.
 
 ## Operational rules
