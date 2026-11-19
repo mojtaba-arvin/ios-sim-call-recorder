@@ -98,8 +98,8 @@ def analyze_wav(
         total_samples = 0
         silent_windows = [0] * channels
         total_windows = 0
-        current_silent_windows = [0] * channels
-        longest_silent_windows = [0] * channels
+        current_silent_frames = [0] * channels
+        longest_silent_frames = [0] * channels
 
         while True:
             sumsquares, peaks, clipped, frames, silent = _read_window(
@@ -119,13 +119,13 @@ def analyze_wav(
                 total_clipped[channel] += clipped[channel]
                 if silent[channel]:
                     silent_windows[channel] += 1
-                    current_silent_windows[channel] += 1
-                    longest_silent_windows[channel] = max(
-                        longest_silent_windows[channel],
-                        current_silent_windows[channel],
+                    current_silent_frames[channel] += frames
+                    longest_silent_frames[channel] = max(
+                        longest_silent_frames[channel],
+                        current_silent_frames[channel],
                     )
                 else:
-                    current_silent_windows[channel] = 0
+                    current_silent_frames[channel] = 0
 
     if total_samples == 0:
         raise ValueError("WAV contains no decodable samples")
@@ -141,7 +141,7 @@ def analyze_wav(
                 "clipped_sample_ratio": round(total_clipped[channel] / total_samples, 6),
                 "silent_window_ratio": round(silent_windows[channel] / max(total_windows, 1), 6),
                 "longest_silent_gap_seconds": round(
-                    longest_silent_windows[channel] * window_ms / 1000.0,
+                    longest_silent_frames[channel] / sample_rate,
                     3,
                 ),
             }
