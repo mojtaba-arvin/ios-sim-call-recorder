@@ -4,6 +4,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct RecordingLibraryView: View {
+    @AppStorage("recordingRetentionDays") private var retentionDays = 0
     @State private var isImporterPresented = false
     @State private var isImporting = false
     @State private var recordings: [ImportedRecording] = []
@@ -12,7 +13,7 @@ struct RecordingLibraryView: View {
     @State private var isPlaying = false
     @State private var sharedRecordingURL: URL?
     @State private var isShareSheetPresented = false
-    @State private var statusMessage = "Import a recording exported from Phone, Notes, or an external recorder."
+    @State private var statusMessage = "Import an audio file exported from Phone, Notes, or an external recorder."
     @State private var isError = false
 
     private let importService = RecordingImportService()
@@ -99,14 +100,32 @@ struct RecordingLibraryView: View {
                     .listStyle(.plain)
                 }
 
-                Text("Files are imported only after you select them. The app does not access Phone or Notes private data. Swipe a recording to delete it.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 4) {
+                    Text("Files are imported only after you select them. The app does not access Phone or Notes private data.")
+                    Text(retentionDescription)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             }
             .padding()
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Picker("Automatically delete recordings", selection: $retentionDays) {
+                            Text("Never").tag(0)
+                            Text("After 30 days").tag(30)
+                            Text("After 90 days").tag(90)
+                            Text("After 1 year").tag(365)
+                        }
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Recording retention settings")
+                }
+            }
             .fileImporter(
                 isPresented: $isImporterPresented,
                 allowedContentTypes: [.audio],
@@ -132,7 +151,16 @@ struct RecordingLibraryView: View {
                 isPlaying = false
             }
             .task {
-                await refreshRecordings()
+                _ = await refreshRecordings()
+            }
+            .onChange(of: retentionDays) { _ in
+                Task {
+                    guard await refreshRecordings() else { return }
+                    statusMessage = retentionDays == 0
+                        ? "Automatic deletion is off. Recordings will be kept until you delete them."
+                        : "Retention updated. Recordings older than \(retentionDays) days were removed."
+                    isError = false
+                }
             }
             .onDisappear {
                 player?.pause()
@@ -141,6 +169,12 @@ struct RecordingLibraryView: View {
                 isPlaying = false
             }
         }
+    }
+
+    private var retentionDescription: String {
+        retentionDays == 0
+            ? "Retention: keep recordings until you delete them."
+            : "Retention: automatically delete recordings after \(retentionDays) days."
     }
 
     private func handleImportSelection(_ result: Result<[URL], Error>) {
@@ -217,12 +251,15 @@ struct RecordingLibraryView: View {
         }
     }
 
-    private func refreshRecordings() async {
+    @discardableResult
+    private func refreshRecordings() async -> Bool {
         do {
-            recordings = try await importService.recordings()
+            recordings = try await importService.recordings(retentionDays: retentionDays)
+            return true
         } catch {
-            statusMessage = "The recording library could not be loaded."
+            statusMessage = error.localizedDescription
             isError = true
+            return false
         }
     }
 
@@ -236,7 +273,6 @@ struct RecordingLibraryView: View {
         }
         if let sharedRecordingURL,
            ids.contains(where: { id in
-               // The URL is app-private and UUID-named; compare against the selected entry.
                recordings.first(where: { $0.id == id }).map {
                    sharedRecordingURL.deletingPathExtension().lastPathComponent == $0.id.uuidString
                } ?? false
@@ -249,7 +285,7 @@ struct RecordingLibraryView: View {
                 for id in ids {
                     try await importService.deleteRecording(id: id)
                 }
-                await refreshRecordings()
+                guard await refreshRecordings() else { return }
                 statusMessage = "Selected recording(s) deleted."
                 isError = false
             } catch {
