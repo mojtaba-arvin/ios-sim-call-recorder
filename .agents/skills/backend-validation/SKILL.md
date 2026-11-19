@@ -24,3 +24,10 @@ description: Validate backend state transitions, persistence, webhooks, provider
 
 ## Completion gate
 No claim of exactly-once execution; demonstrate idempotent effects and recoverable uncertainty.
+
+
+## Provider command preflight
+
+- Validate required opaque references and command-specific payload shape before provider resource lookup or provider I/O.
+- Validate adapter reconciliation result types/enums explicitly; never interpret unknown or malformed states as `APPLIED`.
+- Prove malformed commands are dead-lettered/deferred without invoking adapter reconciliation or execution.
