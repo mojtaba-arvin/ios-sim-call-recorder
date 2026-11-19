@@ -1,6 +1,6 @@
 import AVFoundation
 import XCTest
-@testable import CallRecorderApp
+@testable import CallRecorder
 import CallRecorderCore
 
 final class RecordingImportServiceTests: XCTestCase {
