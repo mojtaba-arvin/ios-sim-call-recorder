@@ -1,0 +1,26 @@
+name: Backend core checks
+
+on:
+  pull_request:
+    branches: [main, feat/conference-bridge-backend-core]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge-core:
+    name: Conference bridge backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run provider-neutral domain tests
+        run: PYTHONPATH=backend python3 -m unittest discover -s backend/tests -v
