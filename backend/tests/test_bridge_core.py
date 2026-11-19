@@ -57,10 +57,10 @@ class BridgeCoreTests(unittest.TestCase):
             participant_ref,
             "sha256:fixture",
             consent_policy_version=(
-                "consent-v1" if event_type is EventType.PARTICIPANT_CONSENTED else None
+                "consent-v1" if kind is EventType.PARTICIPANT_CONSENTED else None
             ),
             consent_method=(
-                "dtmf" if event_type is EventType.PARTICIPANT_CONSENTED else None
+                "dtmf" if kind is EventType.PARTICIPANT_CONSENTED else None
             ),
         )
 
