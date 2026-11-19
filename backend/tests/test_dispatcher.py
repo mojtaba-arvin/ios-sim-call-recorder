@@ -70,7 +70,10 @@ class FakeAdapter:
         return self.execution
 
 
-def leased_command():
+def leased_command(*, participant_ref=None):
+    payload = {"session_id": "session-opaque"}
+    if participant_ref is not None:
+        payload["participant_ref"] = participant_ref
     return LeasedCommand(
         command_id=uuid4(),
         command_type="recording.start",
@@ -78,7 +81,7 @@ def leased_command():
         session_id="session-opaque",
         provider="twilio",
         provider_account_id="account-opaque",
-        payload={"session_id": "session-opaque"},
+        payload=payload,
         attempts=1,
         lease_token=uuid4(),
         lease_owner="worker-test",
@@ -141,6 +144,27 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(repo.resources[("twilio", "account-opaque", "session-opaque")],
                          "CF" + "b" * 32)
         self.assertEqual(len(repo.acked), 1)
+
+    def test_participant_call_sid_is_reconciled_and_persisted_by_opaque_reference(self):
+        command = leased_command(participant_ref="participant-opaque-1")
+        repo = FakeRepository([command])
+        repo.resources[("twilio", "account-opaque", "session-opaque")] = "CF" + "d" * 32
+        adapter = FakeAdapter(
+            ReconciliationResult(ReconciliationState.APPLIED, call_sid="CA" + "e" * 32),
+        )
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo, adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+
+        dispatcher.dispatch_once()
+
+        self.assertEqual(adapter.reconcile_calls[0][2], None)
+        self.assertEqual(
+            repo.participant_resources[("twilio", "account-opaque", "session-opaque",
+                                        "participant-opaque-1")],
+            "CA" + "e" * 32,
+        )
 
     def test_existing_resource_is_supplied_to_reconciliation(self):
         command = leased_command()
