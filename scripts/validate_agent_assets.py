@@ -23,7 +23,7 @@ REQUIRED_SKILLS = {
     "security-review",
     "evidence-management",
 }
-REQUIRED_TEMPLATES = {"task.md", "adr.md", "test-report.md"}
+REQUIRED_TEMPLATES = {"task.md", "adr.md", "test-report.md", "research-report.md", "pr-review.md"}
 REQUIRED_POLICIES = {"evidence-levels.md", "privacy.md", "branch-management.md"}
 
 
