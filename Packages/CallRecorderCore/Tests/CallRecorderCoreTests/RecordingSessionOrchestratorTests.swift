@@ -185,6 +185,38 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         XCTAssertEqual(state, .failed)
     }
 
+    func testFinalizationFailureCancelsRemainingAdapterResources() async throws {
+        let probe = CancellationProbe()
+        let orchestrator = RecordingSessionOrchestrator(
+            adapter: makeAdapter(
+                advertisedPathway: .conferenceBridge,
+                availability: .available,
+                artifact: nil,
+                cancellationProbe: probe,
+                finishFails: true
+            ),
+            consentVerifier: StubConsentVerifier(verified: true)
+        )
+        let sessionID = UUID()
+        _ = try await orchestrator.prepare(sessionID: sessionID, context: makeContext())
+        try await orchestrator.startRecording(
+            sessionID: sessionID,
+            consentEvidence: makeConsentEvidence()
+        )
+
+        do {
+            _ = try await orchestrator.finish(sessionID: sessionID)
+            XCTFail("A failed finalization must not be reported as completed")
+        } catch {
+            XCTAssertTrue(error is StubError)
+        }
+
+        let wasCancelled = await probe.wasCancelled
+        let state = await orchestrator.state
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(state, .failed)
+    }
+
     func testAdapterCannotAdvertiseAnotherPathway() async throws {
         let orchestrator = RecordingSessionOrchestrator(
             adapter: makeAdapter(
@@ -396,7 +428,8 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
         cancellationProbe: CancellationProbe? = nil,
         prepareFails: Bool = false,
         connectFails: Bool = false,
-        startFails: Bool = false
+        startFails: Bool = false,
+        finishFails: Bool = false
     ) -> StubAdapter {
         StubAdapter(
             pathway: .conferenceBridge,
@@ -406,7 +439,8 @@ final class RecordingSessionOrchestratorTests: XCTestCase {
             cancellationProbe: cancellationProbe,
             prepareFails: prepareFails,
             connectFails: connectFails,
-            startFails: startFails
+            startFails: startFails,
+            finishFails: finishFails
         )
     }
 
@@ -458,6 +492,7 @@ private struct StubAdapter: RecordingPathwayAdapter {
     let prepareFails: Bool
     let connectFails: Bool
     let startFails: Bool
+    let finishFails: Bool
 
     func capability(for context: DeviceCompatibilityContext) async -> PathwayCapability {
         PathwayCapability(pathway: advertisedPathway, availability: availability)
@@ -474,6 +509,7 @@ private struct StubAdapter: RecordingPathwayAdapter {
     }
 
     func finishCapture(sessionID: UUID) async throws -> RecordingArtifact {
+        if finishFails { throw StubError.finishFailed }
         guard let artifact else { throw StubError.missingArtifact }
         return artifact
     }
@@ -504,6 +540,7 @@ private enum StubError: Error {
     case prepareFailed
     case connectFailed
     case startFailed
+    case finishFailed
 }
 
 private actor GatedCancellationAdapter: RecordingPathwayAdapter {
