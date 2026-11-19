@@ -1,0 +1,139 @@
+name: Capture pathway test evidence
+description: Submit sanitized results for one exact physical-device or carrier configuration.
+title: "[Capture evidence]: "
+labels: ["research", "device-validation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use only consented test calls. Never upload raw audio, phone numbers, contact names, call transcripts, signed recording URLs or carrier account details. Keep the raw artifact and detailed private log outside GitHub; publish sanitized metadata and metrics only.
+  - type: input
+    id: date
+    attributes:
+      label: Test date (UTC)
+      placeholder: "YYYY-MM-DD"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone model and exact model identifier
+      placeholder: "iPhone model / identifier"
+    validations:
+      required: true
+  - type: input
+    id: ios
+    attributes:
+      label: iOS version and full build
+    validations:
+      required: true
+  - type: input
+    id: region
+    attributes:
+      label: Device region, physical test country and language
+    validations:
+      required: true
+  - type: input
+    id: carrier
+    attributes:
+      label: Carrier/operator and SIM configuration
+      description: "Operator, physical SIM/eSIM, active voice line; no account or phone number."
+    validations:
+      required: true
+  - type: input
+    id: network
+    attributes:
+      label: Network conditions
+      description: "LTE/5G, VoLTE, Wi-Fi Calling, roaming."
+    validations:
+      required: true
+  - type: dropdown
+    id: pathway
+    attributes:
+      label: Capture pathway
+      options:
+        - Apple native recording then user export
+        - Carrier conference bridge
+        - External hardware
+        - App-owned VoIP
+        - Other / exploratory
+    validations:
+      required: true
+  - type: input
+    id: topology
+    attributes:
+      label: Call topology and audio route
+      description: "Incoming/outgoing, one-to-one/conference, receiver/speaker/wired/Bluetooth/accessory."
+    validations:
+      required: true
+  - type: input
+    id: accessory
+    attributes:
+      label: Accessory model and firmware (if applicable)
+      validations:
+        required: false
+  - type: dropdown
+    id: repeat
+    attributes:
+      label: Repeat index
+      options:
+        - "1 of 3"
+        - "2 of 3"
+        - "3 of 3"
+        - "Exploratory / not part of repeat set"
+    validations:
+      required: true
+  - type: dropdown
+    id: consent
+    attributes:
+      label: Consent and recording notice
+      options:
+        - All participants consented and required notice was verified
+        - Consent or notice incomplete — test stopped
+    validations:
+      required: true
+  - type: dropdown
+    id: local_audio
+    attributes:
+      label: Local participant speech independently intelligible
+      options: ["Yes", "No", "Not assessed"]
+    validations:
+      required: true
+  - type: dropdown
+    id: remote_audio
+    attributes:
+      label: Remote participant speech independently intelligible
+      options: ["Yes", "No", "Not assessed"]
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Sanitized artifact metadata and signal metrics
+      description: "Container, sample rate, channel count, duration, clipping, silence gaps, echo/noise. No audio or transcript."
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Evidence classification
+      options:
+        - Confirmed (3 positive repeats for this exact tuple)
+        - Observed (positive but repeat/evidence incomplete)
+        - Hypothesis (documentation/topology only)
+        - Rejected (exact tuple failed or contract rules out path)
+    validations:
+      required: true
+  - type: textarea
+    id: limitations
+    attributes:
+      label: Failure details, exclusions and next experiment
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy and safety confirmation
+      options:
+        - label: I used a consented test call and removed raw audio, phone numbers, contact names, transcripts, signed URLs and account data.
+          required: true
