@@ -125,11 +125,9 @@ class BridgeSession:
             raise InvalidTransition(f"{self.state.value} -> {target.value} is not allowed")
         if target is SessionState.PARTICIPANTS_JOINING and not self.all_participants_consented:
             raise ConsentRequired("every expected participant must consent before provider joins")
-        if target is SessionState.RECORDING and (
-            not self.all_participants_consented or not self.joined_participants
-        ):
+        if target is SessionState.RECORDING and not self.all_participants_consented:
             raise ConsentRequired(
-                "recording requires pre-join consent from every participant and at least one joined participant"
+                "recording requires affirmative pre-join consent from every expected participant"
             )
         if target is SessionState.FAILED and not failure_code:
             raise ValueError("failed sessions require a stable failure code")
