@@ -29,6 +29,7 @@ main
     └── #13 feat/twilio-webhook-signature-adapter
         └── #15 feat/postgres-transactional-outbox
             └── #17 feat/provider-command-dispatcher-core
+            └── #36 fix/backend-dispatcher-validate-command-inputs
 ```
 
 PR #1 and #35 are independent research/product documentation baselines. PR #7, #9 and #11 are independent main-based foundations. The iOS/app stack is serial because later changes build on prior storage, UI and CI behavior. PRs #29 and #30 are independent side branches from #19; PR #28 extends the governance branch from #9.
@@ -52,9 +53,10 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #26 | `feat/ios-storage-integration-tests` | `cabda934c1f2e593d5efaae7934bcf30b12f2235` | #25 | iOS stack |
 | #27 | `feat/ios-playback-controls-interruption-handling` | `9517157e3dc48813ecede33a87d3c1d88105bf62` | #26 | iOS stack |
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
-| #32 | `fix/ios-import-full-decode-validation` | `80e8d4b59e007d9593e070d56c98d4d597dfb3b7` | #27 | iOS import validation |
+| #32 | `fix/ios-import-full-decode-validation` | `605063ab1b18f1fc4ec3f8f7ea3b220e26b47144` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
 | #35 | `docs/product-readme-and-status` | `d0d8ed12f8a90ffb48c3a36613dcda488c1262a0` | `main` | Independent product/release documentation |
+| #36 | `fix/backend-dispatcher-validate-command-inputs` | `a870e76fdb1b45585bc9cfff25f298e9f7270353` | #17 | Backend command validation |
 | #28 | `chore/agent-rd-skills-and-templates` | `de44b1f48006bc8f5c928fb23587ea3796d04a82` | #9 | Governance stack |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
@@ -63,7 +65,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 
 1. Review and integrate independent foundations only after their own CI/review gates: #1, #7, #9, #11 and #35.
 2. Integrate governance extension #28 after #9.
-3. Integrate backend stack in order #13 → #15 → #17 after #11.
+3. Integrate backend stack in order #13 → #15 → #17 → #36 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
 5. Integrate app/storage stack strictly in order #21 → #23 → #24 → #25 → #26 → #27, then review #31 (accessibility) and #32 (audio-payload validation) as separate PRs. PR #34 depends on #30 and adds failure-path adapter cleanup.
 6. Resolve Issue #18 and Issue #20 physical-device gates before enabling provider recording or advertising accessory compatibility.
