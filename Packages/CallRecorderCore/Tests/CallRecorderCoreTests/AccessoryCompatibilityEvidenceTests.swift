@@ -56,6 +56,34 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertTrue(reason.contains("unique"))
     }
 
+    func testMismatchedActiveRouteBlocksOtherwisePositiveTrials() {
+        let context = makeContext(route: .receiver)
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: profile,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("Positive summaries cannot override a mismatched physical route")
+        }
+        XCTAssertTrue(reason.contains("active route"))
+    }
+
+    func testConnectorGenerationMismatchBlocksEvidencePromotion() {
+        let context = makeContext(model: "iPhone14,5", route: .wired)
+        let usbC = AccessoryCaptureProfile(
+            modelIdentifier: "USB-C-Recorder",
+            firmwareVersion: "1.0",
+            transport: .usbC
+        )
+        let evidence = AccessoryCompatibilityEvidence(
+            context: context,
+            accessory: usbC,
+            trials: [trial("a"), trial("b"), trial("c")]
+        )
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
     func testMissingOSBuildBlocksConfirmation() {
         let context = makeContext(build: nil)
         let evidence = AccessoryCompatibilityEvidence(
@@ -121,9 +149,13 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         )
     }
 
-    private func makeContext(build: String? = "22H") -> DeviceCompatibilityContext {
+    private func makeContext(
+        build: String? = "22H",
+        model: String = "iPhone16,1",
+        route: CallAudioRoute = .speaker
+    ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
-            deviceModelIdentifier: "iPhone16,1",
+            deviceModelIdentifier: model,
             operatingSystemVersion: "18.7.1",
             operatingSystemBuild: build,
             deviceRegionCode: "US",
@@ -135,7 +167,7 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
             wifiCallingEnabled: false,
             volteEnabled: true,
             callDirection: .incoming,
-            audioRoute: .speaker
+            audioRoute: route
         )
     }
 }
