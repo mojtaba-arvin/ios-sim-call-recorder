@@ -114,7 +114,9 @@ class AgentTaskValidatorTests(unittest.TestCase):
         dependent["evidence"] = {
             "exact_head_sha": "a" * 40,
             "tests_status": "success",
+            "ci_run_url": "https://github.com/example/repo/actions/runs/123",
             "independent_review": True,
+            "reviewer": "independent-reviewer",
             "documentation_updated": True,
         }
         errors = validate_task_graph([prerequisite, dependent])
