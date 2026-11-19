@@ -85,6 +85,10 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
             errors.append(f"{task_id}: review tasks require a pull_request_url")
 
         if status_valid and status == "done":
+            for dependency in dependencies:
+                prerequisite = by_id.get(dependency)
+                if prerequisite is not None and prerequisite.get("status") != "done":
+                    errors.append(f"{task_id}: dependency '{dependency}' is not done")
             evidence = task.get("evidence")
             if not isinstance(evidence, dict):
                 errors.append(f"{task_id}: done tasks require an evidence object")
