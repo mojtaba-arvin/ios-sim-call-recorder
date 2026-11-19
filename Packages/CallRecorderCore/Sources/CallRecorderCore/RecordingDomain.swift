@@ -62,6 +62,7 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let volteEnabled: Bool
     public let callDirection: CallDirection
     public let audioRoute: CallAudioRoute
+    public let callParticipantCount: Int
 
     public init(
         deviceModelIdentifier: String,
@@ -78,7 +79,8 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         wifiCallingEnabled: Bool,
         volteEnabled: Bool,
         callDirection: CallDirection,
-        audioRoute: CallAudioRoute
+        audioRoute: CallAudioRoute,
+        callParticipantCount: Int = 2
     ) {
         self.deviceModelIdentifier = deviceModelIdentifier
         self.operatingSystemVersion = operatingSystemVersion
@@ -95,6 +97,7 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         self.volteEnabled = volteEnabled
         self.callDirection = callDirection
         self.audioRoute = audioRoute
+        self.callParticipantCount = callParticipantCount
     }
 }
 
