@@ -55,3 +55,5 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings.
 - On library maintenance, abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
 - The Swift core package tests cover retention boundaries. The app-target XCTest suite exercises catalog recovery, fail-closed behavior, retention deletion and filesystem maintenance on an isolated temporary storage root. Simulator tests do not replace physical-device validation.
+
+- Pending playback file lookups are tracked by a request token scoped to the recording ID. A newer request supersedes an older one; deletion, retention cleanup and view teardown invalidate the matching pending lookup. A resolved URL is used only if its request token is still current and the recording remains in the catalog.

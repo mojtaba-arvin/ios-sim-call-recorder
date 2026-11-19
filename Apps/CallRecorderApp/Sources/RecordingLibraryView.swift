@@ -3,6 +3,50 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Tracks one asynchronous playback-file lookup and rejects stale results
+/// after a newer request, deletion, retention cleanup or view teardown.
+struct PlaybackRequestGate {
+    struct Token: Equatable {
+        let requestID: UUID
+        let recordingID: UUID
+    }
+
+    private(set) var current: Token?
+
+    mutating func begin(recordingID: UUID) -> Token {
+        let token = Token(requestID: UUID(), recordingID: recordingID)
+        current = token
+        return token
+    }
+
+    func accepts(_ token: Token, availableRecordingIDs: Set<UUID>) -> Bool {
+        current == token && availableRecordingIDs.contains(token.recordingID)
+    }
+
+    func isCurrent(_ token: Token) -> Bool {
+        current == token
+    }
+
+    mutating func finish(_ token: Token) {
+        guard current == token else { return }
+        current = nil
+    }
+
+    mutating func invalidate(recordingIDs: Set<UUID>) {
+        guard let current, recordingIDs.contains(current.recordingID) else { return }
+        self.current = nil
+    }
+
+    mutating func invalidateMissing(from availableRecordingIDs: Set<UUID>) {
+        guard let current, !availableRecordingIDs.contains(current.recordingID) else { return }
+        self.current = nil
+    }
+
+    mutating func invalidateAll() {
+        current = nil
+    }
+}
+
 struct RecordingLibraryView: View {
     @AppStorage("recordingRetentionDays") private var retentionDays = 0
     @State private var isImporterPresented = false
@@ -15,7 +59,7 @@ struct RecordingLibraryView: View {
     @State private var playbackDuration = 0.0
     @State private var isSeeking = false
     @State private var periodicTimeObserver: Any?
-    @State private var playbackRequestID = UUID()
+    @State private var playbackRequestGate = PlaybackRequestGate()
     @State private var shareRequestID = UUID()
     @State private var sharedRecordingID: UUID?
     @State private var sharedRecordingURL: URL?
@@ -260,13 +304,14 @@ struct RecordingLibraryView: View {
             return
         }
 
-        let requestID = UUID()
-        playbackRequestID = requestID
+        let request = playbackRequestGate.begin(recordingID: recording.id)
         Task {
             do {
                 let url = try await importService.playbackURL(for: recording.id)
-                guard playbackRequestID == requestID else { return }
-                stopPlayback(invalidatePendingRequests: false)
+                let availableIDs = Set(recordings.map(\.id))
+                guard playbackRequestGate.accepts(request, availableRecordingIDs: availableIDs) else { return }
+                playbackRequestGate.finish(request)
+                stopPlayback()
                 let nextPlayer = AVPlayer(url: url)
                 player = nextPlayer
                 playingRecordingID = recording.id
@@ -278,7 +323,8 @@ struct RecordingLibraryView: View {
                 statusMessage = "Playing selected recording. Check that both sides of the conversation are audible."
                 isError = false
             } catch {
-                guard playbackRequestID == requestID else { return }
+                guard playbackRequestGate.isCurrent(request) else { return }
+                playbackRequestGate.finish(request)
                 statusMessage = error.localizedDescription
                 isError = true
                 stopPlayback()
@@ -329,10 +375,8 @@ struct RecordingLibraryView: View {
         )
     }
 
-    private func stopPlayback(invalidatePendingRequests: Bool = true) {
-        if invalidatePendingRequests {
-            playbackRequestID = UUID()
-        }
+    private func stopPlayback() {
+        playbackRequestGate.invalidateAll()
         player?.pause()
         removePeriodicTimeObserver()
         player = nil
@@ -415,6 +459,7 @@ struct RecordingLibraryView: View {
         do {
             let updatedRecordings = try await importService.recordings(retentionDays: retentionDays)
             recordings = updatedRecordings
+            playbackRequestGate.invalidateMissing(from: Set(updatedRecordings.map(\.id)))
             if let playingRecordingID,
                !updatedRecordings.contains(where: { $0.id == playingRecordingID }) {
                 stopPlayback()
@@ -438,6 +483,7 @@ struct RecordingLibraryView: View {
         let ids = offsets.map { recordings[$0].id }
         // Invalidate any in-flight file lookup before deleting from storage.
         shareRequestID = UUID()
+        playbackRequestGate.invalidate(recordingIDs: Set(ids))
         if let playingRecordingID, ids.contains(playingRecordingID) {
             stopPlayback()
         }
