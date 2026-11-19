@@ -157,7 +157,7 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
         guard Set(timestamps).count == timestamps.count else {
             return .insufficient(reason: "Each physical attempt must have a distinct observation timestamp.")
         }
-        guard zip(timestamps, timestamps.dropFirst()).allSatisfy({ $0 < $1 }) else {
+        guard zip(timestamps, timestamps.dropFirst()).allSatisfy({ $0.0 < $0.1 }) else {
             return .insufficient(reason: "Physical attempts must be listed in strictly increasing observation-time order.")
         }
 
