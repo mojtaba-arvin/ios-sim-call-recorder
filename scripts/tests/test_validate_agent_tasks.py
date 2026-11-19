@@ -31,7 +31,9 @@ def make_task(task_id: str, dependencies: list[str] | None = None) -> dict:
         "evidence": {
             "exact_head_sha": None,
             "tests_status": "not-run",
-            "independent_review": False,
+            "review_mode": None,
+            "reviewer": None,
+            "owner_authorization": None,
             "documentation_updated": False,
         },
     }
@@ -106,6 +108,36 @@ class AgentTaskValidatorTests(unittest.TestCase):
             "documentation_updated": True,
         }
         self.assertEqual(validate_task_graph([task]), [])
+
+
+    def test_done_supports_independent_human_review_without_claiming_owner_waiver(self) -> None:
+        task = make_task("IOS-1")
+        task["status"] = "done"
+        task["evidence"] = {
+            "exact_head_sha": "a" * 40,
+            "ci_run_sha": "a" * 40,
+            "tests_status": "success",
+            "ci_run_url": "https://github.com/example/repo/actions/runs/123",
+            "review_mode": "independent_human",
+            "reviewer": "second-maintainer",
+            "documentation_updated": True,
+        }
+        self.assertEqual(validate_task_graph([task]), [])
+
+    def test_owner_authorized_automated_review_requires_explicit_authorization(self) -> None:
+        task = make_task("IOS-1")
+        task["status"] = "done"
+        task["evidence"] = {
+            "exact_head_sha": "a" * 40,
+            "ci_run_sha": "a" * 40,
+            "tests_status": "success",
+            "ci_run_url": "https://github.com/example/repo/actions/runs/123",
+            "review_mode": "owner_authorized_automated",
+            "owner_authorization": " ",
+            "documentation_updated": True,
+        }
+        errors = validate_task_graph([task])
+        self.assertTrue(any("explicit owner authorization" in error for error in errors))
 
     def test_done_task_rejects_ci_run_from_a_different_sha(self) -> None:
         task = make_task("IOS-1")
