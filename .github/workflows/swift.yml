@@ -42,7 +42,7 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-    call-recorder-core:
+  call-recorder-core:
     name: CallRecorderCore tests
     needs: detect-changes
     if: needs.detect-changes.outputs.run == 'true'
