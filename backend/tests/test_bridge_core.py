@@ -56,6 +56,12 @@ class BridgeCoreTests(unittest.TestCase):
             occurred_at or self.now,
             participant_ref,
             "sha256:fixture",
+            consent_policy_version=(
+                "consent-v1" if event_type is EventType.PARTICIPANT_CONSENTED else None
+            ),
+            consent_method=(
+                "dtmf" if event_type is EventType.PARTICIPANT_CONSENTED else None
+            ),
         )
 
     def send(self, event):
@@ -79,7 +85,15 @@ class BridgeCoreTests(unittest.TestCase):
             2,
             expected_participant_refs=frozenset({"p1", "p2"}),
             state=SessionState.AWAITING_CONSENT,
-            consented_participants=frozenset({"p1"}),
+        ).participant_consented(
+            "p1",
+            provider="twilio",
+            provider_account_id="account-test",
+            event_id="consent-p1",
+            policy_version="consent-v1",
+            consent_method="dtmf",
+            evidence_digest="sha256:consent-p1",
+            at=self.now,
         )
         with self.assertRaises(ConsentRequired):
             session.transition(SessionState.PARTICIPANTS_JOINING)
@@ -124,6 +138,27 @@ class BridgeCoreTests(unittest.TestCase):
         )
         self.send(self.event("consent-b-replayed", EventType.PARTICIPANT_CONSENTED, "b"))
         self.assertEqual(len(self.repo.get_outbox_commands()), 1)
+
+
+    def test_consent_evidence_is_bound_to_signed_event_and_policy_version(self):
+        self.preconsent()
+        session = self.repo.get_session("session-opaque-1")
+        evidence = {item.participant_ref: item for item in session.consent_evidence}
+        self.assertEqual(set(evidence), self.expected_refs)
+        self.assertEqual(evidence["a"].provider, "test-provider")
+        self.assertEqual(evidence["a"].provider_account_id, "default")
+        self.assertEqual(evidence["a"].event_id, "consent-a")
+        self.assertEqual(evidence["a"].policy_version, "consent-v1")
+        self.assertEqual(evidence["a"].consent_method, "dtmf")
+        self.assertEqual(evidence["a"].evidence_digest, "sha256:fixture")
+
+    def test_consent_event_requires_policy_version_and_method(self):
+        with self.assertRaises(ValueError):
+            NormalizedProviderEvent(
+                "test-provider", "missing-policy", "session-opaque-1",
+                EventType.PARTICIPANT_CONSENTED, self.now, "a", "sha256:fixture",
+                consent_method="dtmf",
+            )
 
     def test_first_join_enqueues_only_remaining_preconsented_participants(self):
         self.preconsent()
