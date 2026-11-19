@@ -18,11 +18,65 @@ for path in WORKFLOWS:
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(ROOT)
 
-    if not re.search(r"(?m)^permissions:\s*$", text):
-        ERRORS.append(f"{rel}: explicit least-privilege permissions block is required")
+    # Parse every workflow-level and job-level permissions mapping. GitHub
+    # defaults are not accepted: permissions must be explicit and read-only.
+    top_level_permissions_found = False
+    lines = text.splitlines()
+    for line_number, line in enumerate(lines):
+        match = re.match(r"^( *)permissions:\\s*(.*?)\\s*$", line)
+        if not match:
+            continue
 
-    if re.search(r"(?m)^\s*permissions:\s*(?:write-all|read-all)", text):
-        ERRORS.append(f"{rel}: broad permissions are forbidden")
+        indentation = len(match.group(1))
+        inline_value = match.group(2)
+        if indentation == 0:
+            top_level_permissions_found = True
+
+        if inline_value:
+            if inline_value in {"read-all", "write-all"}:
+                ERRORS.append(f"{rel}:{line_number + 1}: broad permissions are forbidden")
+            else:
+                ERRORS.append(
+                    f"{rel}:{line_number + 1}: use an explicit permissions mapping, not inline YAML"
+                )
+            continue
+
+        permission_count = 0
+        child_index = line_number + 1
+        while child_index < len(lines):
+            child_line = lines[child_index]
+            if not child_line.strip():
+                child_index += 1
+                continue
+
+            child_indentation = len(child_line) - len(child_line.lstrip(" "))
+            if child_indentation <= indentation:
+                break
+
+            if child_indentation == indentation + 2 and not child_line.lstrip().startswith("#"):
+                permission = re.match(
+                    r"^ *([A-Za-z0-9_-]+):\\s*(read|write|none)\\s*(?:#.*)?$",
+                    child_line,
+                )
+                if permission:
+                    permission_count += 1
+                    if permission.group(2) == "write":
+                        ERRORS.append(
+                            f"{rel}:{child_index + 1}: write permission "
+                            f"({permission.group(1)}) requires an explicit security exception"
+                        )
+                else:
+                    ERRORS.append(
+                        f"{rel}:{child_index + 1}: unsupported permissions entry; "
+                        "use a GitHub permission set to read or none"
+                    )
+            child_index += 1
+
+        if indentation == 0 and permission_count == 0:
+            ERRORS.append(f"{rel}:{line_number + 1}: top-level permissions mapping is empty")
+
+    if not top_level_permissions_found:
+        ERRORS.append(f"{rel}: explicit top-level least-privilege permissions block is required")
 
     if re.search(r"(?m)^\s*pull_request_target\s*:", text):
         ERRORS.append(f"{rel}: pull_request_target requires a separately reviewed threat model")
