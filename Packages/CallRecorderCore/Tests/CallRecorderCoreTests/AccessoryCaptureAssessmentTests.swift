@@ -11,7 +11,7 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
     }
 
     func testWiredAccessoryOnExternalRouteRemainsExperimental() {
-        let result = assess(.lightning, route: .externalAccessory)
+        let result = assess(.usbC, route: .externalAccessory)
         assertExperimental(result, containing: "three physical calls")
     }
 
