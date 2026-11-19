@@ -23,11 +23,13 @@ class ReconciliationState(StrEnum):
 class ReconciliationResult:
     state: ReconciliationState
     conference_sid: str | None = None
+    call_sid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderExecutionResult:
     conference_sid: str | None = None
+    call_sid: str | None = None
 
 
 class ProviderOperationError(RuntimeError):
@@ -46,9 +48,11 @@ class ProviderOperationError(RuntimeError):
 class ProviderCommandAdapter(Protocol):
     """A configured provider/account adapter; credentials remain inside the adapter."""
 
-    def reconcile(self, command: LeasedCommand, conference_sid: str | None) -> ReconciliationResult: ...
+    def reconcile(self, command: LeasedCommand, *, conference_sid: str | None,
+                  call_sid: str | None) -> ReconciliationResult: ...
 
-    def execute(self, command: LeasedCommand, conference_sid: str | None) -> ProviderExecutionResult: ...
+    def execute(self, command: LeasedCommand, *, conference_sid: str | None,
+                call_sid: str | None) -> ProviderExecutionResult: ...
 
 
 class DispatchRepository(Protocol):
@@ -65,6 +69,13 @@ class DispatchRepository(Protocol):
 
     def put_provider_resource(self, provider: str, provider_account_id: str,
                               session_id: str, conference_sid: str) -> None: ...
+
+    def get_provider_participant_resource(self, provider: str, provider_account_id: str,
+                                          session_id: str, participant_ref: str) -> str | None: ...
+
+    def put_provider_participant_resource(self, provider: str, provider_account_id: str,
+                                          session_id: str, participant_ref: str,
+                                          call_sid: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +128,16 @@ class OutboxCommandDispatcher:
             conference_sid = self._repository.get_provider_resource(
                 command.provider, command.provider_account_id, command.session_id,
             )
-            reconciliation = adapter.reconcile(command, conference_sid)
+            participant_ref = command.payload.get("participant_ref")
+            call_sid = None
+            if isinstance(participant_ref, str):
+                call_sid = self._repository.get_provider_participant_resource(
+                    command.provider, command.provider_account_id,
+                    command.session_id, participant_ref,
+                )
+            reconciliation = adapter.reconcile(
+                command, conference_sid=conference_sid, call_sid=call_sid,
+            )
             if reconciliation.state is ReconciliationState.UNKNOWN:
                 self._repository.fail_outbox(
                     command.command_id, command.lease_token,
@@ -127,15 +147,24 @@ class OutboxCommandDispatcher:
                 return DispatchResult(str(command.command_id), "reconciliation_required")
 
             if reconciliation.state is ReconciliationState.NOT_APPLIED:
-                execution = adapter.execute(command, conference_sid)
-                conference_sid = execution.conference_sid
+                execution = adapter.execute(
+                    command, conference_sid=conference_sid, call_sid=call_sid,
+                )
+                conference_sid = execution.conference_sid or conference_sid
+                call_sid = execution.call_sid or call_sid
             else:
-                conference_sid = reconciliation.conference_sid
+                conference_sid = reconciliation.conference_sid or conference_sid
+                call_sid = reconciliation.call_sid or call_sid
 
             if conference_sid:
                 self._repository.put_provider_resource(
                     command.provider, command.provider_account_id,
                     command.session_id, conference_sid,
+                )
+            if call_sid and isinstance(participant_ref, str):
+                self._repository.put_provider_participant_resource(
+                    command.provider, command.provider_account_id,
+                    command.session_id, participant_ref, call_sid,
                 )
             self._repository.acknowledge_outbox(command.command_id, command.lease_token)
             return DispatchResult(str(command.command_id), "acknowledged")
