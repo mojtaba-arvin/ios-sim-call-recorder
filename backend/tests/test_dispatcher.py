@@ -70,13 +70,13 @@ class FakeAdapter:
         return self.execution
 
 
-def leased_command(*, participant_ref=None):
+def leased_command(*, participant_ref=None, command_type="recording.start"):
     payload = {"session_id": "session-opaque"}
     if participant_ref is not None:
         payload["participant_ref"] = participant_ref
     return LeasedCommand(
         command_id=uuid4(),
-        command_type="recording.start",
+        command_type=command_type,
         idempotency_key="recording-start:twilio:account-opaque:session-opaque",
         session_id="session-opaque",
         provider="twilio",
@@ -146,7 +146,7 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(len(repo.acked), 1)
 
     def test_participant_call_sid_is_reconciled_and_persisted_by_opaque_reference(self):
-        command = leased_command(participant_ref="participant-opaque-1")
+        command = leased_command(participant_ref="participant-opaque-1", command_type="participant.add")
         repo = FakeRepository([command])
         repo.resources[("twilio", "account-opaque", "session-opaque")] = "CF" + "d" * 32
         adapter = FakeAdapter(
@@ -165,6 +165,21 @@ class DispatcherTests(unittest.TestCase):
                                         "participant-opaque-1")],
             "CA" + "e" * 32,
         )
+
+    def test_create_command_without_provider_resource_is_not_acknowledged(self):
+        command = leased_command(command_type="conference.create")
+        repo = FakeRepository([command])
+        adapter = FakeAdapter(ReconciliationResult(ReconciliationState.NOT_APPLIED))
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo, adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+
+        results = dispatcher.dispatch_once()
+
+        self.assertEqual(results[0].outcome, "deferred")
+        self.assertEqual(repo.acked, [])
+        self.assertEqual(repo.failed[0][2], "provider_conference_sid_missing")
 
     def test_existing_resource_is_supplied_to_reconciliation(self):
         command = leased_command()
