@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import unittest
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
@@ -63,7 +64,7 @@ class PostgresPersistenceTests(unittest.TestCase):
             policy_version="consent-v1",
             consent_method="dtmf",
             evidence_digest="sha256:consent-evidence",
-            at=__import__("datetime").datetime(2026, 11, 19, tzinfo=__import__("datetime").timezone.utc),
+            at=datetime(2026, 11, 19, tzinfo=timezone.utc),
         )
         self.repo.apply_event_once(
             "twilio", "consent-a", self.session.session_id,
