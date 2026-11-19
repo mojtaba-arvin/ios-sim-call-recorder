@@ -134,11 +134,20 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
                 errors.append(f"{task_id}: CI run SHA must match exact_head_sha")
             if evidence.get("tests_status") != "success":
                 errors.append(f"{task_id}: done tasks require successful exact-head tests")
-            if evidence.get("independent_review") is not True:
-                errors.append(f"{task_id}: done tasks require independent review")
-            reviewer = evidence.get("reviewer")
-            if not isinstance(reviewer, str) or not reviewer.strip():
-                errors.append(f"{task_id}: done tasks require the independent reviewer identity")
+            review_mode = evidence.get("review_mode")
+            if review_mode == "independent_human":
+                reviewer = evidence.get("reviewer")
+                if not isinstance(reviewer, str) or not reviewer.strip():
+                    errors.append(f"{task_id}: independent_human review requires reviewer identity")
+            elif review_mode == "owner_authorized_automated":
+                authorization = evidence.get("owner_authorization")
+                if not isinstance(authorization, str) or not authorization.strip():
+                    errors.append(f"{task_id}: owner_authorized_automated review requires explicit owner authorization")
+            else:
+                errors.append(
+                    f"{task_id}: done tasks require review_mode independent_human "
+                    "or owner_authorized_automated"
+                )
             ci_run_url = evidence.get("ci_run_url")
             if (
                 not isinstance(ci_run_url, str)
