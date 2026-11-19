@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -5,6 +6,9 @@ struct RecordingLibraryView: View {
     @State private var isImporterPresented = false
     @State private var isImporting = false
     @State private var recordings: [ImportedRecording] = []
+    @State private var player: AVPlayer?
+    @State private var playingRecordingID: UUID?
+    @State private var isPlaying = false
     @State private var statusMessage = "Import a recording exported from Phone, Notes, or an external recorder."
     @State private var isError = false
 
@@ -66,6 +70,15 @@ struct RecordingLibraryView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    Spacer(minLength: 8)
+                                    Button {
+                                        togglePlayback(for: recording)
+                                    } label: {
+                                        Image(systemName: playingRecordingID == recording.id && isPlaying ? "pause.fill" : "play.fill")
+                                            .frame(width: 36, height: 36)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel(playingRecordingID == recording.id && isPlaying ? "Pause recording" : "Play recording")
                                 }
                             }
                             .onDelete(perform: deleteRecordings)
@@ -90,6 +103,12 @@ struct RecordingLibraryView: View {
             )
             .task {
                 await refreshRecordings()
+            }
+            .onDisappear {
+                player?.pause()
+                player = nil
+                playingRecordingID = nil
+                isPlaying = false
             }
         }
     }
@@ -120,6 +139,39 @@ struct RecordingLibraryView: View {
         }
     }
 
+    private func togglePlayback(for recording: ImportedRecording) {
+        if playingRecordingID == recording.id, isPlaying {
+            player?.pause()
+            isPlaying = false
+            return
+        }
+
+        if playingRecordingID == recording.id, let player {
+            player.play()
+            isPlaying = true
+            return
+        }
+
+        Task {
+            do {
+                let url = try await importService.playbackURL(for: recording.id)
+                player?.pause()
+                let nextPlayer = AVPlayer(url: url)
+                player = nextPlayer
+                playingRecordingID = recording.id
+                isPlaying = true
+                nextPlayer.play()
+                statusMessage = "Playing selected recording. Check that both sides of the conversation are audible."
+                isError = false
+            } catch {
+                statusMessage = error.localizedDescription
+                isError = true
+                isPlaying = false
+                playingRecordingID = nil
+            }
+        }
+    }
+
     private func refreshRecordings() async {
         do {
             recordings = try await importService.recordings()
@@ -131,6 +183,12 @@ struct RecordingLibraryView: View {
 
     private func deleteRecordings(at offsets: IndexSet) {
         let ids = offsets.map { recordings[$0].id }
+        if let playingRecordingID, ids.contains(playingRecordingID) {
+            player?.pause()
+            player = nil
+            self.playingRecordingID = nil
+            isPlaying = false
+        }
         Task {
             do {
                 for id in ids {
