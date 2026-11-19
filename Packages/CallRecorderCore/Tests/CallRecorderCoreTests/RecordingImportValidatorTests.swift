@@ -15,50 +15,50 @@ final class RecordingImportValidatorTests: XCTestCase {
     }
 
     func testRejectsWhitespaceOnlyFileName() {
-        XCTAssertEqual(validate(validMetadata(fileName: "  ")).failure, .emptyFileName)
+        XCTAssertEqual(validationError(validMetadata(fileName: "  ")), .emptyFileName)
     }
 
     func testRejectsUnsupportedExtension() {
-        XCTAssertEqual(validate(validMetadata(fileName: "recording.aac")).failure, .unsupportedFileExtension)
+        XCTAssertEqual(validationError(validMetadata(fileName: "recording.aac")), .unsupportedFileExtension)
     }
 
     func testRejectsZeroByteFile() {
-        XCTAssertEqual(validate(validMetadata(byteCount: 0)).failure, .emptyFile)
+        XCTAssertEqual(validationError(validMetadata(byteCount: 0)), .emptyFile)
     }
 
     func testRejectsFileAboveMaximumSize() {
         XCTAssertEqual(
-            validate(validMetadata(byteCount: RecordingImportValidator.maximumFileSizeBytes + 1)).failure,
+            validationError(validMetadata(byteCount: RecordingImportValidator.maximumFileSizeBytes + 1)),
             .fileTooLarge(maximumBytes: RecordingImportValidator.maximumFileSizeBytes)
         )
     }
 
     func testRejectsNonFiniteOrNonPositiveDuration() {
-        XCTAssertEqual(validate(validMetadata(duration: .nan)).failure, .invalidDuration)
-        XCTAssertEqual(validate(validMetadata(duration: 0)).failure, .invalidDuration)
-        XCTAssertEqual(validate(validMetadata(duration: -.infinity)).failure, .invalidDuration)
+        XCTAssertEqual(validationError(validMetadata(duration: .nan)), .invalidDuration)
+        XCTAssertEqual(validationError(validMetadata(duration: 0)), .invalidDuration)
+        XCTAssertEqual(validationError(validMetadata(duration: -.infinity)), .invalidDuration)
     }
 
     func testRejectsDurationAboveMaximum() {
         XCTAssertEqual(
-            validate(validMetadata(duration: RecordingImportValidator.maximumDurationSeconds + 1)).failure,
+            validationError(validMetadata(duration: RecordingImportValidator.maximumDurationSeconds + 1)),
             .durationTooLong(maximumSeconds: RecordingImportValidator.maximumDurationSeconds)
         )
     }
 
     func testRejectsInvalidSampleRate() {
-        XCTAssertEqual(validate(validMetadata(sampleRate: 7_999)).failure, .invalidSampleRate)
-        XCTAssertEqual(validate(validMetadata(sampleRate: .infinity)).failure, .invalidSampleRate)
+        XCTAssertEqual(validationError(validMetadata(sampleRate: 7_999)), .invalidSampleRate)
+        XCTAssertEqual(validationError(validMetadata(sampleRate: .infinity)), .invalidSampleRate)
     }
 
     func testRejectsUnsupportedChannelCount() {
-        XCTAssertEqual(validate(validMetadata(channels: 0)).failure, .unsupportedChannelCount)
-        XCTAssertEqual(validate(validMetadata(channels: 3)).failure, .unsupportedChannelCount)
+        XCTAssertEqual(validationError(validMetadata(channels: 0)), .unsupportedChannelCount)
+        XCTAssertEqual(validationError(validMetadata(channels: 3)), .unsupportedChannelCount)
     }
 
     func testRejectsExtensionAndProbedContainerMismatch() {
         XCTAssertEqual(
-            validate(validMetadata(fileName: "recording.m4a", container: .wav)).failure,
+            validationError(validMetadata(fileName: "recording.m4a", container: .wav)),
             .extensionContainerMismatch
         )
     }
@@ -77,6 +77,15 @@ final class RecordingImportValidatorTests: XCTestCase {
         _ metadata: RecordingImportMetadata
     ) -> Result<Void, RecordingImportValidationError> {
         RecordingImportValidator.validate(metadata)
+    }
+
+    private func validationError(
+        _ metadata: RecordingImportMetadata
+    ) -> RecordingImportValidationError? {
+        guard case .failure(let error) = validate(metadata) else {
+            return nil
+        }
+        return error
     }
 
     private func validMetadata(
