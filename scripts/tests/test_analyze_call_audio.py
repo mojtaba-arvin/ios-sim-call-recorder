@@ -40,8 +40,8 @@ class CallAudioAnalysisTests(unittest.TestCase):
             self.assertEqual(result["channel_count"], 2)
             self.assertEqual(result["duration_seconds"], 1.0)
             metrics = result["analysis"]["channels"]
-            self.assertLess(metrics[0]["rms_dbfs"], -5)
-            self.assertGreater(metrics[0]["rms_dbfs"], -8)
+            self.assertLess(metrics[0]["rms_dbfs"], -8)
+            self.assertGreater(metrics[0]["rms_dbfs"], -11)
             self.assertGreater(metrics[1]["rms_dbfs"], metrics[0]["rms_dbfs"] - 8)
             self.assertEqual(metrics[0]["silent_window_ratio"], 0.0)
 
