@@ -45,6 +45,16 @@ public enum CallAudioRoute: String, Hashable, Sendable {
     case unknown
 }
 
+/// Describes where a route observation came from. An app-owned AVAudioSession
+/// observation does not establish the active route of Phone.app's private
+/// cellular call session.
+public enum CallAudioRouteEvidence: String, Hashable, Sendable {
+    case unknown
+    case userReported
+    case appOwnedSessionObserved
+    case physicalTestObserved
+}
+
 /// Capability decisions are scoped to this exact environment context.
 public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let deviceModelIdentifier: String
@@ -62,6 +72,7 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
     public let volteEnabled: Bool
     public let callDirection: CallDirection
     public let audioRoute: CallAudioRoute
+    public let audioRouteEvidence: CallAudioRouteEvidence
     public let callParticipantCount: Int
 
     public init(
@@ -80,6 +91,7 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         volteEnabled: Bool,
         callDirection: CallDirection,
         audioRoute: CallAudioRoute,
+        audioRouteEvidence: CallAudioRouteEvidence = .unknown,
         callParticipantCount: Int = 2
     ) {
         self.deviceModelIdentifier = deviceModelIdentifier
@@ -97,6 +109,7 @@ public struct DeviceCompatibilityContext: Equatable, Sendable {
         self.volteEnabled = volteEnabled
         self.callDirection = callDirection
         self.audioRoute = audioRoute
+        self.audioRouteEvidence = audioRouteEvidence
         self.callParticipantCount = callParticipantCount
     }
 }
