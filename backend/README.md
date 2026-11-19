@@ -87,6 +87,14 @@ the reviewed API reference. A concrete adapter must use a stable provider correl
 strategy and query provider state before retrying ambiguous operations. No real provider
 calls or carrier-compatibility claims are made by these tests.
 
+## Twilio recording and consent ordering
+
+The current domain reducer is provider-neutral and accepts consent after all participants have joined, then emits a `recording.start` command. **That event order is not yet a valid Twilio Conference implementation.** Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
+
+A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. It must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call. The current state machine must be redesigned before a live Twilio adapter is enabled.
+
+The manual carrier-merge path is separately blocked: a merged cellular call may arrive as one mixed PSTN participant, so the remote party cannot be assumed to be separately addressable or consent-verified. No provider adapter, live recording or carrier support is claimed.
+
 ## Security and deliberate production gaps
 
 Never persist raw phone numbers, credentials, signatures, media URLs or audio in
