@@ -170,8 +170,11 @@ actor RecordingImportService {
 
     func recordings() throws -> [ImportedRecording] {
         let entries = try loadCatalog()
-        let validEntries = entries.filter {
-            fileManager.fileExists(atPath: recordingURL(for: $0).path)
+        var validEntries: [ImportedRecording] = []
+        for entry in entries {
+            if fileManager.fileExists(atPath: try recordingURL(for: entry).path) {
+                validEntries.append(entry)
+            }
         }
         if validEntries != entries {
             try saveCatalog(validEntries)
@@ -183,7 +186,7 @@ actor RecordingImportService {
         var entries = try loadCatalog()
         guard let entry = entries.first(where: { $0.id == id }) else { return }
 
-        let url = recordingURL(for: entry)
+        let url = try recordingURL(for: entry)
         if fileManager.fileExists(atPath: url.path) {
             try fileManager.removeItem(at: url)
         }
@@ -227,10 +230,8 @@ actor RecordingImportService {
         try data.write(to: catalogURL(), options: .atomic)
     }
 
-    private func recordingURL(for entry: ImportedRecording) -> URL {
-        let directory = (try? privateDirectory(named: "Recordings"))
-            ?? fileManager.temporaryDirectory
-        return directory
+    private func recordingURL(for entry: ImportedRecording) throws -> URL {
+        try privateDirectory(named: "Recordings")
             .appendingPathComponent(entry.id.uuidString)
             .appendingPathExtension(entry.fileExtension)
     }
