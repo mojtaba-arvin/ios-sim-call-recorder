@@ -11,6 +11,7 @@ enum RecordingImportServiceError: LocalizedError {
     case storageUnavailable
     case recordingNotFound
     case recordingFileMissing
+    case catalogCorrupted
 
     var errorDescription: String? {
         switch self {
@@ -49,6 +50,8 @@ enum RecordingImportServiceError: LocalizedError {
             return "This recording is no longer in your library."
         case .recordingFileMissing:
             return "The audio file for this recording is missing."
+        case .catalogCorrupted:
+            return "The recording catalog is damaged and no valid backup is available. Audio files were left untouched."
         }
     }
 }
@@ -61,8 +64,7 @@ struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
     let importedAt: Date
 }
 
-/// Owns the user-initiated import boundary. Imported files are copied to
-/// app-private storage under opaque names; source filenames are not persisted.
+/// Owns user-mediated imports, app-private storage, catalog recovery and retention.
 actor RecordingImportService {
     private let fileManager = FileManager.default
 
@@ -90,8 +92,6 @@ actor RecordingImportService {
             }
         }
 
-        // Coordinate reads from File Provider / external document locations.
-        // All later probing happens against our app-private staged copy.
         var coordinationError: NSError?
         var copyError: Error?
         var sourceByteCount: Int64?
@@ -175,9 +175,7 @@ actor RecordingImportService {
             durationSeconds: duration,
             importedAt: Date()
         )
-        let finalURL = recordingsDirectory
-            .appendingPathComponent(entry.id.uuidString)
-            .appendingPathExtension(container.rawValue)
+        let finalURL = try recordingURL(for: entry)
 
         try fileManager.moveItem(at: stagedURL, to: finalURL)
         stagedFileExists = false
@@ -194,21 +192,17 @@ actor RecordingImportService {
         return entry
     }
 
-    func recordings() throws -> [ImportedRecording] {
-        let entries = try loadCatalog()
-        var validEntries: [ImportedRecording] = []
-        for entry in entries {
-            if fileManager.fileExists(atPath: try recordingURL(for: entry).path) {
-                validEntries.append(entry)
-            }
+    /// Performs recovery and optional retention before returning the library.
+    /// A value of zero means keep recordings indefinitely.
+    func recordings(retentionDays: Int = 0) throws -> [ImportedRecording] {
+        guard let retentionPolicy = RecordingRetentionPolicy(rawValue: retentionDays) else {
+            throw RecordingImportServiceError.storageUnavailable
         }
-        if validEntries != entries {
-            try saveCatalog(validEntries)
-        }
-        return validEntries.sorted { $0.importedAt > $1.importedAt }
+        try performMaintenance(retentionPolicy: retentionPolicy)
+        return try loadCatalog().sorted { $0.importedAt > $1.importedAt }
     }
 
-    /// Returns only a URL belonging to a catalog entry in app-private storage.
+    /// Returns only a URL belonging to a validated catalog entry in app-private storage.
     func playbackURL(for id: UUID) throws -> URL {
         let entries = try loadCatalog()
         guard let entry = entries.first(where: { $0.id == id }) else {
@@ -233,6 +227,62 @@ actor RecordingImportService {
         try saveCatalog(entries)
     }
 
+    private func performMaintenance(retentionPolicy: RecordingRetentionPolicy) throws {
+        var entries = try loadCatalog()
+        let now = Date()
+
+        var retainedEntries: [ImportedRecording] = []
+        for entry in entries {
+            let url = try recordingURL(for: entry)
+            let isExpired = retentionPolicy.hasExpired(importedAt: entry.importedAt, relativeTo: now)
+            if isExpired {
+                if fileManager.fileExists(atPath: url.path) {
+                    try fileManager.removeItem(at: url)
+                }
+            } else if fileManager.fileExists(atPath: url.path) {
+                retainedEntries.append(entry)
+            }
+        }
+
+        if retainedEntries != entries {
+            try saveCatalog(retainedEntries)
+            entries = retainedEntries
+        }
+
+        // Imports are serialized by this actor. Anything left in staging after
+        // process termination is an abandoned, incomplete copy and is safe to remove.
+        try removeContents(of: privateDirectory(named: "Staging"))
+
+        // Remove only UUID-named files with known audio extensions that are not
+        // referenced by the validated catalog. Unknown files are left untouched.
+        let knownPaths = Set(try entries.map { try recordingURL(for: $0).standardizedFileURL.path })
+        let recordingsDirectory = try privateDirectory(named: "Recordings")
+        let files = try fileManager.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        for file in files {
+            guard UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
+                  RecordingAudioContainer(rawValue: file.pathExtension.lowercased()) != nil,
+                  !knownPaths.contains(file.standardizedFileURL.path) else {
+                continue
+            }
+            try fileManager.removeItem(at: file)
+        }
+    }
+
+    private func removeContents(of directory: URL) throws {
+        let contents = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        for item in contents {
+            try fileManager.removeItem(at: item)
+        }
+    }
+
     private func privateDirectory(named name: String) throws -> URL {
         guard let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
@@ -241,7 +291,7 @@ actor RecordingImportService {
             throw RecordingImportServiceError.storageUnavailable
         }
 
-        var directory = applicationSupport.appendingPathComponent(
+        let directory = applicationSupport.appendingPathComponent(
             "CallRecorder/\(name)",
             isDirectory: true
         )
@@ -264,22 +314,82 @@ actor RecordingImportService {
             .appendingPathComponent("recordings.json")
     }
 
-    private func loadCatalog() throws -> [ImportedRecording] {
-        let url = try catalogURL()
-        guard fileManager.fileExists(atPath: url.path) else { return [] }
+    private func catalogBackupURL() throws -> URL {
+        try privateDirectory(named: "Catalog")
+            .appendingPathComponent("recordings.json.backup")
+    }
+
+    private func decodeAndValidateCatalog(at url: URL) throws -> [ImportedRecording] {
         let data = try Data(contentsOf: url)
-        return try JSONDecoder().decode([ImportedRecording].self, from: data)
+        let entries = try JSONDecoder().decode([ImportedRecording].self, from: data)
+        try validateCatalog(entries)
+        return entries
+    }
+
+    private func validateCatalog(_ entries: [ImportedRecording]) throws {
+        var identifiers = Set<UUID>()
+        for entry in entries {
+            guard identifiers.insert(entry.id).inserted,
+                  RecordingAudioContainer(rawValue: entry.fileExtension.lowercased()) != nil,
+                  entry.fileExtension == entry.fileExtension.lowercased(),
+                  entry.byteCount > 0,
+                  entry.byteCount <= RecordingImportValidator.maximumFileSizeBytes,
+                  entry.durationSeconds.isFinite,
+                  entry.durationSeconds > 0,
+                  entry.durationSeconds <= RecordingImportValidator.maximumDurationSeconds,
+                  entry.importedAt.timeIntervalSince1970.isFinite else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
+        }
+    }
+
+    private func loadCatalog() throws -> [ImportedRecording] {
+        let primary = try catalogURL()
+        let backup = try catalogBackupURL()
+        guard fileManager.fileExists(atPath: primary.path) else {
+            if fileManager.fileExists(atPath: backup.path) {
+                let recovered = try decodeAndValidateCatalog(at: backup)
+                try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+                return recovered
+            }
+            return []
+        }
+
+        do {
+            return try decodeAndValidateCatalog(at: primary)
+        } catch {
+            guard fileManager.fileExists(atPath: backup.path) else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
+            let recovered = try decodeAndValidateCatalog(at: backup)
+            try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+            return recovered
+        }
     }
 
     private func saveCatalog(_ entries: [ImportedRecording]) throws {
+        try validateCatalog(entries)
         let data = try JSONEncoder().encode(entries)
-        try data.write(to: catalogURL(), options: .atomic)
+        let primary = try catalogURL()
+        let backup = try catalogBackupURL()
+
+        if fileManager.fileExists(atPath: primary.path) {
+            // Preserve the last known-good snapshot before atomically replacing it.
+            let current = try decodeAndValidateCatalog(at: primary)
+            let backupData = try JSONEncoder().encode(current)
+            try backupData.write(to: backup, options: .atomic)
+        }
+        try data.write(to: primary, options: .atomic)
     }
 
     private func recordingURL(for entry: ImportedRecording) throws -> URL {
-        try privateDirectory(named: "Recordings")
+        guard let container = RecordingAudioContainer(rawValue: entry.fileExtension),
+              entry.fileExtension == entry.fileExtension.lowercased() else {
+            throw RecordingImportServiceError.catalogCorrupted
+        }
+        return try privateDirectory(named: "Recordings")
             .appendingPathComponent(entry.id.uuidString)
-            .appendingPathExtension(entry.fileExtension)
+            .appendingPathExtension(container.rawValue)
     }
 }
 
