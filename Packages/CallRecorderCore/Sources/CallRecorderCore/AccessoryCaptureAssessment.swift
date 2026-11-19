@@ -75,6 +75,28 @@ public enum AccessoryCaptureAssessment {
             )
         }
 
+        if accessory.transport == .lightning || accessory.transport == .usbC {
+            guard let connector = inferredConnector(for: device) else {
+                return PathwayCapability(
+                    pathway: pathway,
+                    availability: .experimental(
+                        reason: "The iPhone model identifier does not match a recognized iPhone generation; connector compatibility must be verified manually."
+                    ),
+                    evidenceReference: accessory.evidenceReference
+                )
+            }
+            let expectedTransport: AccessoryCaptureTransport = connector == .lightning ? .lightning : .usbC
+            guard accessory.transport == expectedTransport else {
+                return PathwayCapability(
+                    pathway: pathway,
+                    availability: .unavailable(
+                        reason: "The accessory connector does not match the iPhone model generation. Use a connector-compatible accessory and assess any adapter as a separate hardware configuration."
+                    ),
+                    evidenceReference: accessory.evidenceReference
+                )
+            }
+        }
+
         return PathwayCapability(
             pathway: pathway,
             availability: .experimental(
@@ -82,6 +104,27 @@ public enum AccessoryCaptureAssessment {
             ),
             evidenceReference: accessory.evidenceReference
         )
+    }
+
+    private enum IPhoneConnector {
+        case lightning
+        case usbC
+    }
+
+    /// iPhone 15 introduced USB-C; earlier iPhone generations use Lightning.
+    /// Unknown/non-iPhone identifiers fail closed instead of guessing.
+    private static func inferredConnector(for modelIdentifier: String) -> IPhoneConnector? {
+        guard modelIdentifier.hasPrefix("iPhone"),
+              let comma = modelIdentifier.firstIndex(of: ",") else {
+            return nil
+        }
+        let generationStart = modelIdentifier.index(modelIdentifier.startIndex, offsetBy: 6)
+        guard generationStart < comma,
+              let generation = Int(modelIdentifier[generationStart..<comma]),
+              generation > 0 else {
+            return nil
+        }
+        return generation >= 15 ? .usbC : .lightning
     }
 
     private static func pathway(for transport: AccessoryCaptureTransport) -> RecordingPathway {
