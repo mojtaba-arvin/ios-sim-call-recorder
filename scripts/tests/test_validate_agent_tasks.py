@@ -75,6 +75,23 @@ class AgentTaskValidatorTests(unittest.TestCase):
         }
         self.assertEqual(validate_task_graph([task]), [])
 
+    def test_done_task_requires_all_dependencies_to_be_done(self) -> None:
+        prerequisite = make_task("IOS-1")
+        dependent = make_task("IOS-2", ["IOS-1"])
+        dependent["status"] = "done"
+        dependent["evidence"] = {
+            "exact_head_sha": "a" * 40,
+            "tests_status": "success",
+            "independent_review": True,
+            "documentation_updated": True,
+        }
+        errors = validate_task_graph([prerequisite, dependent])
+        self.assertTrue(any("dependency 'IOS-1' is not done" in error for error in errors))
+
+        prerequisite["status"] = "done"
+        prerequisite["evidence"] = copy.deepcopy(dependent["evidence"])
+        self.assertEqual(validate_task_graph([prerequisite, dependent]), [])
+
     def test_blocked_task_requires_a_blocker(self) -> None:
         task = make_task("IOS-1")
         task["status"] = "blocked"
