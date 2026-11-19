@@ -80,6 +80,53 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertTrue(importedFiles.isEmpty)
     }
 
+    func testEmptySourceIsRejectedBeforeStaging() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("empty.wav")
+        try Data().write(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("An empty source must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .validation(.emptyFile) = error else {
+                return XCTFail("Expected emptyFile, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+    }
+
+    func testUnknownContainerIsRejectedAndStagingIsCleaned() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("not-audio.wav")
+        try Data("not an audio container".utf8).write(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("An unknown audio container must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .unsupportedContainer = error else {
+                return XCTFail("Expected unsupportedContainer, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
     func testFilenameContainerMismatchIsRejectedBeforeCommit() async throws {
         let sourceURL = temporaryRoot.appendingPathComponent("misleading.m4a")
         try writeValidWAV(to: sourceURL)
