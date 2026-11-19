@@ -127,6 +127,9 @@ def analyze_wav(
                 else:
                     current_silent_frames[channel] = 0
 
+        if total_samples != declared_frames:
+            raise ValueError("WAV audio payload is truncated or inconsistent with its declared frame count")
+
     if total_samples == 0:
         raise ValueError("WAV contains no decodable samples")
 
