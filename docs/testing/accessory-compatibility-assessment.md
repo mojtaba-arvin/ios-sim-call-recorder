@@ -40,3 +40,9 @@ This is a connector planning matrix, not a claim that every accessory works on e
 A matching software route assessment remains **experimental**. To mark an exact tuple as observed/confirmed, capture three consented physical calls with the same device model, iOS build, accessory model/firmware, route, SIM, carrier, network and call direction. Both local and remote phrases must be independently intelligible at the beginning, middle and end. Record clipping, gaps, echo, noise, route changes and truncation. A separate WAV metrics report is supplementary and cannot identify speakers or prove intelligibility.
 
 Never upload raw recordings, phone numbers, contacts, signatures or media URLs to GitHub. Publish only sanitized tuple metadata and evidence summaries.
+
+## Executable evidence-promotion gate
+
+The Swift core now models each physical attempt as a privacy-safe trial summary. It stores only an opaque attempt ID, timestamp, consent/notice confirmations, independent local/remote intelligibility results and artifact-integrity result—never audio, phone numbers, contacts or media URLs.
+
+`AccessoryCompatibilityEvidence` is scoped to the exact device/OS/build/SIM/network/route context and accessory model/firmware. Its status remains insufficient unless at least three attempts have unique opaque IDs and every attempt confirms consent, recording notice, intelligible local speech, intelligible remote speech and artifact integrity. Any failed or incomplete attempt blocks promotion. This is a software gate over human-observed physical evidence; it cannot create or simulate that evidence.
