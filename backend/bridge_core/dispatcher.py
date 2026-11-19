@@ -46,7 +46,12 @@ class ProviderOperationError(RuntimeError):
 
 
 class ProviderCommandAdapter(Protocol):
-    """A configured provider/account adapter; credentials remain inside the adapter."""
+    """A configured provider/account adapter; credentials remain inside the adapter.
+
+    Implementations must bound network timeouts below the dispatcher lease duration,
+    reconcile uncertain outcomes, and wrap failures in sanitized ProviderOperationError.
+    Never log command payloads or raw provider responses.
+    """
 
     def reconcile(self, command: LeasedCommand, *, conference_sid: str | None,
                   call_sid: str | None) -> ReconciliationResult: ...
@@ -62,7 +67,7 @@ class DispatchRepository(Protocol):
     def acknowledge_outbox(self, command_id, lease_token) -> None: ...
 
     def fail_outbox(self, command_id, lease_token, *, error_code: str,
-                    retry_delay_seconds: int) -> str: ...
+                    retry_delay_seconds: int, terminal: bool = False) -> str: ...
 
     def get_provider_resource(self, provider: str, provider_account_id: str,
                               session_id: str) -> str | None: ...
@@ -178,6 +183,7 @@ class OutboxCommandDispatcher:
             self._repository.fail_outbox(
                 command.command_id, command.lease_token,
                 error_code=exc.error_code, retry_delay_seconds=delay,
+                terminal=not exc.retryable,
             )
             return DispatchResult(str(command.command_id), "deferred")
         except Exception:
