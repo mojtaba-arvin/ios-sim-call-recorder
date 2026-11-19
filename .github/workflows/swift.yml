@@ -2,7 +2,7 @@ name: Swift package checks
 
 on:
   pull_request:
-    branches: [main, feat/swift-recording-core-foundation, feat/iphone-capture-pathway-discovery]
+    branches: [main, feat/swift-recording-core-foundation, feat/recording-import-validation]
   workflow_dispatch:
 
 permissions:
