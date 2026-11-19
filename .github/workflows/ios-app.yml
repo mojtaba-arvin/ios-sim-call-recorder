@@ -15,7 +15,10 @@ concurrency:
 jobs:
   simulator-build:
     name: CallRecorderApp simulator tests
-    runs-on: macos-15
+    # macOS 26 images ship with a current Xcode and installed iOS Simulator runtimes.
+    # Avoid downloading runtimes during CI: that network-dependent step has failed
+    # before Xcode project generation and prevented the test suite from running.
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - name: Check out source
@@ -24,8 +27,11 @@ jobs:
           persist-credentials: false
       - name: Install XcodeGen
         run: brew install xcodegen
-      - name: Install iOS Simulator runtime
-        run: xcodebuild -downloadPlatform iOS
+      - name: Inspect Xcode and installed simulator runtimes
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devices available
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Select an available iPhone simulator
@@ -34,12 +40,16 @@ jobs:
         run: |
           DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); devices=[x for group in d["devices"].values() for x in group if x["isAvailable"] and x["name"].startswith("iPhone")]; print(devices[0]["udid"] if devices else "")')"
           if [ -z "$DEVICE_ID" ]; then
-            echo "No available iPhone simulator was installed with the selected Xcode runtime." >&2
+            echo "No available iPhone simulator is installed on this runner." >&2
+            xcrun simctl list runtimes
             xcrun simctl list devices
             exit 1
           fi
           echo "device_id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl boot "$DEVICE_ID" || {
+            xcrun simctl list devices
+            exit 1
+          }
           xcrun simctl bootstatus "$DEVICE_ID" -b
       - name: Run iOS simulator app tests
         run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" -configuration Debug CODE_SIGNING_ALLOWED=NO test
