@@ -189,5 +189,17 @@ class PostgresPersistenceTests(unittest.TestCase):
             self.repo.acknowledge_outbox(leased.command_id, uuid4())
         self.repo.acknowledge_outbox(leased.command_id, leased.lease_token)
 
+    def test_terminal_provider_failure_is_dead_lettered_immediately(self):
+        self.repo.enqueue_command(self.command("terminal-provider-error"))
+        leased = self.repo.claim_outbox(worker_id="worker-terminal", limit=1)[0]
+        status = self.repo.fail_outbox(
+            leased.command_id, leased.lease_token,
+            error_code="provider_request_rejected",
+            retry_delay_seconds=86400,
+            terminal=True,
+        )
+        self.assertEqual(status, "dead")
+        self.assertEqual(self.repo.claim_outbox(worker_id="worker-retry", limit=10), ())
+
 if __name__ == "__main__":
     unittest.main()

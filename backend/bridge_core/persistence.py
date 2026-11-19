@@ -16,6 +16,9 @@ class EventIdentityConflict(ValueError):
 class LeaseLost(RuntimeError):
     """An outbox command is no longer leased by the supplied token."""
 
+class ProviderResourceConflict(ValueError):
+    """A provider resource identifier is already owned by another mapping."""
+
 
 class CommandIdentityConflict(ValueError):
     """An idempotency key was reused for a different provider command."""
@@ -165,6 +168,87 @@ class PostgresBridgeRepository:
             raise CommandIdentityConflict("outbox idempotency key conflicts with a different command")
         return False
 
+
+    def get_provider_resource(self, provider: str, provider_account_id: str,
+                              session_id: str) -> str | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT conference_sid FROM provider_resources
+                    WHERE provider = %s AND provider_account_id = %s AND session_id = %s""",
+                    (provider, provider_account_id, session_id))
+                row = cur.fetchone()
+        return row[0] if row else None
+
+    def put_provider_resource(self, provider: str, provider_account_id: str,
+                              session_id: str, conference_sid: str) -> None:
+        for name, value in (("provider", provider), ("provider_account_id", provider_account_id),
+                            ("session_id", session_id), ("conference_sid", conference_sid)):
+            if not value or not value.strip():
+                raise ValueError(f"{name} must not be empty")
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO provider_resources
+                    (provider, provider_account_id, session_id, conference_sid)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (provider, provider_account_id, session_id) DO NOTHING
+                    RETURNING conference_sid""",
+                    (provider, provider_account_id, session_id, conference_sid))
+                inserted = cur.fetchone()
+                if inserted is not None:
+                    return
+                cur.execute(
+                    """SELECT conference_sid FROM provider_resources
+                    WHERE provider = %s AND provider_account_id = %s AND session_id = %s""",
+                    (provider, provider_account_id, session_id))
+                existing = cur.fetchone()
+                if existing is None or existing[0] != conference_sid:
+                    raise ProviderResourceConflict(
+                        "session is already mapped to a different provider conference")
+
+    def get_provider_participant_resource(self, provider: str, provider_account_id: str,
+                                          session_id: str, participant_ref: str) -> str | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT call_sid FROM provider_participant_resources
+                    WHERE provider = %s AND provider_account_id = %s
+                    AND session_id = %s AND participant_ref = %s""",
+                    (provider, provider_account_id, session_id, participant_ref))
+                row = cur.fetchone()
+        return row[0] if row else None
+
+    def put_provider_participant_resource(self, provider: str, provider_account_id: str,
+                                          session_id: str, participant_ref: str,
+                                          call_sid: str) -> None:
+        for name, value in (("provider", provider), ("provider_account_id", provider_account_id),
+                            ("session_id", session_id), ("participant_ref", participant_ref),
+                            ("call_sid", call_sid)):
+            if not value or not value.strip():
+                raise ValueError(f"{name} must not be empty")
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO provider_participant_resources
+                    (provider, provider_account_id, session_id, participant_ref, call_sid)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (provider, provider_account_id, session_id, participant_ref)
+                    DO NOTHING RETURNING call_sid""",
+                    (provider, provider_account_id, session_id, participant_ref, call_sid))
+                inserted = cur.fetchone()
+                if inserted is not None:
+                    return
+                cur.execute(
+                    """SELECT call_sid FROM provider_participant_resources
+                    WHERE provider = %s AND provider_account_id = %s
+                    AND session_id = %s AND participant_ref = %s""",
+                    (provider, provider_account_id, session_id, participant_ref))
+                existing = cur.fetchone()
+                if existing is None or existing[0] != call_sid:
+                    raise ProviderResourceConflict(
+                        "participant is already mapped to a different provider call")
+
     def claim_outbox(self, *, worker_id: str, limit: int = 10,
                      lease_seconds: int = 30) -> tuple[LeasedCommand, ...]:
         if not worker_id.strip():
@@ -220,7 +304,7 @@ class PostgresBridgeRepository:
                     raise LeaseLost("outbox lease is no longer owned by this worker")
 
     def fail_outbox(self, command_id: UUID, lease_token: UUID, *,
-                    error_code: str, retry_delay_seconds: int) -> str:
+                    error_code: str, retry_delay_seconds: int, terminal: bool = False) -> str:
         if not re.fullmatch(r"[a-z0-9_.-]{1,64}", error_code):
             raise ValueError("error_code must be a stable, non-sensitive identifier")
         if not 0 <= retry_delay_seconds <= 86400:
@@ -229,12 +313,12 @@ class PostgresBridgeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE outbox_commands
-                    SET status = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'pending' END,
+                    SET status = CASE WHEN %s OR attempts >= max_attempts THEN 'dead' ELSE 'pending' END,
                     available_at = now() + (%s * interval '1 second'), last_error_code = %s,
                     lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
                     WHERE command_id = %s AND status = 'leased' AND lease_token = %s
                     RETURNING status""",
-                    (retry_delay_seconds, error_code, command_id, lease_token))
+                    (terminal, retry_delay_seconds, error_code, command_id, lease_token))
                 row = cur.fetchone()
                 if row is None:
                     raise LeaseLost("outbox lease is no longer owned by this worker")
