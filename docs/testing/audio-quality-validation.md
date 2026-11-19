@@ -43,7 +43,7 @@ Record these values for every run:
 
 ## Local WAV metrics
 
-The repository tool `scripts/analyze_call_audio.py` computes per-channel RMS, peak level, clipping ratio, silent-window ratio and longest silent gap. It uses only Python's standard library and prints metadata/metrics; it does not upload or persist audio.
+The repository tool `scripts/analyze_call_audio.py` computes per-channel RMS, peak level, clipping ratio, silent-window ratio and longest silent gap. It checks that the number of decoded frames matches the WAV header's declared frame count and rejects a physically truncated or inconsistent payload instead of reporting a misleading shorter duration. It uses only Python's standard library and prints metadata/metrics; it does not upload or persist audio.
 
 For an M4A or another format supported by FFmpeg, convert locally to PCM WAV while preserving the source channel count and sample rate:
 
