@@ -2,6 +2,17 @@ import XCTest
 @testable import CallRecorderCore
 
 final class RecordingPathwayAssessmentTests: XCTestCase {
+    func testAppleCallRecordingDoesNotAssumeGroupCallSupport() {
+        let capability = RecordingPathwayAssessment.appleSystemCallRecording(
+            for: makeContext(participants: 3)
+        )
+
+        guard case .unavailable(let reason) = capability.availability else {
+            return XCTFail("Group-call recording must not be assumed supported")
+        }
+        XCTAssertTrue(reason.contains("one other person"))
+    }
+
     func testAppleCallRecordingRequiresIOS181OrLater() {
         let capability = RecordingPathwayAssessment.appleSystemCallRecording(
             for: makeContext(os: "18.0")
@@ -77,7 +88,8 @@ final class RecordingPathwayAssessmentTests: XCTestCase {
         os: String = "18.1",
         region: String = "US",
         country: String = "US",
-        language: String = "en-US"
+        language: String = "en-US",
+        participants: Int = 2
     ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
             deviceModelIdentifier: "iPhone-test",
@@ -91,7 +103,8 @@ final class RecordingPathwayAssessmentTests: XCTestCase {
             wifiCallingEnabled: false,
             volteEnabled: true,
             callDirection: .outgoing,
-            audioRoute: .speaker
+            audioRoute: .speaker,
+            callParticipantCount: participants
         )
     }
 }
