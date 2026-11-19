@@ -28,6 +28,30 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
         XCTAssertEqual(result.pathway, .bluetoothAccessory)
     }
 
+    func testUserReportedRouteRemainsOnlyASetupHint() {
+        let result = AccessoryCaptureAssessment.assess(
+            context: makeContext(route: .speaker, evidence: .userReported),
+            accessory: profile(.contactVibration)
+        )
+        assertExperimental(result, containing: "only a setup hint")
+    }
+
+    func testAppOwnedRouteDoesNotProvePhoneCallRoute() {
+        let result = AccessoryCaptureAssessment.assess(
+            context: makeContext(route: .speaker, evidence: .appOwnedSessionObserved),
+            accessory: profile(.contactVibration)
+        )
+        assertExperimental(result, containing: "does not establish Phone.app")
+    }
+
+    func testUnknownRouteEvidenceDoesNotBecomeSupported() {
+        let result = AccessoryCaptureAssessment.assess(
+            context: makeContext(route: .speaker, evidence: .unknown),
+            accessory: profile(.contactVibration)
+        )
+        assertExperimental(result, containing: "observation source is unknown")
+    }
+
     func testContactVibrationRecorderRequiresSpeakerRoute() {
         let result = assess(.contactVibration, route: .receiver)
         guard case .unavailable = result.availability else {
@@ -148,7 +172,8 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
 
     private func makeContext(
         route: CallAudioRoute,
-        model: String = "iPhone16,1"
+        model: String = "iPhone16,1",
+        evidence: CallAudioRouteEvidence = .physicalTestObserved
     ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
             deviceModelIdentifier: model,
@@ -163,7 +188,8 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
             wifiCallingEnabled: false,
             volteEnabled: true,
             callDirection: .incoming,
-            audioRoute: route
+            audioRoute: route,
+            audioRouteEvidence: evidence
         )
     }
 
