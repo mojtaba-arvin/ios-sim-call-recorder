@@ -19,7 +19,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 3. The source size is checked against the core 500 MiB limit before copying, preventing oversized files from consuming app staging storage.
 4. A lightweight container signature probe checks RIFF/WAVE, AIFF/AIFC, CAF, MP3 and ISO-BMFF/MP4-family headers. The filename extension is checked independently by the core validator.
 5. The selected file is copied into an app-private staging directory under an opaque UUID filename.
-6. AVAudioFile must successfully decode the staged file. Duration, sample rate and channel count are read from the decoded media, not guessed from its filename.
+6. AVAudioFile must successfully decode the staged file. Duration, sample rate and channel count are read from the decoded media, not guessed from its filename. After metadata limits pass, the complete payload is decoded in bounded 65,536-frame chunks; a truncated or unreadable tail is rejected without loading the full recording into memory.
 7. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
 8. A validated file is moved into app-private recording storage under a new opaque UUID filename.
 9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups.
