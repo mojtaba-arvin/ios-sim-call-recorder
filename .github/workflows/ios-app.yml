@@ -2,7 +2,7 @@ name: iOS app build and tests
 
 on:
   pull_request:
-    branches: [feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle, feat/ios-recording-retention-catalog-recovery-v2, feat/ios-storage-integration-tests]
+    branches: [feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle, feat/ios-recording-retention-catalog-recovery-v2, feat/ios-storage-integration-tests, feat/ios-playback-controls-interruption-handling]
   workflow_dispatch:
 
 permissions:
