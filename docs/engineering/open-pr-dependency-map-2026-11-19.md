@@ -63,7 +63,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
 | #37 | `feat/accessory-compatibility-assessment` | `131474f9b4aaa8f142133eaee484d58e077e3bd3` | #19 | Accessory compatibility/evidence gate |
 | #38 | `fix/ios-pending-playback-request-invalidation` | `8952c356e8fed25704d2aef65ec935a5c7751e77` | #27 | Playback lifecycle race fix |
-| #28 | `chore/agent-rd-skills-and-templates` | `e447fa74d4fcab3352bcb08b372eb069b4fe0663` | #9 | Governance stack (latest synchronized head) |
+| #28 | `chore/agent-rd-skills-and-templates` | `e447fa74d4fcab3352bcb08b372eb069b4fe0663` | #9 | Governance stack (CI-validated code head; see execution refresh below) |
 | #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `b9bc82363910a17d226b05a1aa5719ea6d80afd3` | #19 | Core lifecycle |
 
