@@ -135,6 +135,76 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
     }
 
+    func testPlaybackRequestGateAcceptsOnlyCurrentAvailableRequest() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let request = gate.begin(recordingID: recordingID)
+
+        XCTAssertTrue(gate.accepts(request, availableRecordingIDs: [recordingID]))
+        XCTAssertFalse(gate.accepts(request, availableRecordingIDs: []))
+    }
+
+    func testNewPlaybackRequestSupersedesOlderLookup() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let older = gate.begin(recordingID: recordingID)
+        let newer = gate.begin(recordingID: recordingID)
+
+        XCTAssertFalse(gate.isCurrent(older))
+        XCTAssertTrue(gate.accepts(newer, availableRecordingIDs: [recordingID]))
+    }
+
+    func testDeletingPendingRecordingInvalidatesLookup() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let request = gate.begin(recordingID: recordingID)
+
+        gate.invalidate(recordingIDs: [recordingID])
+
+        XCTAssertFalse(gate.isCurrent(request))
+        XCTAssertFalse(gate.accepts(request, availableRecordingIDs: [recordingID]))
+    }
+
+    func testDeletingDifferentRecordingKeepsPendingLookup() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let request = gate.begin(recordingID: recordingID)
+
+        gate.invalidate(recordingIDs: [UUID()])
+
+        XCTAssertTrue(gate.accepts(request, availableRecordingIDs: [recordingID]))
+    }
+
+    func testRetentionInvalidatesLookupForRemovedRecording() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let request = gate.begin(recordingID: recordingID)
+
+        gate.invalidateMissing(from: [UUID()])
+
+        XCTAssertFalse(gate.isCurrent(request))
+    }
+
+    func testFinishingStaleRequestCannotClearNewerRequest() {
+        var gate = PlaybackRequestGate()
+        let recordingID = UUID()
+        let older = gate.begin(recordingID: recordingID)
+        let newer = gate.begin(recordingID: recordingID)
+
+        gate.finish(older)
+
+        XCTAssertTrue(gate.isCurrent(newer))
+    }
+
+    func testViewTeardownInvalidatesAllPendingLookups() {
+        var gate = PlaybackRequestGate()
+        let request = gate.begin(recordingID: UUID())
+
+        gate.invalidateAll()
+
+        XCTAssertFalse(gate.isCurrent(request))
+    }
+
     private func writeValidWAV(to url: URL) throws {
         let format = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
