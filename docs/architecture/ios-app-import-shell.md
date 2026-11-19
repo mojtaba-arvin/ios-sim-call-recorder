@@ -21,7 +21,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 5. AVAudioFile must successfully decode the staged file. Duration, sample rate and channel count are read from the decoded media, not guessed from its filename.
 6. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
 7. A validated file is moved into app-private recording storage under a new opaque UUID filename.
-8. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted.
+8. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups.
 9. The library lists catalog entries and lets the user delete an imported recording; missing media files are pruned from the catalog when the library loads. A failed import removes its staged copy.
 
 ## Explicit limitations
