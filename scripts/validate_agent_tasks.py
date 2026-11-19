@@ -29,7 +29,10 @@ ALLOWED_TRANSITIONS = {
 
 
 def validate_state_transition(current: str, target: str, *, reset_reason: str | None = None) -> bool:
-    if current not in STATUSES or target not in STATUSES:
+    if (
+        not isinstance(current, str) or current not in STATUSES
+        or not isinstance(target, str) or target not in STATUSES
+    ):
         raise ValueError("current and target must be known task states")
     if target not in ALLOWED_TRANSITIONS[current]:
         raise ValueError(f"task state transition '{current}' -> '{target}' is not allowed")
