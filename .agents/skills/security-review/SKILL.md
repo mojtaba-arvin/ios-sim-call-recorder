@@ -22,3 +22,11 @@ description: Perform threat-focused review of privacy, consent, file handling, A
 
 ## Completion gate
 P0/P1 findings block readiness; privacy and consent limitations are explicitly documented.
+
+
+## Telephony payload privacy regression
+
+- Treat `from`, `to`, `source`, `destination`, `caller`, `callee`, `number`, E.164 and equivalent normalized/nested keys as potentially phone-number-bearing fields.
+- Prefer explicit command payload allowlists over relying only on a key denylist; key checks cannot detect PII hidden under arbitrary innocent-looking keys.
+- Ensure invalid outbox commands are rejected before provider reconciliation/execution and do not create remote resources.
+- Add nested payload regression tests and assert the provider adapter is not called for invalid commands.
