@@ -2,7 +2,7 @@
 
 An evidence-driven iOS project exploring lawful, user-consented ways to retain cellular-call audio on iPhone. The project is intentionally conservative: it does not claim that a third-party iOS app can directly read the private live audio stream of Apple's Phone app.
 
-> **Pre-release / research status.** This repository is not a production-ready universal SIM-call recorder. The default `main` branch is not yet a runnable app release. App, Swift-core, backend and test-tooling changes are being developed in reviewable pull requests. No physical-device/carrier capture route is currently certified by this README.
+> **Pre-release / research status.** The repository now contains a runnable SwiftUI companion app and a tested provider-neutral backend foundation, but it is not a production-ready universal SIM-call recorder. No physical-device/carrier capture route is currently certified.
 
 ## Product boundary
 
@@ -11,23 +11,22 @@ The project distinguishes four separate pathways:
 | Pathway | Intended role | Current evidence boundary |
 |---|---|---|
 | Apple Phone native recording | User starts Apple's system recording, then exports the resulting audio for import | Availability depends on iOS version, region, language and platform policy. The app does not access Phone.app private storage or its live audio stream. |
-| Carrier conference bridge | Join a cellular call to a separately hosted conference/recording service | Experimental until merge topology, two-way audio and channel behavior are demonstrated on the exact iPhone/carrier/SIM combination. |
+| Carrier conference bridge | Join a cellular call to a separately hosted conference/recording service | Backend lifecycle and persistence foundations exist. Real provider integration, carrier merge topology, two-way audio and channel behavior remain unverified. |
 | External hardware | Capture speakerphone or an audio/accessory output independently, then import the file | Hardware-specific; no accessory is certified until repeatable physical tests pass. |
 | App-owned VoIP | Record media for calls whose media pipeline is owned by this app | Separate product pathway; it does not record native Phone.app cellular calls. |
 
 ReplayKit and microphone APIs are not treated as a way to obtain the private downlink audio of a native cellular Phone call. CallKit provides call integration/system UI, not permission to intercept Phone.app audio. Accessibility audio injection is not a recording API.
 
-## Current development areas
+## Current implementation
 
-The open implementation work is organized as independently reviewable stacks:
+- **Swift core:** capability/context types, consent-gated session lifecycle, cancellation and adapter resource cleanup.
+- **iOS companion app:** user-mediated document import, app-private storage, opaque local catalog, local playback/seeking, interruption and output-route handling, system share/export, opt-in retention and catalog recovery.
+- **Import validation:** container probing, metadata limits, and full decode/boundary hardening are covered by dedicated regression tests; check the exact mainline CI status before relying on the newest hardening change.
+- **Audio validation tooling:** local WAV signal metrics and deterministic regression fixtures.
+- **Conference bridge backend:** provider-neutral session state machine, participant consent gate, Twilio webhook signature verifier, PostgreSQL persistence, transactional outbox, leased dispatcher, provider-resource mappings and reconciliation contracts.
+- **Engineering workflow:** role contracts, reusable research/validation/security skills, task/review templates and machine-checked task/evidence policies are being consolidated into the mainline.
 
-- **Swift core:** pathway capability assessment, compatibility context, consent gate, session state machine and adapter lifecycle.
-- **iOS import shell:** user-mediated file import, app-private storage, local catalog, playback/export, retention and recovery.
-- **Audio validation tooling:** local PCM WAV signal metrics and a repeatable physical-device/carrier test protocol.
-- **Conference bridge backend:** provider-neutral session state, authenticated webhooks, transactional outbox and reconciled provider commands.
-- **R&D engineering system:** role contracts, reusable validation/research/security skills, evidence templates and repository policy checks.
-
-These items remain in pull requests until their exact-head checks and independent reviews are complete. A Simulator pass does not certify native telephony, accessory behavior or carrier compatibility.
+The backend is a foundation, **not a deployable recording service**. It does not yet include authenticated HTTP session endpoints, a concrete live provider command adapter, a supervised production worker, media ingestion/object storage, audio verification or provider/product deletion reconciliation.
 
 ## Evidence policy
 
@@ -40,7 +39,7 @@ Every capability claim must be tied to an exact implementation version and evide
 5. **Physical device:** exact iPhone model and iOS build.
 6. **Carrier verified:** exact carrier, plan, SIM, network and call topology.
 
-Positive physical configurations require at least three repeated runs and independent verification that both local and remote speech are intelligible. Results are scoped to the tested compatibility tuple; they are not generalized to all iPhones or carriers.
+Positive physical configurations require at least three repeated runs and independent verification that both local and remote speech are intelligible. Results are scoped to the tested compatibility tuple; they are not generalized to all iPhones or carriers. A simulator or mocked provider pass is not physical capture evidence.
 
 ## Consent, privacy and safety
 
@@ -52,7 +51,7 @@ Positive physical configurations require at least three repeated runs and indepe
 
 ## Repository workflow
 
-- Read [`AGENTS.md`](AGENTS.md) before contributing; it defines branch, security, privacy, test and evidence requirements.
+- Read [AGENTS.md](AGENTS.md) before contributing; it defines branch, security, privacy, test and evidence requirements.
 - Work on a task-scoped branch and submit a pull request. Do not push directly to `main`, force-push shared branches or merge without owner authorization.
 - Use the [bug report form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=bug_report.yml) for reproducible defects and the [capture evidence form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=capture_pathway_evidence.yml) for sanitized physical-device results. Never attach raw recordings or personal call data.
 - Record the exact PR head SHA and inspect the individual test results. A queued, cancelled, skipped or stale run is not a pass.
