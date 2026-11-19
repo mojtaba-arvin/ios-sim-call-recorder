@@ -7,6 +7,7 @@ enum RecordingImportServiceError: LocalizedError {
     case unreadableAudio
     case missingFileSize
     case sourceChangedDuringImport
+    case validation(RecordingImportValidationError)
     case storageUnavailable
 
     var errorDescription: String? {
@@ -19,33 +20,29 @@ enum RecordingImportServiceError: LocalizedError {
             return "The selected file size could not be determined."
         case .sourceChangedDuringImport:
             return "The selected file changed while it was being imported. Please try again."
+        case .validation(let error):
+            switch error {
+            case .emptyFileName:
+                return "The selected file has no valid filename."
+            case .unsupportedFileExtension:
+                return "Choose an M4A, MP3, WAV, CAF, or AIFF audio file."
+            case .emptyFile:
+                return "The selected audio file is empty."
+            case .fileTooLarge(let maximumBytes):
+                return "The selected file exceeds the maximum size of \(maximumBytes / 1_048_576) MiB."
+            case .invalidDuration:
+                return "The selected file has an invalid audio duration."
+            case .durationTooLong(let maximumSeconds):
+                return "The selected recording exceeds the maximum duration of \(Int(maximumSeconds / 3_600)) hours."
+            case .invalidSampleRate:
+                return "The selected file has an unsupported sample rate."
+            case .unsupportedChannelCount:
+                return "The selected file must contain one or two audio channels."
+            case .extensionContainerMismatch:
+                return "The file extension does not match its actual audio container."
+            }
         case .storageUnavailable:
             return "Private recording storage is unavailable."
-        }
-    }
-}
-
-extension RecordingImportValidationError: LocalizedError {
-    public var errorDescription: String? {
-        switch self {
-        case .emptyFileName:
-            return "The selected file has no valid filename."
-        case .unsupportedFileExtension:
-            return "Choose an M4A, MP3, WAV, CAF, or AIFF audio file."
-        case .emptyFile:
-            return "The selected audio file is empty."
-        case .fileTooLarge(let maximumBytes):
-            return "The selected file exceeds the maximum size of \(maximumBytes / 1_048_576) MiB."
-        case .invalidDuration:
-            return "The selected file has an invalid audio duration."
-        case .durationTooLong(let maximumSeconds):
-            return "The selected recording exceeds the maximum duration of \(Int(maximumSeconds / 3_600)) hours."
-        case .invalidSampleRate:
-            return "The selected file has an unsupported sample rate."
-        case .unsupportedChannelCount:
-            return "The selected file must contain one or two audio channels."
-        case .extensionContainerMismatch:
-            return "The file extension does not match its actual audio container."
         }
     }
 }
@@ -106,11 +103,11 @@ actor RecordingImportService {
                     throw RecordingImportServiceError.missingFileSize
                 }
                 guard byteCount > 0 else {
-                    throw RecordingImportValidationError.emptyFile
+                    throw RecordingImportServiceError.validation(.emptyFile)
                 }
                 guard byteCount <= RecordingImportValidator.maximumFileSizeBytes else {
-                    throw RecordingImportValidationError.fileTooLarge(
-                        maximumBytes: RecordingImportValidator.maximumFileSizeBytes
+                    throw RecordingImportServiceError.validation(
+                        .fileTooLarge(maximumBytes: RecordingImportValidator.maximumFileSizeBytes)
                     )
                 }
                 sourceByteCount = byteCount
@@ -162,7 +159,7 @@ actor RecordingImportService {
         case .success:
             break
         case .failure(let error):
-            throw error
+            throw RecordingImportServiceError.validation(error)
         }
 
         let entry = ImportedRecording(
