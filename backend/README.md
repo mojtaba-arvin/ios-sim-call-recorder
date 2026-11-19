@@ -49,7 +49,8 @@ session is rejected.
 Workers call `claim_outbox` to lease commands. Claims use PostgreSQL
 `FOR UPDATE SKIP LOCKED`, an expiring lease and a fresh opaque lease token.
 Only the current token can acknowledge or fail a command. Expired leases can be
-reclaimed; attempts are bounded and terminal commands move to `dead`.
+reclaimed; attempts are bounded and terminal provider failures can be moved directly
+to `dead` without a retry delay.
 
 A worker must commit the lease before calling a provider, pass the stable
 `idempotency_key` when supported, reconcile uncertain outcomes before retrying
