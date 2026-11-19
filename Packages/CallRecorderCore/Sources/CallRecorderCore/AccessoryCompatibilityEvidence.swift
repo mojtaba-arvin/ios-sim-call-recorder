@@ -1,5 +1,46 @@
 import Foundation
 
+/// Human-reviewed quality evidence for one audio direction. A direction
+/// passes only when speech is intelligible at the beginning, middle and end,
+/// with acceptable clipping, gaps, echo and background noise.
+public struct AccessoryAudioDirectionEvidence: Equatable, Sendable {
+    public let intelligibleAtBeginning: Bool
+    public let intelligibleAtMiddle: Bool
+    public let intelligibleAtEnd: Bool
+    public let clippingAcceptable: Bool
+    public let gapsAcceptable: Bool
+    public let echoAcceptable: Bool
+    public let noiseAcceptable: Bool
+
+    public init(
+        intelligibleAtBeginning: Bool,
+        intelligibleAtMiddle: Bool,
+        intelligibleAtEnd: Bool,
+        clippingAcceptable: Bool,
+        gapsAcceptable: Bool,
+        echoAcceptable: Bool,
+        noiseAcceptable: Bool
+    ) {
+        self.intelligibleAtBeginning = intelligibleAtBeginning
+        self.intelligibleAtMiddle = intelligibleAtMiddle
+        self.intelligibleAtEnd = intelligibleAtEnd
+        self.clippingAcceptable = clippingAcceptable
+        self.gapsAcceptable = gapsAcceptable
+        self.echoAcceptable = echoAcceptable
+        self.noiseAcceptable = noiseAcceptable
+    }
+
+    public var isAcceptable: Bool {
+        intelligibleAtBeginning
+            && intelligibleAtMiddle
+            && intelligibleAtEnd
+            && clippingAcceptable
+            && gapsAcceptable
+            && echoAcceptable
+            && noiseAcceptable
+    }
+}
+
 /// A privacy-safe summary of one consented physical validation attempt.
 /// It deliberately stores no audio, phone number, contact or media URL.
 public struct AccessoryCaptureTrial: Equatable, Sendable {
@@ -7,8 +48,8 @@ public struct AccessoryCaptureTrial: Equatable, Sendable {
     public let observedAt: Date
     public let consentConfirmed: Bool
     public let recordingNoticeConfirmed: Bool
-    public let localSpeechIntelligible: Bool
-    public let remoteSpeechIntelligible: Bool
+    public let localAudioQuality: AccessoryAudioDirectionEvidence
+    public let remoteAudioQuality: AccessoryAudioDirectionEvidence
     public let artifactIntegrityVerified: Bool
 
     public init(
@@ -16,24 +57,24 @@ public struct AccessoryCaptureTrial: Equatable, Sendable {
         observedAt: Date,
         consentConfirmed: Bool,
         recordingNoticeConfirmed: Bool,
-        localSpeechIntelligible: Bool,
-        remoteSpeechIntelligible: Bool,
+        localAudioQuality: AccessoryAudioDirectionEvidence,
+        remoteAudioQuality: AccessoryAudioDirectionEvidence,
         artifactIntegrityVerified: Bool
     ) {
         self.attemptIdentifier = attemptIdentifier
         self.observedAt = observedAt
         self.consentConfirmed = consentConfirmed
         self.recordingNoticeConfirmed = recordingNoticeConfirmed
-        self.localSpeechIntelligible = localSpeechIntelligible
-        self.remoteSpeechIntelligible = remoteSpeechIntelligible
+        self.localAudioQuality = localAudioQuality
+        self.remoteAudioQuality = remoteAudioQuality
         self.artifactIntegrityVerified = artifactIntegrityVerified
     }
 
     public var isPositive: Bool {
         consentConfirmed
             && recordingNoticeConfirmed
-            && localSpeechIntelligible
-            && remoteSpeechIntelligible
+            && localAudioQuality.isAcceptable
+            && remoteAudioQuality.isAcceptable
             && artifactIntegrityVerified
     }
 }
@@ -118,7 +159,7 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
         }
 
         guard trials.allSatisfy(\.isPositive) else {
-            return .insufficient(reason: "Every recorded attempt must confirm consent, notice, intelligible local and remote speech, and artifact integrity.")
+            return .insufficient(reason: "Every recorded attempt must confirm consent, notice, acceptable local and remote audio quality, and artifact integrity.")
         }
 
         return .confirmed(positiveTrials: trials.count)
