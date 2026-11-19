@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 struct RecordingLibraryView: View {
     @State private var isImporterPresented = false
     @State private var isImporting = false
-    @State private var importedCount = 0
+    @State private var recordings: [ImportedRecording] = []
     @State private var statusMessage = "Import a recording exported from Phone, Notes, or an external recorder."
     @State private var isError = false
 
@@ -12,9 +12,9 @@ struct RecordingLibraryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 Image(systemName: "waveform")
-                    .font(.system(size: 48, weight: .regular))
+                    .font(.system(size: 42, weight: .regular))
                     .foregroundStyle(.tint)
 
                 Text("Call Recordings")
@@ -23,11 +23,6 @@ struct RecordingLibraryView: View {
                 Text(statusMessage)
                     .multilineTextAlignment(.center)
                     .foregroundColor(isError ? .red : .secondary)
-
-                if importedCount > 0 {
-                    Label("\(importedCount) recording(s) imported", systemImage: "checkmark.circle")
-                        .foregroundStyle(.secondary)
-                }
 
                 Button {
                     isImporterPresented = true
@@ -42,7 +37,39 @@ struct RecordingLibraryView: View {
                     ProgressView("Validating and importing…")
                 }
 
-                Text("Files are imported only after you select them. The app does not access Phone or Notes private data.")
+                if recordings.isEmpty {
+                    ContentUnavailableView(
+                        "No Recordings",
+                        systemImage: "waveform",
+                        description: Text("Select an audio file to add it to your library.")
+                    )
+                    .frame(maxHeight: .infinity)
+                } else {
+                    List {
+                        Section("Imported recordings") {
+                            ForEach(recordings) { recording in
+                                HStack(spacing: 12) {
+                                    Image(systemName: "waveform")
+                                        .foregroundStyle(.tint)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Recording")
+                                            .font(.body.weight(.medium))
+                                        Text(recording.importedAt.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Text("\(formattedDuration(recording.durationSeconds)) · \(formattedSize(recording.byteCount))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .onDelete(perform: deleteRecordings)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+
+                Text("Files are imported only after you select them. The app does not access Phone or Notes private data. Swipe a recording to delete it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -56,6 +83,9 @@ struct RecordingLibraryView: View {
                 allowsMultipleSelection: false,
                 onCompletion: handleImportSelection
             )
+            .task {
+                await refreshRecordings()
+            }
         }
     }
 
@@ -70,8 +100,11 @@ struct RecordingLibraryView: View {
             isError = false
             Task {
                 do {
-                    try await importService.importRecording(from: url, source: .filesApp)
-                    importedCount += 1
+                    let recording = try await importService.importRecording(
+                        from: url,
+                        source: .filesApp
+                    )
+                    recordings.insert(recording, at: 0)
                     statusMessage = "Recording imported and validated successfully."
                 } catch {
                     statusMessage = error.localizedDescription
@@ -80,5 +113,40 @@ struct RecordingLibraryView: View {
                 isImporting = false
             }
         }
+    }
+
+    private func refreshRecordings() async {
+        do {
+            recordings = try await importService.recordings()
+        } catch {
+            statusMessage = "The recording library could not be loaded."
+            isError = true
+        }
+    }
+
+    private func deleteRecordings(at offsets: IndexSet) {
+        let ids = offsets.map { recordings[$0].id }
+        Task {
+            do {
+                for id in ids {
+                    try await importService.deleteRecording(id: id)
+                }
+                await refreshRecordings()
+                statusMessage = "Selected recording(s) deleted."
+                isError = false
+            } catch {
+                statusMessage = "A recording could not be deleted."
+                isError = true
+            }
+        }
+    }
+
+    private func formattedDuration(_ duration: Double) -> String {
+        let totalSeconds = max(0, Int(duration))
+        return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private func formattedSize(_ byteCount: Int64) -> String {
+        String(format: "%.1f MB", Double(byteCount) / 1_048_576)
     }
 }
