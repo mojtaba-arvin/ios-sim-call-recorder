@@ -128,8 +128,13 @@ final class RecordingImportServiceTests: XCTestCase {
     }
 
     func testFilenameContainerMismatchIsRejectedBeforeCommit() async throws {
+        let validURL = temporaryRoot.appendingPathComponent("valid-container.wav")
+        try writeValidWAV(to: validURL)
+        let validWAV = try Data(contentsOf: validURL)
+        XCTAssertEqual(String(decoding: validWAV.prefix(4), as: UTF8.self), "RIFF")
+
         let sourceURL = temporaryRoot.appendingPathComponent("misleading.m4a")
-        try writeValidWAV(to: sourceURL)
+        try validWAV.write(to: sourceURL)
 
         let service = RecordingImportService(storageRootURL: temporaryRoot)
         do {
