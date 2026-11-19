@@ -41,6 +41,13 @@ final class RecordingImportServiceTests: XCTestCase {
             try JSONDecoder().decode([ImportedRecording].self, from: primary),
             try JSONDecoder().decode([ImportedRecording].self, from: backup)
         )
+        XCTAssertFalse(String(decoding: primary, as: UTF8.self).contains("sample.wav"))
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(storedFiles.count, 1)
+        XCTAssertEqual(storedFiles[0].deletingPathExtension().lastPathComponent, imported.id.uuidString)
     }
 
     func testTruncatedAudioPayloadIsRejectedAndStagingIsCleaned() async throws {
@@ -58,6 +65,32 @@ final class RecordingImportServiceTests: XCTestCase {
         } catch let error as RecordingImportServiceError {
             guard case .unreadableAudio = error else {
                 return XCTFail("Expected unreadableAudio, got \(error)")
+            }
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
+    func testFilenameContainerMismatchIsRejectedBeforeCommit() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("misleading.m4a")
+        try writeValidWAV(to: sourceURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("A WAV payload named as M4A must be rejected")
+        } catch let error as RecordingImportServiceError {
+            guard case .validation(.extensionContainerMismatch) = error else {
+                return XCTFail("Expected extensionContainerMismatch, got \(error)")
             }
         }
 
