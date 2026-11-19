@@ -96,6 +96,11 @@ public struct AccessoryCompatibilityEvidence: Equatable, Sendable {
             return .insufficient(reason: "Every physical attempt must have a unique, non-empty opaque identifier.")
         }
 
+        let timestamps = trials.map(\.observedAt)
+        guard Set(timestamps).count == timestamps.count else {
+            return .insufficient(reason: "Each physical attempt must have a distinct observation timestamp.")
+        }
+
         guard trials.allSatisfy(\.isPositive) else {
             return .insufficient(reason: "Every recorded attempt must confirm consent, notice, intelligible local and remote speech, and artifact integrity.")
         }
