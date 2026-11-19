@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, system share/export, opt-in retention and catalog recovery implemented. Simulator CI passes; physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -40,7 +40,6 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device until the user explicitly chooses a destination in the system share sheet. No background network transfer is implemented.
 - Transcription, cloud upload and automated two-way speaker verification remain future work.
-
 
 ## Retention, catalog recovery and storage maintenance
 
