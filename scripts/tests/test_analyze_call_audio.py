@@ -76,6 +76,15 @@ class CallAudioAnalysisTests(unittest.TestCase):
 
             self.assertEqual(result["analysis"]["channels"][0]["clipped_sample_ratio"], 1.0)
 
+    def test_rejects_truncated_wav_payload_instead_of_reporting_shorter_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "truncated.wav"
+            self.write_wav(path, [[1_000] * 8_000])
+            path.write_bytes(path.read_bytes()[:-512])
+
+            with self.assertRaisesRegex(ValueError, "truncated or inconsistent"):
+                analyze_wav(path)
+
     def test_rejects_invalid_silence_threshold_and_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fixture.wav"
