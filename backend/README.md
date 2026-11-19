@@ -108,3 +108,6 @@ PYTHONPATH=backend python -m unittest discover -s backend/tests -v
 PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover rollback,
 duplicate/concurrent delivery, account-scoped event identity, atomic outbox
 insertion, concurrent claims, lease expiry, stale lease rejection and retries.
+
+
+The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
