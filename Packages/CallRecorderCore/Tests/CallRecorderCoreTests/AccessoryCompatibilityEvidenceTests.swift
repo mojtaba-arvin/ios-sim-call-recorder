@@ -119,6 +119,31 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         XCTAssertFalse(evidence.isConfirmed)
     }
 
+    func testNumericOnlyAttemptIdentifiersAreRejectedAsPotentialPII() {
+        let evidence = makeEvidence(trials: [trial("111"), trial("222"), trial("333")])
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("Numeric-only identifiers can be confused with personal identifiers")
+        }
+        XCTAssertTrue(reason.contains("numeric-only"))
+    }
+
+    func testOutOfOrderPhysicalAttemptsCannotBeConfirmed() {
+        let evidence = makeEvidence(trials: [trial("c"), trial("b"), trial("a")])
+        guard case .insufficient(let reason) = evidence.status else {
+            return XCTFail("Evidence must preserve chronological attempt order")
+        }
+        XCTAssertTrue(reason.contains("increasing observation-time order"))
+    }
+
+    func testOverlongAttemptIdentifierIsRejected() {
+        let evidence = makeEvidence(trials: [
+            trial(String(repeating: "a", count: 65)),
+            trial("second"),
+            trial("third")
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
     func testDuplicateObservationTimestampsBlockConfirmation() {
         let timestamp = Date(timeIntervalSince1970: 1_800_000_000)
         let repeated = (1...3).map { index in
