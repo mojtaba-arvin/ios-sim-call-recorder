@@ -19,6 +19,22 @@ jobs:
     name: Conference bridge backend tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TEST_DATABASE_URL: postgresql://bridge_test:bridge_test@localhost:5432/bridge_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bridge_test
+          POSTGRES_PASSWORD: bridge_test
+          POSTGRES_DB: bridge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bridge_test -d bridge_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
