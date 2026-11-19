@@ -24,7 +24,7 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
 
     func testBluetoothHFPDoesNotBecomeSupportedFromPairingAlone() {
         let result = assess(.bluetoothHFP, route: .bluetoothHFP)
-        assertExperimental(result, containing: "candidate only")
+        assertExperimental(result, containing: "Candidate only")
         XCTAssertEqual(result.pathway, .bluetoothAccessory)
     }
 
