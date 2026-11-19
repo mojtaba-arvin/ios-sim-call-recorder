@@ -32,6 +32,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - Audio interruptions pause playback. Playback does not resume automatically after an interruption; the user must explicitly press play.
 - Disconnecting the current audio output (for example, unplugging headphones) pauses playback to avoid unexpectedly sending private audio to another output.
 - The system share sheet exports the selected app-private audio file to a user-chosen destination or app. Export is user initiated; the app does not upload audio to a service.
+- VoiceOver labels recording metadata, per-recording share/play actions, playback position and elapsed/total time; import progress and changing status/error messages have accessible descriptions.
 - Playback and export URLs are resolved through the catalog and checked for file existence before use.
 - Users should listen for both their own voice and the remote participant. Playback is a listening aid, not proof of two-way call capture; channel count alone is insufficient.
 
