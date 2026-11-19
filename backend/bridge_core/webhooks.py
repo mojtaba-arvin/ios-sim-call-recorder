@@ -33,19 +33,20 @@ class NormalizedProviderEvent:
 
     def __post_init__(self):
         for name in ("provider", "provider_account_id", "event_id", "session_id"):
-            if not getattr(self, name).strip():
-                raise ValueError(f"{name} must not be empty")
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware")
         if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED}:
-            if not self.participant_ref or not self.participant_ref.strip():
+            if not isinstance(self.participant_ref, str) or not self.participant_ref.strip():
                 raise ValueError("participant event requires opaque participant_ref")
         if self.event_type is EventType.PARTICIPANT_CONSENTED:
-            if not self.consent_policy_version or not self.consent_policy_version.strip():
+            if not isinstance(self.consent_policy_version, str) or not self.consent_policy_version.strip():
                 raise ValueError("consent event requires consent_policy_version")
-            if not self.consent_method or not self.consent_method.strip():
+            if not isinstance(self.consent_method, str) or not self.consent_method.strip():
                 raise ValueError("consent event requires consent_method")
-            if not self.payload_digest:
+            if not isinstance(self.payload_digest, str) or not self.payload_digest:
                 raise ValueError("consent event requires a signed payload digest")
 
 
