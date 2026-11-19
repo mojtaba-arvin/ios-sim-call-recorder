@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
+from .application import EventApplication
 from .domain import BridgeSession
 
 @dataclass(frozen=True, slots=True)
@@ -34,10 +35,11 @@ class BridgeRepository(Protocol):
     """Atomically deduplicate an event and persist its session mutation.
 
     Production implementations MUST use a database transaction and unique
-    (provider, event_id) constraint. If apply raises, neither write is committed.
+    (provider, provider_account_id, event_id) constraint. If apply raises, neither write is committed.
     """
     def apply_event_once(self, provider: str, event_id: str, session_id: str,
-                         apply: Callable[[BridgeSession], BridgeSession]) -> bool: ...
+                         apply: Callable[[BridgeSession], BridgeSession | EventApplication], *,
+                         provider_account_id: str = "default", payload_digest: str = "") -> bool: ...
     def get_session(self, session_id: str) -> BridgeSession | None: ...
 
 class BridgeProvider(Protocol):

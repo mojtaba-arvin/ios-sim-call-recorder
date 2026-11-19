@@ -70,6 +70,32 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(decoded, [])
         self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.AWAITING_USER_ACTION)
 
+    def test_last_consent_enqueues_one_idempotent_recording_command(self):
+        for event in [
+            self.event("ring", EventType.BRIDGE_RINGING),
+            self.event("ja", EventType.PARTICIPANT_JOINED, "a"),
+            self.event("jb", EventType.PARTICIPANT_JOINED, "b"),
+            self.event("ca", EventType.PARTICIPANT_CONSENTED, "a"),
+        ]:
+            self.send(event)
+        self.assertEqual(self.repo.get_outbox_commands(), ())
+        self.send(self.event("cb", EventType.PARTICIPANT_CONSENTED, "b"))
+        commands = self.repo.get_outbox_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].command_type, "recording.start")
+        self.assertEqual(commands[0].payload, {"session_id": "session-opaque-1"})
+        self.send(self.event("cb-replayed", EventType.PARTICIPANT_CONSENTED, "b"))
+        self.assertEqual(len(self.repo.get_outbox_commands()), 1)
+
+    def test_outbox_payload_rejects_sensitive_fields(self):
+        from bridge_core.application import OutboxCommand
+        with self.assertRaises(ValueError):
+            OutboxCommand(
+                command_type="recording.start", idempotency_key="unsafe",
+                session_id="session-opaque-1", provider="test-provider",
+                payload={"metadata": {"phone_number": "+15555550123"}},
+            )
+
     def test_decoder_receives_the_exact_verified_request(self):
         event = self.event("same-request", EventType.BRIDGE_RINGING)
         request = SignedWebhookRequest(
