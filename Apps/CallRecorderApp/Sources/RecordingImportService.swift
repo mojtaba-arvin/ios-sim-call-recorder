@@ -172,6 +172,11 @@ actor RecordingImportService {
             throw RecordingImportServiceError.validation(error)
         }
 
+        // AVAudioFile construction validates the container/header, not every
+        // compressed or PCM frame. Decode the payload in bounded chunks so a
+        // truncated tail cannot be committed as a playable library item.
+        try validateAudioPayload(audioFile)
+
         let entry = ImportedRecording(
             id: UUID(),
             fileExtension: container.rawValue,
@@ -229,6 +234,43 @@ actor RecordingImportService {
         }
         entries.removeAll { $0.id == id }
         try saveCatalog(entries)
+    }
+
+    private func validateAudioPayload(_ audioFile: AVAudioFile) throws {
+        let expectedFrameCount = audioFile.length
+        let format = audioFile.processingFormat
+        guard expectedFrameCount > 0,
+              format.sampleRate.isFinite,
+              format.sampleRate > 0,
+              (1...2).contains(Int(format.channelCount)),
+              let buffer = AVAudioPCMBuffer(
+                pcmFormat: format,
+                frameCapacity: 65_536
+              ) else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        var decodedFrameCount: AVAudioFramePosition = 0
+        while decodedFrameCount < expectedFrameCount {
+            let remainingFrames = expectedFrameCount - decodedFrameCount
+            let requestedFrames = AVAudioFrameCount(
+                min(Int64(buffer.frameCapacity), remainingFrames)
+            )
+            do {
+                try audioFile.read(into: buffer, frameCount: requestedFrames)
+            } catch {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+
+            guard buffer.frameLength > 0 else {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+            decodedFrameCount += AVAudioFramePosition(buffer.frameLength)
+        }
+
+        guard decodedFrameCount == expectedFrameCount else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
     }
 
     private func performMaintenance(retentionPolicy: RecordingRetentionPolicy) throws {
