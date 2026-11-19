@@ -36,7 +36,9 @@ def validate_state_transition(current: str, target: str, *, reset_reason: str | 
         raise ValueError("current and target must be known task states")
     if target not in ALLOWED_TRANSITIONS[current]:
         raise ValueError(f"task state transition '{current}' -> '{target}' is not allowed")
-    if target == "queued" and current in {"running", "failed"} and not (reset_reason and reset_reason.strip()):
+    if target == "queued" and current in {"running", "failed"} and not (
+        isinstance(reset_reason, str) and reset_reason.strip()
+    ):
         raise ValueError("resetting a running or failed task requires a corrective reset_reason")
     return True
 
