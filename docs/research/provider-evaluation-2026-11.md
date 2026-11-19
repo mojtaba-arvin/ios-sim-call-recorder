@@ -8,7 +8,7 @@
 1. Keep native cellular-call capture and provider conference bridging as separate recording pathways.
 2. Do not use CallKit as evidence of access to native Phone-call audio. Apple's CallKit documentation describes the system calling UI and coordination for an app's VoIP services.
 3. Region availability is a hard capability input. Apple's current iPhone call-recording guide lists the European Union, Iran and Oman among regions where its built-in recording feature is unavailable.
-4. Keep Twilio as the first adapter target because the current backend stack already contains its signature verifier. Do not claim Twilio is the best universal provider.
+4. Keep Twilio as the first adapter target only for the current stack; do not infer it is the best product provider. Telnyx is now a strong second candidate and must be compared before live integration is locked.
 5. Preserve Vonage as a viable alternative for a future controlled comparison. Telnyx remains research-only until primary documentation supports the exact call-control, recording-channel and idempotency requirements.
 6. Never retry an ambiguous provider create/join operation without reconciliation. A transactional outbox gives at-least-once delivery, not exactly-once remote effects.
 
@@ -41,6 +41,19 @@
 
 The reviewed documentation does **not** establish a general idempotency guarantee for Conference Participant creation. The adapter must use a stable opaque correlation key (for example a deterministic per-session conference name plus unique participant labels), inspect provider state after uncertain outcomes, and only retry when reconciliation establishes that the effect did not happen. Provider API behavior and account configuration must be verified before production use.
 
+### Telnyx-specific findings
+
+The primary Telnyx documentation now confirms a substantially more complete conference path than the initial research suggested:
+
+- [Commands and resources](https://developers.telnyx.com/docs/voice/programmable-voice/voice-api-commands-and-resources) exposes conference create/list/retrieve, participant join/leave, and conference recording start/stop.
+- [Conference recording start](https://developers.telnyx.com/api-reference/conference-commands/conference-recording-start) supports WAV/MP3, `channels=dual`, `play_beep`, and a selectable recording region including Europe and Middle East. Dual output places the conference creator on channel 1 and all other participants together on channel 2; it is not per-participant isolation.
+- [Bridge calls](https://developers.telnyx.com/api-reference/call-commands/bridge-calls) supports bridging two Call Control legs and exposes recording controls including `record_channels` and `record_track`.
+- [Webhook delivery](https://developers.telnyx.com/docs/voice/programmable-voice/receiving-webhooks) is not ordered and may be duplicated; validate the Ed25519 signature and deduplicate by webhook event ID.
+- Telnyx documents `command_id` deduplication for duplicate commands for the same call/conference, but the documented duplicate-command suppression window is **60 seconds**. It is not a durable exactly-once guarantee for long-delayed outbox retries.
+- [Recording storage](https://developers.telnyx.com/docs/voice/programmable-voice/storing-call-recordings) sends a recording-ready webhook; the documented Telnyx-hosted recording URL is time-limited (10 minutes in the example). Treat it as a secret and never place it in logs or durable outbox payloads.
+
+This makes Telnyx a strong alternative to Twilio for the next controlled comparison, especially where Europe/Middle East recording locality matters. The docs do not establish a universal carrier-merge capability, per-person separation, or market-by-market number availability. A beep is an audible notice, not proof of affirmative consent.
+
 ### Vonage-specific findings
 
 - [Recording guide](https://developer.vonage.com/en/voice/voice-api/concepts/recording): named Conversations can be recorded; split recording is described as stereo caller-vs-received audio.
@@ -62,7 +75,7 @@ This makes Vonage a plausible second adapter candidate, but does not establish c
 ## Evidence gaps / next research
 
 - Verify current Twilio Participant API behavior for deterministic conference names, participant labels, concurrent creation and post-timeout reconciliation using a test account before enabling a live adapter.
-- Complete primary-source Telnyx research for conference lifecycle, recording channels, webhook signature verification, retries and command idempotency.
+- Complete Telnyx market-specific number availability, pricing, recording retention/data residency and test-account validation; verify the exact 60-second command_id behavior against long outbox retries.
 - Compare Vonage and Twilio with the same physical-device/carrier scenarios and the same consent/audio-verification acceptance protocol.
 - Test SIM-call merge behavior on each target carrier/device/region combination. Provider conference docs cannot prove carrier support.
 - Define lawful recording, consent, data residency, retention and deletion requirements for each launch market.
