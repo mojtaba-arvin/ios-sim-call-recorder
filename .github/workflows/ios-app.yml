@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   simulator-build:
-    name: CallRecorderApp simulator build
+    name: CallRecorderApp simulator tests
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,7 +24,22 @@ jobs:
           persist-credentials: false
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Install iOS Simulator runtime
+        run: xcodebuild -downloadPlatform iOS
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Select an available iPhone simulator
+        id: simulator
+        shell: bash
+        run: |
+          DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); devices=[x for group in d["devices"].values() for x in group if x["isAvailable"] and x["name"].startswith("iPhone")]; print(devices[0]["udid"] if devices else "")')"
+          if [ -z "$DEVICE_ID" ]; then
+            echo "No available iPhone simulator was installed with the selected Xcode runtime." >&2
+            xcrun simctl list devices
+            exit 1
+          fi
+          echo "device_id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
       - name: Run iOS simulator app tests
-        run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' -configuration Debug CODE_SIGNING_ALLOWED=NO test
+        run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" -configuration Debug CODE_SIGNING_ALLOWED=NO test
