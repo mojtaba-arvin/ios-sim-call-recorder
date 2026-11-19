@@ -59,3 +59,15 @@ A third-party app must not treat its own `AVAudioSession` route as proof of the 
 The three-call promotion gate requires `physicalTestObserved`. A user-selected "speaker" value or an app audio-route notification cannot promote a cellular accessory tuple.
 
 Physical evidence also requires exact device region, physical test country, language, carrier identity, carrier bundle version, SIM configuration and network type. This prevents a result from one carrier bundle, SIM mode or network from being generalized to another. Do not put subscriber identifiers, phone numbers or raw call media in this tuple; carrier identity must be a non-personal carrier/bundle identifier.
+
+## Per-direction quality gate
+
+Each physical call now carries separate local and remote audio-quality summaries. Each direction must independently pass all of these checks:
+
+- Speech intelligible at the beginning, middle and end of the call.
+- Clipping within the accepted review threshold.
+- No unacceptable audio gaps or dropouts.
+- Echo within an acceptable range.
+- Background noise within an acceptable range.
+
+A positive local track cannot compensate for an unintelligible remote track, and a good average cannot hide a failure at the beginning, middle or end. The software model records reviewer outcomes only; it does not claim that these subjective checks are automated. The existing WAV analyzer can supply supplementary signal metrics, but waveform metrics alone cannot prove speaker identity or intelligibility.
