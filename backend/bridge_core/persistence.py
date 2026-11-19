@@ -64,10 +64,11 @@ class PostgresBridgeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO bridge_sessions
-                    (session_id, expected_participants, state, joined_participants,
+                    (session_id, expected_participants, expected_participant_refs, state, joined_participants,
                      consented_participants, failure_code, updated_at)
-                    VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)""",
-                    (session.session_id, session.expected_participants, session.state.value,
+                    VALUES (%s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s, %s)""",
+                    (session.session_id, session.expected_participants,
+                     json.dumps(sorted(session.expected_participant_refs)), session.state.value,
                      json.dumps(sorted(session.joined_participants)),
                      json.dumps(sorted(session.consented_participants)),
                      session.failure_code, session.updated_at),
@@ -77,8 +78,8 @@ class PostgresBridgeRepository:
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT session_id, expected_participants, state, joined_participants,
-                    consented_participants, failure_code, updated_at
+                    """SELECT session_id, expected_participants, expected_participant_refs, state,
+                    joined_participants, consented_participants, failure_code, updated_at
                     FROM bridge_sessions WHERE session_id = %s""", (session_id,))
                 row = cur.fetchone()
         return self._session_from_row(row) if row else None
@@ -110,8 +111,8 @@ class PostgresBridgeRepository:
                     return False
 
                 cur.execute(
-                    """SELECT session_id, expected_participants, state, joined_participants,
-                    consented_participants, failure_code, updated_at
+                    """SELECT session_id, expected_participants, expected_participant_refs, state,
+                    joined_participants, consented_participants, failure_code, updated_at
                     FROM bridge_sessions WHERE session_id = %s FOR UPDATE""", (session_id,))
                 row = cur.fetchone()
                 if row is None:
@@ -341,9 +342,11 @@ class PostgresBridgeRepository:
 
     @staticmethod
     def _session_from_row(row: tuple[Any, ...]) -> BridgeSession:
-        joined = row[3] if isinstance(row[3], list) else json.loads(row[3])
-        consented = row[4] if isinstance(row[4], list) else json.loads(row[4])
+        expected = row[2] if isinstance(row[2], list) else json.loads(row[2])
+        joined = row[4] if isinstance(row[4], list) else json.loads(row[4])
+        consented = row[5] if isinstance(row[5], list) else json.loads(row[5])
         return BridgeSession(
-            session_id=row[0], expected_participants=row[1], state=SessionState(row[2]),
+            session_id=row[0], expected_participants=row[1],
+            expected_participant_refs=frozenset(expected), state=SessionState(row[3]),
             joined_participants=frozenset(joined), consented_participants=frozenset(consented),
-            failure_code=row[5], updated_at=row[6])
+            failure_code=row[6], updated_at=row[7])
