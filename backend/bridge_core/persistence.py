@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 from .application import EventApplication, OutboxCommand
-from .domain import BridgeSession, SessionState
+from .domain import BridgeSession, ConsentEvidence, SessionState
 
 class EventIdentityConflict(ValueError):
     """A provider reused an event ID for a different session."""
@@ -65,12 +65,13 @@ class PostgresBridgeRepository:
                 cur.execute(
                     """INSERT INTO bridge_sessions
                     (session_id, expected_participants, expected_participant_refs, state, joined_participants,
-                     consented_participants, failure_code, updated_at)
-                    VALUES (%s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s, %s)""",
+                     consented_participants, consent_evidence, failure_code, updated_at)
+                    VALUES (%s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)""",
                     (session.session_id, session.expected_participants,
                      json.dumps(sorted(session.expected_participant_refs)), session.state.value,
                      json.dumps(sorted(session.joined_participants)),
                      json.dumps(sorted(session.consented_participants)),
+                     json.dumps([item.to_dict() for item in session.consent_evidence]),
                      session.failure_code, session.updated_at),
                 )
 
@@ -79,7 +80,7 @@ class PostgresBridgeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT session_id, expected_participants, expected_participant_refs, state,
-                    joined_participants, consented_participants, failure_code, updated_at
+                    joined_participants, consented_participants, consent_evidence, failure_code, updated_at
                     FROM bridge_sessions WHERE session_id = %s""", (session_id,))
                 row = cur.fetchone()
         return self._session_from_row(row) if row else None
@@ -126,10 +127,12 @@ class PostgresBridgeRepository:
                 cur.execute(
                     """UPDATE bridge_sessions SET expected_participants = %s, state = %s,
                     joined_participants = %s::jsonb, consented_participants = %s::jsonb,
-                    failure_code = %s, updated_at = %s WHERE session_id = %s""",
+                    consent_evidence = %s::jsonb, failure_code = %s,
+                    updated_at = %s WHERE session_id = %s""",
                     (updated.expected_participants, updated.state.value,
                      json.dumps(sorted(updated.joined_participants)),
                      json.dumps(sorted(updated.consented_participants)),
+                     json.dumps([item.to_dict() for item in updated.consent_evidence]),
                      updated.failure_code, updated.updated_at, session_id))
                 for command in application.commands:
                     if command.session_id != session_id:
@@ -345,8 +348,10 @@ class PostgresBridgeRepository:
         expected = row[2] if isinstance(row[2], list) else json.loads(row[2])
         joined = row[4] if isinstance(row[4], list) else json.loads(row[4])
         consented = row[5] if isinstance(row[5], list) else json.loads(row[5])
+        evidence = row[6] if isinstance(row[6], list) else json.loads(row[6])
         return BridgeSession(
             session_id=row[0], expected_participants=row[1],
             expected_participant_refs=frozenset(expected), state=SessionState(row[3]),
             joined_participants=frozenset(joined), consented_participants=frozenset(consented),
-            failure_code=row[6], updated_at=row[7])
+            consent_evidence=tuple(ConsentEvidence.from_dict(item) for item in evidence),
+            failure_code=row[7], updated_at=row[8])
