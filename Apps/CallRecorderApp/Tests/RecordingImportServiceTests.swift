@@ -219,6 +219,28 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertEqual(restored, [entry])
     }
 
+    func testMissingCatalogCopiesFailClosedWhenManagedMediaExists() async throws {
+        let orphanedMedia = recordingsDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("m4a")
+        try Data("preserve this media".utf8).write(to: orphanedMedia)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        do {
+            _ = try await service.recordings()
+            XCTFail("Missing catalog copies with existing media must fail closed")
+        } catch let error as RecordingImportServiceError {
+            guard case .catalogCorrupted = error else {
+                return XCTFail("Expected catalogCorrupted, got \(error)")
+            }
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphanedMedia.path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: catalogDirectory.appendingPathComponent("recordings.json").path
+        ))
+    }
+
     func testInvalidPrimaryAndBackupFailClosedWithoutDeletingMedia() async throws {
         let entry = makeEntry()
         let media = mediaURL(for: entry)
