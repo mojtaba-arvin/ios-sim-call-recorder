@@ -77,10 +77,14 @@ public enum RecordingImportValidator {
             return .failure(.emptyFileName)
         }
 
-        guard let extensionValue = normalizedName.split(separator: ".").last,
-              normalizedName.contains("."),
+        guard let extensionStart = normalizedName.lastIndex(of: "."),
+              extensionStart != normalizedName.startIndex else {
+            return .failure(.unsupportedFileExtension)
+        }
+        let extensionIndex = normalizedName.index(after: extensionStart)
+        guard extensionIndex < normalizedName.endIndex,
               let declaredContainer = RecordingAudioContainer(
-                rawValue: extensionValue.lowercased()
+                rawValue: String(normalizedName[extensionIndex...]).lowercased()
               ) else {
             return .failure(.unsupportedFileExtension)
         }

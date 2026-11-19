@@ -22,6 +22,11 @@ final class RecordingImportValidatorTests: XCTestCase {
         XCTAssertEqual(validationError(validMetadata(fileName: "recording.aac")), .unsupportedFileExtension)
     }
 
+    func testRejectsDotfileAndTrailingDotExtension() {
+        XCTAssertEqual(validationError(validMetadata(fileName: ".m4a")), .unsupportedFileExtension)
+        XCTAssertEqual(validationError(validMetadata(fileName: "recording.m4a.")), .unsupportedFileExtension)
+    }
+
     func testRejectsZeroByteFile() {
         XCTAssertEqual(validationError(validMetadata(byteCount: 0)), .emptyFile)
     }

@@ -1,0 +1,35 @@
+name: CallRecorder
+options:
+  minimumXcodeGenVersion: 2.41.0
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  bundleIdPrefix: com.mojtabaarvin
+packages:
+  CallRecorderCore:
+    path: Packages/CallRecorderCore
+targets:
+  CallRecorderApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Apps/CallRecorderApp/Sources
+    dependencies:
+      - package: CallRecorderCore
+        product: CallRecorderCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mojtabaarvin.callrecorder
+        PRODUCT_NAME: CallRecorder
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Call Recorder
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+        CODE_SIGNING_ALLOWED: NO
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
