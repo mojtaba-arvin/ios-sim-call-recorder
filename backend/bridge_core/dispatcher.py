@@ -156,6 +156,10 @@ class OutboxCommandDispatcher:
                 conference_sid = reconciliation.conference_sid or conference_sid
                 call_sid = reconciliation.call_sid or call_sid
 
+            if command.command_type == "conference.create" and not conference_sid:
+                raise ProviderOperationError("provider_conference_sid_missing", retryable=True)
+            if command.command_type == "participant.add" and (not isinstance(participant_ref, str) or not call_sid):
+                raise ProviderOperationError("provider_participant_sid_missing", retryable=True)
             if conference_sid:
                 self._repository.put_provider_resource(
                     command.provider, command.provider_account_id,
@@ -174,5 +178,15 @@ class OutboxCommandDispatcher:
             self._repository.fail_outbox(
                 command.command_id, command.lease_token,
                 error_code=exc.error_code, retry_delay_seconds=delay,
+            )
+            return DispatchResult(str(command.command_id), "deferred")
+        except Exception:
+            # Do not leak exception text (which may contain provider request data).
+            # Best-effort release prevents one malformed adapter result from blocking
+            # the rest of the claimed batch until lease expiry.
+            self._repository.fail_outbox(
+                command.command_id, command.lease_token,
+                error_code="dispatcher_internal_error",
+                retry_delay_seconds=self._retry_delay_seconds,
             )
             return DispatchResult(str(command.command_id), "deferred")
