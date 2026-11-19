@@ -9,7 +9,6 @@ import struct
 import sys
 import wave
 from pathlib import Path
-from typing import BinaryIO
 
 
 def _decode_sample(data: bytes, width: int) -> float:
@@ -34,13 +33,13 @@ def _dbfs(amplitude: float) -> float | None:
 
 
 def _read_window(
-    source: BinaryIO,
+    source: wave.Wave_read,
     frame_count: int,
     channels: int,
     sample_width: int,
     silence_threshold: float,
-) -> tuple[list[float], list[float], list[int], int]:
-    raw = source.read(frame_count * channels * sample_width)
+) -> tuple[list[float], list[float], list[int], int, list[int]]:
+    raw = source.readframes(frame_count)
     frame_size = channels * sample_width
     complete_frames = len(raw) // frame_size
     sumsquares = [0.0] * channels
