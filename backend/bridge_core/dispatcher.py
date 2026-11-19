@@ -46,9 +46,9 @@ class ProviderOperationError(RuntimeError):
 class ProviderCommandAdapter(Protocol):
     """A configured provider/account adapter; credentials remain inside the adapter."""
 
-    def reconcile(self, command: LeasedCommand) -> ReconciliationResult: ...
+    def reconcile(self, command: LeasedCommand, conference_sid: str | None) -> ReconciliationResult: ...
 
-    def execute(self, command: LeasedCommand) -> ProviderExecutionResult: ...
+    def execute(self, command: LeasedCommand, conference_sid: str | None) -> ProviderExecutionResult: ...
 
 
 class DispatchRepository(Protocol):
@@ -111,9 +111,13 @@ class OutboxCommandDispatcher:
             return DispatchResult(str(command.command_id), "deferred")
 
         try:
-            # A DB lookup is deliberately outside provider I/O; adapters reconcile
-            # by durable provider correlation metadata even if this mapping is absent.
-            reconciliation = adapter.reconcile(command)
+            # Provider I/O occurs after the outbox lease transaction has committed.
+            # If the mapping is absent (crash after remote create), the adapter must
+            # reconcile using the stable command correlation key before creating again.
+            conference_sid = self._repository.get_provider_resource(
+                command.provider, command.provider_account_id, command.session_id,
+            )
+            reconciliation = adapter.reconcile(command, conference_sid)
             if reconciliation.state is ReconciliationState.UNKNOWN:
                 self._repository.fail_outbox(
                     command.command_id, command.lease_token,
@@ -123,7 +127,7 @@ class OutboxCommandDispatcher:
                 return DispatchResult(str(command.command_id), "reconciliation_required")
 
             if reconciliation.state is ReconciliationState.NOT_APPLIED:
-                execution = adapter.execute(command)
+                execution = adapter.execute(command, conference_sid)
                 conference_sid = execution.conference_sid
             else:
                 conference_sid = reconciliation.conference_sid
