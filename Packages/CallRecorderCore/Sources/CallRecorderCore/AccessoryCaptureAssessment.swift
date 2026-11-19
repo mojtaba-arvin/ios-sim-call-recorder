@@ -97,10 +97,22 @@ public enum AccessoryCaptureAssessment {
             }
         }
 
+        let routeEvidenceNote: String
+        switch context.audioRouteEvidence {
+        case .physicalTestObserved:
+            routeEvidenceNote = "The route was recorded during a physical test, but the accessory signal path and two-way speech still require three positive repeated calls."
+        case .userReported:
+            routeEvidenceNote = "The route was user-reported and is only a setup hint; it is not physical compatibility evidence."
+        case .appOwnedSessionObserved:
+            routeEvidenceNote = "The observed route belongs to the app's own audio session and does not establish Phone.app's cellular-call route."
+        case .unknown:
+            routeEvidenceNote = "The route observation source is unknown and cannot establish Phone.app's cellular-call route."
+        }
+
         return PathwayCapability(
             pathway: pathway,
             availability: .experimental(
-                reason: "Accessory \(model) (firmware \(firmware)) is connected on the expected route for \(device) running iOS \(context.operatingSystemVersion). This is a candidate only: verify local and remote speech independently in three physical calls before marking this exact tuple supported."
+                reason: "Accessory \(model) (firmware \(firmware)) matches the declared route for \(device) running iOS \(context.operatingSystemVersion). Candidate only: \(routeEvidenceNote) Verify local and remote speech independently in three physical calls before marking this exact tuple supported."
             ),
             evidenceReference: accessory.evidenceReference
         )
