@@ -21,10 +21,10 @@ ReplayKit and microphone APIs are not treated as a way to obtain the private dow
 
 - **Swift core:** capability/context types, consent-gated session lifecycle, cancellation and adapter resource cleanup.
 - **iOS companion app:** user-mediated document import, app-private storage, opaque local catalog, local playback/seeking, interruption and output-route handling, system share/export, opt-in retention and catalog recovery.
-- **Import validation:** container probing, metadata limits, and full decode/boundary hardening are covered by dedicated regression tests; check the exact mainline CI status before relying on the newest hardening change.
+- **Import validation:** RIFF/WAV chunk boundaries, physical EOF checks, bounded full-payload decoding and catalog-recovery edge cases are covered by regression tests integrated in main.
 - **Audio validation tooling:** local WAV signal metrics and deterministic regression fixtures.
 - **Conference bridge backend:** provider-neutral session state machine, participant consent gate, Twilio webhook signature verifier, PostgreSQL persistence, transactional outbox, leased dispatcher, provider-resource mappings and reconciliation contracts.
-- **Engineering workflow:** role contracts, reusable research/validation/security skills, task/review templates and machine-checked task/evidence policies are being consolidated into the mainline.
+- **Engineering workflow:** role contracts, reusable research/validation/security skills, task/review templates, workflow guardrails and machine-checked task/evidence/Markdown policies are integrated into main.
 
 The backend is a foundation, **not a deployable recording service**. It does not yet include authenticated HTTP session endpoints, a concrete live provider command adapter, a supervised production worker, media ingestion/object storage, audio verification or provider/product deletion reconciliation.
 
@@ -56,6 +56,13 @@ Positive physical configurations require at least three repeated runs and indepe
 - Use the [bug report form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=bug_report.yml) for reproducible defects and the [capture evidence form](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/new?template=capture_pathway_evidence.yml) for sanitized physical-device results. Never attach raw recordings or personal call data.
 - Record the exact PR head SHA and inspect the individual test results. A queued, cancelled, skipped or stale run is not a pass.
 - Keep platform research, implementation and physical-device evidence separate. Link compatibility claims to the exact evidence that supports them.
+
+## Project roadmap and evidence
+
+- [Executable delivery roadmap](docs/engineering/executable-product-roadmap.md) — sequenced milestones, dependencies and release gates.
+- [Physical-device acceptance protocol](docs/engineering/physical-device-test-protocol.md) — exact compatibility tuple and repeatable test matrix.
+- [Recording pathway research](docs/research/recording-pathways.md) — platform, carrier and accessory evidence boundaries.
+- [Twilio recording/consent ordering decision](docs/engineering/adr-0002-twilio-recording-consent-order.md) — why a live provider adapter must change the current post-join consent sequence.
 
 ## Project maturity
 
