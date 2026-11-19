@@ -5,7 +5,7 @@ recording service and not a real PSTN provider integration.
 
 ## Included
 - Typed bridge lifecycle and guarded transitions.
-- Pre-join consent from every expected participant, bound to immutable opaque participant references.
+- Pre-join consent from every expected participant, bound to immutable opaque participant references and durable policy/event evidence.
 - Provider-native signature verification using the exact request URL, method,
   content type, headers, original bytes and (where required) parsed form fields.
 - Provider event deduplication scoped by provider and provider account.
@@ -24,7 +24,7 @@ python -m pip install -r backend/requirements.txt
 
 Apply SQL migrations in numeric order with the deployment migration runner before starting the
 service: `0001_bridge_persistence.sql`, `0002_provider_resources.sql`, then
-`0003_consent_preflight.sql`. The repository deliberately
+`0003_consent_preflight.sql`, then `0004_consent_evidence.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -92,7 +92,7 @@ calls or carrier-compatibility claims are made by these tests.
 
 The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and HTTP service are still not implemented.** Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
 
-A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. The current domain state machine now models this preflight, with immutable expected participant refs and outbox commands for conference creation and later participant joins. A concrete adapter must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call.
+A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. The current domain state machine now models this preflight, with immutable expected participant refs, consent policy version, method, signed event ID and payload digest persisted per participant, plus outbox commands for conference creation and later participant joins. A concrete adapter must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call.
 
 The manual carrier-merge path is separately blocked: a merged cellular call may arrive as one mixed PSTN participant, so the remote party cannot be assumed to be separately addressable or consent-verified. No provider adapter, live recording or carrier support is claimed.
 
@@ -114,7 +114,7 @@ real two-way recording is proven.
 PYTHONPATH=backend python -m unittest discover -s backend/tests -v
 ```
 
-PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected participant-reference persistence, rollback, duplicate/concurrent delivery, account-scoped event identity, atomic outbox insertion, concurrent claims, lease expiry, stale lease rejection and retries. Unit tests cover consent-before-join, recording-from-start command creation and idempotent participant-add scheduling.
+PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected participant-reference and consent-evidence persistence, rollback, duplicate/concurrent delivery, account-scoped event identity, atomic outbox insertion, concurrent claims, lease expiry, stale lease rejection and retries. Unit tests cover consent-before-join, recording-from-start command creation and idempotent participant-add scheduling.
 
 
 The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
