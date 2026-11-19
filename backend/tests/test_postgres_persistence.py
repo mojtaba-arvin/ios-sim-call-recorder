@@ -22,21 +22,30 @@ class PostgresPersistenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.connect = staticmethod(lambda: psycopg.connect(DATABASE_URL))
-        migration = Path(__file__).parents[1] / "migrations" / "0001_bridge_persistence.sql"
+        migrations = Path(__file__).parents[1] / "migrations"
         with cls.connect() as conn:
-            conn.execute(migration.read_text())
+            for migration in sorted(migrations.glob("*.sql")):
+                conn.execute(migration.read_text())
 
     def setUp(self):
         with self.connect() as conn:
             conn.execute("TRUNCATE outbox_commands, provider_event_receipts, bridge_sessions CASCADE")
         self.repo = PostgresBridgeRepository(self.connect)
-        self.session = BridgeSession("session-test", 2, state=SessionState.AWAITING_USER_ACTION)
+        self.session = BridgeSession(
+            "session-test", 2,
+            expected_participant_refs=frozenset({"participant-a", "participant-b"}),
+            state=SessionState.AWAITING_USER_ACTION,
+        )
         self.repo.create_session(self.session)
 
     def command(self, key=None):
         return OutboxCommand("recording.start", key or f"recording-start:{uuid4()}",
                              self.session.session_id, "twilio", "account-test",
                              {"session_id": self.session.session_id})
+
+    def test_expected_participant_references_round_trip_through_postgres(self):
+        loaded = self.repo.get_session(self.session.session_id)
+        self.assertEqual(loaded.expected_participant_refs, self.session.expected_participant_refs)
 
     def test_event_receipt_session_and_outbox_commit_atomically(self):
         command = self.command("recording-start:atomic")
@@ -93,7 +102,11 @@ class PostgresPersistenceTests(unittest.TestCase):
         apply = lambda s: s.transition(SessionState.BRIDGE_LEG_RINGING)
         self.assertTrue(self.repo.apply_event_once("twilio", "same-event", self.session.session_id, apply))
         self.assertFalse(self.repo.apply_event_once("twilio", "same-event", self.session.session_id, apply))
-        self.repo.create_session(BridgeSession("other-session", 2, state=SessionState.AWAITING_USER_ACTION))
+        self.repo.create_session(BridgeSession(
+            "other-session", 2,
+            expected_participant_refs=frozenset({"other-a", "other-b"}),
+            state=SessionState.AWAITING_USER_ACTION,
+        ))
         with self.assertRaises(EventIdentityConflict):
             self.repo.apply_event_once("twilio", "same-event", "other-session", apply)
         with self.assertRaises(EventIdentityConflict):
