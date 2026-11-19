@@ -154,6 +154,14 @@ class OutboxCommandDispatcher:
             reconciliation = adapter.reconcile(
                 command, conference_sid=conference_sid, call_sid=call_sid,
             )
+            if (
+                not isinstance(reconciliation, ReconciliationResult)
+                or not isinstance(reconciliation.state, ReconciliationState)
+            ):
+                # Never treat an unknown/malformed enum value as APPLIED. That
+                # would acknowledge a command without establishing provider state.
+                raise ProviderOperationError("provider_reconciliation_invalid", retryable=True)
+
             if reconciliation.state is ReconciliationState.UNKNOWN:
                 self._repository.fail_outbox(
                     command.command_id, command.lease_token,
