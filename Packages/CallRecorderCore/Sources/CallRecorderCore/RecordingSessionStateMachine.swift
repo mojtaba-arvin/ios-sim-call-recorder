@@ -4,6 +4,7 @@ public enum RecordingSessionState: Hashable, Sendable {
     case awaitingConsent
     case connecting
     case recording
+    case cancelling
     case finalizing
     case completed
     case failed
@@ -33,13 +34,15 @@ public struct RecordingSessionStateMachine: Sendable {
         case .preparing:
             return [.awaitingConsent, .failed, .cancelled]
         case .awaitingConsent:
-            return [.connecting, .cancelled, .failed]
+            return [.connecting, .cancelling, .cancelled, .failed]
         case .connecting:
-            return [.recording, .failed, .cancelled, .interrupted, .degraded]
+            return [.recording, .cancelling, .failed, .cancelled, .interrupted, .degraded]
         case .recording:
-            return [.finalizing, .failed, .interrupted, .degraded]
+            return [.finalizing, .cancelling, .failed, .interrupted, .degraded]
         case .interrupted:
-            return [.connecting, .finalizing, .failed, .cancelled]
+            return [.connecting, .cancelling, .finalizing, .failed, .cancelled]
+        case .cancelling:
+            return [.cancelled, .failed]
         case .degraded:
             return []
         case .finalizing:
