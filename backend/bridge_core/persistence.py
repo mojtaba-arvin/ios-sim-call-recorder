@@ -304,7 +304,7 @@ class PostgresBridgeRepository:
                     raise LeaseLost("outbox lease is no longer owned by this worker")
 
     def fail_outbox(self, command_id: UUID, lease_token: UUID, *,
-                    error_code: str, retry_delay_seconds: int) -> str:
+                    error_code: str, retry_delay_seconds: int, terminal: bool = False) -> str:
         if not re.fullmatch(r"[a-z0-9_.-]{1,64}", error_code):
             raise ValueError("error_code must be a stable, non-sensitive identifier")
         if not 0 <= retry_delay_seconds <= 86400:
@@ -313,12 +313,12 @@ class PostgresBridgeRepository:
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE outbox_commands
-                    SET status = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'pending' END,
+                    SET status = CASE WHEN %s OR attempts >= max_attempts THEN 'dead' ELSE 'pending' END,
                     available_at = now() + (%s * interval '1 second'), last_error_code = %s,
                     lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
                     WHERE command_id = %s AND status = 'leased' AND lease_token = %s
                     RETURNING status""",
-                    (retry_delay_seconds, error_code, command_id, lease_token))
+                    (terminal, retry_delay_seconds, error_code, command_id, lease_token))
                 row = cur.fetchone()
                 if row is None:
                     raise LeaseLost("outbox lease is no longer owned by this worker")
