@@ -3,6 +3,50 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Tracks one asynchronous playback-file lookup and rejects stale results
+/// after a newer request, deletion, retention cleanup or view teardown.
+struct PlaybackRequestGate {
+    struct Token: Equatable {
+        let requestID: UUID
+        let recordingID: UUID
+    }
+
+    private(set) var current: Token?
+
+    mutating func begin(recordingID: UUID) -> Token {
+        let token = Token(requestID: UUID(), recordingID: recordingID)
+        current = token
+        return token
+    }
+
+    func accepts(_ token: Token, availableRecordingIDs: Set<UUID>) -> Bool {
+        current == token && availableRecordingIDs.contains(token.recordingID)
+    }
+
+    func isCurrent(_ token: Token) -> Bool {
+        current == token
+    }
+
+    mutating func finish(_ token: Token) {
+        guard current == token else { return }
+        current = nil
+    }
+
+    mutating func invalidate(recordingIDs: Set<UUID>) {
+        guard let current, recordingIDs.contains(current.recordingID) else { return }
+        self.current = nil
+    }
+
+    mutating func invalidateMissing(from availableRecordingIDs: Set<UUID>) {
+        guard let current, !availableRecordingIDs.contains(current.recordingID) else { return }
+        self.current = nil
+    }
+
+    mutating func invalidateAll() {
+        current = nil
+    }
+}
+
 struct RecordingLibraryView: View {
     @AppStorage("recordingRetentionDays") private var retentionDays = 0
     @State private var isImporterPresented = false
@@ -11,6 +55,13 @@ struct RecordingLibraryView: View {
     @State private var player: AVPlayer?
     @State private var playingRecordingID: UUID?
     @State private var isPlaying = false
+    @State private var playbackCurrentTime = 0.0
+    @State private var playbackDuration = 0.0
+    @State private var isSeeking = false
+    @State private var periodicTimeObserver: Any?
+    @State private var playbackRequestGate = PlaybackRequestGate()
+    @State private var shareRequestID = UUID()
+    @State private var sharedRecordingID: UUID?
     @State private var sharedRecordingURL: URL?
     @State private var isShareSheetPresented = false
     @State private var statusMessage = "Import an audio file exported from Phone, Notes, or an external recorder."
@@ -100,6 +151,10 @@ struct RecordingLibraryView: View {
                     .listStyle(.plain)
                 }
 
+                if playingRecordingID != nil {
+                    playbackControls
+                }
+
                 VStack(spacing: 4) {
                     Text("Files are imported only after you select them. The app does not access Phone or Notes private data.")
                     Text(retentionDescription)
@@ -133,6 +188,8 @@ struct RecordingLibraryView: View {
                 onCompletion: handleImportSelection
             )
             .sheet(isPresented: $isShareSheetPresented, onDismiss: {
+                shareRequestID = UUID()
+                sharedRecordingID = nil
                 sharedRecordingURL = nil
             }) {
                 if let sharedRecordingURL {
@@ -147,8 +204,16 @@ struct RecordingLibraryView: View {
                 else {
                     return
                 }
+                player?.pause()
                 player?.seek(to: .zero)
+                playbackCurrentTime = 0
                 isPlaying = false
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
+                handleAudioInterruption(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
+                handleAudioRouteChange(notification)
             }
             .task {
                 _ = await refreshRecordings()
@@ -163,12 +228,42 @@ struct RecordingLibraryView: View {
                 }
             }
             .onDisappear {
-                player?.pause()
-                player = nil
-                playingRecordingID = nil
-                isPlaying = false
+                stopPlayback()
             }
         }
+    }
+
+    private var playbackControls: some View {
+        VStack(spacing: 8) {
+            Slider(
+                value: $playbackCurrentTime,
+                in: 0...max(playbackDuration, 1),
+                onEditingChanged: { editing in
+                    isSeeking = editing
+                    if !editing {
+                        seekToCurrentPosition()
+                    }
+                }
+            )
+            .accessibilityLabel("Playback position")
+            .accessibilityValue("\(formattedDuration(playbackCurrentTime)) of \(formattedDuration(playbackDuration))")
+
+            HStack {
+                Text(formattedDuration(playbackCurrentTime))
+                Spacer()
+                Button {
+                    toggleCurrentPlayback()
+                } label: {
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel(isPlaying ? "Pause playback" : "Resume playback")
+                Spacer()
+                Text(formattedDuration(playbackDuration))
+            }
+            .font(.caption.monospacedDigit())
+        }
+        .padding(.horizontal, 4)
     }
 
     private var retentionDescription: String {
@@ -204,47 +299,155 @@ struct RecordingLibraryView: View {
     }
 
     private func togglePlayback(for recording: ImportedRecording) {
-        if playingRecordingID == recording.id, isPlaying {
-            player?.pause()
-            isPlaying = false
+        if playingRecordingID == recording.id {
+            toggleCurrentPlayback()
             return
         }
 
-        if playingRecordingID == recording.id, let player {
-            player.play()
-            isPlaying = true
-            return
-        }
-
+        let request = playbackRequestGate.begin(recordingID: recording.id)
         Task {
             do {
                 let url = try await importService.playbackURL(for: recording.id)
-                player?.pause()
+                let availableIDs = Set(recordings.map(\.id))
+                guard playbackRequestGate.accepts(request, availableRecordingIDs: availableIDs) else { return }
+                playbackRequestGate.finish(request)
+                stopPlayback()
                 let nextPlayer = AVPlayer(url: url)
                 player = nextPlayer
                 playingRecordingID = recording.id
+                playbackCurrentTime = 0
+                playbackDuration = recording.durationSeconds
                 isPlaying = true
+                installPeriodicTimeObserver(on: nextPlayer)
                 nextPlayer.play()
                 statusMessage = "Playing selected recording. Check that both sides of the conversation are audible."
                 isError = false
             } catch {
+                guard playbackRequestGate.isCurrent(request) else { return }
+                playbackRequestGate.finish(request)
                 statusMessage = error.localizedDescription
                 isError = true
-                isPlaying = false
-                playingRecordingID = nil
+                stopPlayback()
             }
         }
     }
 
+    private func toggleCurrentPlayback() {
+        guard let player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            player.play()
+            isPlaying = true
+        }
+    }
+
+    private func installPeriodicTimeObserver(on player: AVPlayer) {
+        removePeriodicTimeObserver()
+        periodicTimeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            queue: .main
+        ) { time in
+            guard !isSeeking else { return }
+            let seconds = time.seconds
+            guard seconds.isFinite else { return }
+            playbackCurrentTime = min(max(seconds, 0), playbackDuration)
+        }
+    }
+
+    private func removePeriodicTimeObserver() {
+        guard let periodicTimeObserver, let player else {
+            periodicTimeObserver = nil
+            return
+        }
+        player.removeTimeObserver(periodicTimeObserver)
+        self.periodicTimeObserver = nil
+    }
+
+    private func seekToCurrentPosition() {
+        guard let player, playbackDuration > 0 else { return }
+        let target = min(max(playbackCurrentTime, 0), playbackDuration)
+        player.seek(
+            to: CMTime(seconds: target, preferredTimescale: 600),
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        )
+    }
+
+    private func stopPlayback() {
+        playbackRequestGate.invalidateAll()
+        player?.pause()
+        removePeriodicTimeObserver()
+        player = nil
+        playingRecordingID = nil
+        isPlaying = false
+        playbackCurrentTime = 0
+        playbackDuration = 0
+        isSeeking = false
+    }
+
+    private func handleAudioInterruption(_ notification: Notification) {
+        guard
+            let userInfo = notification.userInfo,
+            let rawType = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+            let type = AVAudioSession.InterruptionType(rawValue: rawType)
+        else {
+            return
+        }
+
+        switch type {
+        case .began:
+            player?.pause()
+            isPlaying = false
+            statusMessage = "Playback paused because another app or system service interrupted audio. Resume when ready."
+            isError = false
+        case .ended:
+            // Do not resume automatically: the user explicitly chooses when audio starts again.
+            isPlaying = false
+            statusMessage = "Audio is available again. Press play to resume the recording."
+            isError = false
+        @unknown default:
+            player?.pause()
+            isPlaying = false
+        }
+    }
+
+    private func handleAudioRouteChange(_ notification: Notification) {
+        guard
+            let rawReason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+            let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason)
+        else {
+            return
+        }
+
+        if reason == .oldDeviceUnavailable {
+            // Avoid unexpectedly routing a private recording to the speaker when
+            // headphones or another private output are disconnected.
+            player?.pause()
+            isPlaying = false
+            statusMessage = "Playback paused because the audio output was disconnected. Press play to continue."
+            isError = false
+        }
+    }
+
     private func shareRecording(_ recording: ImportedRecording) {
+        let requestID = UUID()
+        shareRequestID = requestID
         Task {
             do {
                 let url = try await importService.playbackURL(for: recording.id)
+                guard shareRequestID == requestID,
+                      recordings.contains(where: { $0.id == recording.id }) else {
+                    return
+                }
+                sharedRecordingID = recording.id
                 sharedRecordingURL = url
                 isShareSheetPresented = true
                 statusMessage = "Choose an app or destination to export this recording."
                 isError = false
             } catch {
+                guard shareRequestID == requestID else { return }
                 statusMessage = error.localizedDescription
                 isError = true
             }
@@ -254,7 +457,20 @@ struct RecordingLibraryView: View {
     @discardableResult
     private func refreshRecordings() async -> Bool {
         do {
-            recordings = try await importService.recordings(retentionDays: retentionDays)
+            let updatedRecordings = try await importService.recordings(retentionDays: retentionDays)
+            recordings = updatedRecordings
+            playbackRequestGate.invalidateMissing(from: Set(updatedRecordings.map(\.id)))
+            if let playingRecordingID,
+               !updatedRecordings.contains(where: { $0.id == playingRecordingID }) {
+                stopPlayback()
+            }
+            if let sharedRecordingID,
+               !updatedRecordings.contains(where: { $0.id == sharedRecordingID }) {
+                shareRequestID = UUID()
+                isShareSheetPresented = false
+                self.sharedRecordingID = nil
+                sharedRecordingURL = nil
+            }
             return true
         } catch {
             statusMessage = error.localizedDescription
@@ -265,20 +481,16 @@ struct RecordingLibraryView: View {
 
     private func deleteRecordings(at offsets: IndexSet) {
         let ids = offsets.map { recordings[$0].id }
+        // Invalidate any in-flight file lookup before deleting from storage.
+        shareRequestID = UUID()
+        playbackRequestGate.invalidate(recordingIDs: Set(ids))
         if let playingRecordingID, ids.contains(playingRecordingID) {
-            player?.pause()
-            player = nil
-            self.playingRecordingID = nil
-            isPlaying = false
+            stopPlayback()
         }
-        if let sharedRecordingURL,
-           ids.contains(where: { id in
-               recordings.first(where: { $0.id == id }).map {
-                   sharedRecordingURL.deletingPathExtension().lastPathComponent == $0.id.uuidString
-               } ?? false
-           }) {
+        if let sharedRecordingID, ids.contains(sharedRecordingID) {
             isShareSheetPresented = false
-            self.sharedRecordingURL = nil
+            self.sharedRecordingID = nil
+            sharedRecordingURL = nil
         }
         Task {
             do {

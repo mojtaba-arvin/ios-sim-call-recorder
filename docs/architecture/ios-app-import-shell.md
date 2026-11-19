@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -27,7 +27,10 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 ## Playback and export
 
-- Playback is local-only through AVPlayer. The library supports play/pause and resets the playback state when the selected item reaches its end.
+- Playback is local-only through AVPlayer. The library supports play/pause, a seek slider, elapsed/total time, and resetting the playhead when the selected item reaches its end.
+- A periodic AVPlayer time observer updates the playhead only while the user is not dragging the slider. The observer is removed before replacing or releasing its player.
+- Audio interruptions pause playback. Playback does not resume automatically after an interruption; the user must explicitly press play.
+- Disconnecting the current audio output (for example, unplugging headphones) pauses playback to avoid unexpectedly sending private audio to another output.
 - The system share sheet exports the selected app-private audio file to a user-chosen destination or app. Export is user initiated; the app does not upload audio to a service.
 - Playback and export URLs are resolved through the catalog and checked for file existence before use.
 - Users should listen for both their own voice and the remote participant. Playback is a listening aid, not proof of two-way call capture; channel count alone is insufficient.
@@ -35,7 +38,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 ## Explicit limitations
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
-- It does not read Notes private storage or automate the Phone app. The user must export/share a recording and select it.
+- It does not read Notes private storage or automate the Phone app. The user must export/share a recording from Notes or another source and select it.
 - Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device until the user explicitly chooses a destination in the system share sheet. No background network transfer is implemented.
@@ -46,8 +49,11 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - Retention is opt-in. The default is **Never** (keep recordings until the user deletes them). The user can select 30, 90 or 365 days from the library's settings menu.
 - The selected retention policy is stored locally using AppStorage. Expiration is evaluated when the library is loaded and when the setting changes; there is no background deletion task.
 - Expired media is deleted before its catalog entry is removed. If catalog persistence fails, the next maintenance pass can reconcile the missing media entry.
+- When retention removes the currently playing or shared recording, the library stops playback or dismisses the share sheet and invalidates pending file lookups so a stale asynchronous result cannot reopen deleted media.
 - The catalog accepts only unique UUID identifiers, known lowercase audio-container extensions, positive bounded byte counts, finite bounded durations and finite import timestamps. Extensions are never used to construct paths until allowlisted.
 - On the first catalog save, the service seeds `recordings.json.backup` with the initial valid catalog. Before each later replacement, it atomically stores the previous last-known-good contents as the backup. If the primary catalog cannot be decoded or validated, the backup is validated and restored.
 - If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings.
 - On library maintenance, abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
 - The Swift core package tests cover retention boundaries. The app-target XCTest suite exercises catalog recovery, fail-closed behavior, retention deletion and filesystem maintenance on an isolated temporary storage root. Simulator tests do not replace physical-device validation.
+
+- Pending playback file lookups are tracked by a request token scoped to the recording ID. A newer request supersedes an older one; deletion, retention cleanup and view teardown invalidate the matching pending lookup. A resolved URL is used only if its request token is still current and the recording remains in the catalog.
