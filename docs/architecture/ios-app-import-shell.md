@@ -20,13 +20,15 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 4. The selected file is copied into an app-private staging directory under an opaque UUID filename.
 5. AVAudioFile must successfully decode the staged file. Duration, sample rate and channel count are read from the decoded media, not guessed from its filename.
 6. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
-7. A validated file is moved into app-private recording storage under a new opaque UUID filename. A failed import removes its staged copy.
+7. A validated file is moved into app-private recording storage under a new opaque UUID filename.
+8. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted.
+9. The library lists catalog entries and lets the user delete an imported recording; missing media files are pruned from the catalog when the library loads. A failed import removes its staged copy.
 
 ## Explicit limitations
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
 - It does not read Notes private storage or automate the Phone app. The user must export/share a recording and select it.
-- It does not yet expose playback, deletion, retention settings, share/export, transcription, cloud upload or two-way speaker verification.
+- Playback, retention settings, share/export, transcription, cloud upload and two-way speaker verification are not implemented. Users can list and delete imported recordings.
 - Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device. No network transfer is implemented.
