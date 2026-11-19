@@ -22,6 +22,31 @@ enum RecordingImportServiceError: LocalizedError {
     }
 }
 
+extension RecordingImportValidationError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .emptyFileName:
+            return "The selected file has no valid filename."
+        case .unsupportedFileExtension:
+            return "Choose an M4A, MP3, WAV, CAF, or AIFF audio file."
+        case .emptyFile:
+            return "The selected audio file is empty."
+        case .fileTooLarge(let maximumBytes):
+            return "The selected file exceeds the maximum size of \(maximumBytes / 1_048_576) MiB."
+        case .invalidDuration:
+            return "The selected file has an invalid audio duration."
+        case .durationTooLong(let maximumSeconds):
+            return "The selected recording exceeds the maximum duration of \(Int(maximumSeconds / 3_600)) hours."
+        case .invalidSampleRate:
+            return "The selected file has an unsupported sample rate."
+        case .unsupportedChannelCount:
+            return "The selected file must contain one or two audio channels."
+        case .extensionContainerMismatch:
+            return "The file extension does not match its actual audio container."
+        }
+    }
+}
+
 /// Owns the user-initiated import boundary. Imported files are copied to
 /// app-private storage under opaque names; source filenames are not persisted.
 actor RecordingImportService {
@@ -38,20 +63,12 @@ actor RecordingImportService {
             }
         }
 
-        let container = try AudioContainerProbe.detect(at: sourceURL)
-        let attributes = try fileManager.attributesOfItem(atPath: sourceURL.path)
-        guard let size = (attributes[.size] as? NSNumber)?.int64Value else {
-            throw RecordingImportServiceError.missingFileSize
-        }
-
         let stagingDirectory = try privateDirectory(named: "Staging")
         let recordingsDirectory = try privateDirectory(named: "Recordings")
+        let sourceExtension = sourceURL.pathExtension
         let stagedURL = stagingDirectory
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(container.rawValue)
-        let finalURL = recordingsDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(container.rawValue)
+            .appendingPathExtension(sourceExtension)
 
         var stagedFileExists = false
         defer {
@@ -60,8 +77,35 @@ actor RecordingImportService {
             }
         }
 
-        try fileManager.copyItem(at: sourceURL, to: stagedURL)
-        stagedFileExists = true
+        // Coordinate reads from File Provider / external document locations.
+        // All later probing happens against our app-private staged copy.
+        var coordinationError: NSError?
+        var copyError: Error?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(
+            readingItemAt: sourceURL,
+            options: [],
+            error: &coordinationError
+        ) { coordinatedURL in
+            do {
+                try fileManager.copyItem(at: coordinatedURL, to: stagedURL)
+                stagedFileExists = true
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let coordinationError { throw coordinationError }
+        if let copyError { throw copyError }
+        guard stagedFileExists else {
+            throw RecordingImportServiceError.storageUnavailable
+        }
+
+        let container = try AudioContainerProbe.detect(at: stagedURL)
+        let attributes = try fileManager.attributesOfItem(atPath: stagedURL.path)
+        guard let size = (attributes[.size] as? NSNumber)?.int64Value else {
+            throw RecordingImportServiceError.missingFileSize
+        }
 
         let audioFile: AVAudioFile
         do {
@@ -91,6 +135,9 @@ actor RecordingImportService {
             throw error
         }
 
+        let finalURL = recordingsDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(container.rawValue)
         try fileManager.moveItem(at: stagedURL, to: finalURL)
         stagedFileExists = false
     }
