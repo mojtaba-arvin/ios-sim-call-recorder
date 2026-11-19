@@ -41,10 +41,11 @@ targets:
       - path: Apps/CallRecorderApp/Tests
     dependencies:
       - target: CallRecorderApp
-    hostApplication: CallRecorderApp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mojtabaarvin.callrecorder.tests
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CallRecorder.app/CallRecorder"
+        BUNDLE_LOADER: "$(TEST_HOST)"

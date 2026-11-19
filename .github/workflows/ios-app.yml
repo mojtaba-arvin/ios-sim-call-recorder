@@ -1,8 +1,8 @@
-name: iOS app build
+name: iOS app build and tests
 
 on:
   pull_request:
-    branches: [feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle]
+    branches: [feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle, feat/ios-recording-retention-catalog-recovery-v2]
   workflow_dispatch:
 
 permissions:
@@ -26,5 +26,5 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
-      - name: Build iOS simulator app
+      - name: Run iOS simulator app tests
         run: xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' -configuration Debug CODE_SIGNING_ALLOWED=NO test
