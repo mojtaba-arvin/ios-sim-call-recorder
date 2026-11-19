@@ -1,7 +1,6 @@
 import AVFoundation
 import XCTest
 @testable import CallRecorder
-import CallRecorderCore
 
 final class RecordingImportServiceTests: XCTestCase {
     private var temporaryRoot: URL!
