@@ -200,7 +200,9 @@ public actor RecordingSessionOrchestrator {
     }
 
     private func failUnlessCancellationIsInProgress() -> Bool {
-        guard machine.state != .cancelling, machine.state != .cancelled else {
+        guard activeSessionID != nil,
+              machine.state != .cancelling,
+              machine.state != .cancelled else {
             return true
         }
         try? machine.transition(to: .failed)
