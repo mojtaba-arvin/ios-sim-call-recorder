@@ -59,7 +59,7 @@ Investigate whether a companion app can guide users to the system recording feat
 
 ### P02 — Conference bridge
 
-Prototype the three-leg flow: establish the user-to-party call, dial a recording bridge, then merge. The bridge records each leg or mixed audio server-side and associates it with a consented session. Test incoming and outgoing orchestration, call waiting, merge failures, carrier restrictions, dual SIM and roaming. Commercial products describing this model are evidence that the workflow exists in some markets, not proof of universal carrier support.
+Prototype the three-leg flow: establish the user-to-party call, dial a recording bridge, then merge. The bridge records each leg or mixed audio server-side and associates it with a consented session. Test incoming and outgoing orchestration, call waiting, merge failures, carrier restrictions, dual SIM and roaming. Commercial products describing this model are evidence that the workflow exists in some markets, not proof of universal carrier support. For Twilio, recording-from-start must be configured as the conference is created/participants join; the reviewed API does not document starting a conference recording after participants are already joined. Therefore consent must be collected from every expected participant before the first recording-enabled join. A manual carrier merge may collapse both human speakers into one provider participant and does not provide independently verifiable remote-party consent. See [ADR-0002](../engineering/adr-0002-twilio-recording-consent-order.md); do not enable this topology until the consent and audio paths are physically proven.
 
 ### P03 — Carrier integration
 
