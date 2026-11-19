@@ -256,16 +256,20 @@ actor RecordingImportService {
             let requestedFrames = AVAudioFrameCount(
                 min(Int64(buffer.frameCapacity), remainingFrames)
             )
+            let previousFramePosition = audioFile.framePosition
             do {
                 try audioFile.read(into: buffer, frameCount: requestedFrames)
             } catch {
                 throw RecordingImportServiceError.unreadableAudio
             }
 
-            guard buffer.frameLength > 0 else {
+            let nextFramePosition = audioFile.framePosition
+            guard buffer.frameLength > 0,
+                  nextFramePosition > previousFramePosition,
+                  nextFramePosition <= expectedFrameCount else {
                 throw RecordingImportServiceError.unreadableAudio
             }
-            decodedFrameCount += AVAudioFramePosition(buffer.frameLength)
+            decodedFrameCount = nextFramePosition
         }
 
         guard decodedFrameCount == expectedFrameCount else {
