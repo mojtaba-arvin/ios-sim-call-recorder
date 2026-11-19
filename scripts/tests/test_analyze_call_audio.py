@@ -14,17 +14,33 @@ from analyze_call_audio import analyze_wav
 
 
 class CallAudioAnalysisTests(unittest.TestCase):
-    def write_wav(self, path: Path, channels: list[list[int]], sample_rate: int = 8_000) -> None:
+    def write_wav(
+        self,
+        path: Path,
+        channels: list[list[int]],
+        sample_rate: int = 8_000,
+        sample_width: int = 2,
+    ) -> None:
         frame_count = len(channels[0])
         self.assertTrue(all(len(channel) == frame_count for channel in channels))
         with wave.open(str(path), "wb") as output:
             output.setnchannels(len(channels))
-            output.setsampwidth(2)
+            output.setsampwidth(sample_width)
             output.setframerate(sample_rate)
             frames = bytearray()
             for frame in range(frame_count):
                 for channel in channels:
-                    frames.extend(struct.pack("<h", channel[frame]))
+                    sample = channel[frame]
+                    if sample_width == 1:
+                        frames.append(sample + 128)
+                    elif sample_width == 2:
+                        frames.extend(struct.pack("<h", sample))
+                    elif sample_width == 3:
+                        frames.extend(sample.to_bytes(3, byteorder="little", signed=True))
+                    elif sample_width == 4:
+                        frames.extend(struct.pack("<i", sample))
+                    else:
+                        raise ValueError("Unsupported fixture sample width")
             output.writeframes(bytes(frames))
 
     def test_reports_stereo_channel_signal_and_duration(self) -> None:
@@ -84,6 +100,16 @@ class CallAudioAnalysisTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "truncated or inconsistent"):
                 analyze_wav(path)
+
+    def test_detects_full_scale_clipping_in_unsigned_8_bit_pcm(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "8bit.wav"
+            self.write_wav(path, [[127] * 800], sample_width=1)
+
+            result = analyze_wav(path)
+
+            self.assertEqual(result["sample_width_bits"], 8)
+            self.assertEqual(result["analysis"]["channels"][0]["clipped_sample_ratio"], 1.0)
 
     def test_rejects_invalid_silence_threshold_and_window(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
