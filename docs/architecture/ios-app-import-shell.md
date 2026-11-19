@@ -49,6 +49,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - Retention is opt-in. The default is **Never** (keep recordings until the user deletes them). The user can select 30, 90 or 365 days from the library's settings menu.
 - The selected retention policy is stored locally using AppStorage. Expiration is evaluated when the library is loaded and when the setting changes; there is no background deletion task.
 - Expired media is deleted before its catalog entry is removed. If catalog persistence fails, the next maintenance pass can reconcile the missing media entry.
+- When retention removes the currently playing or shared recording, the library stops playback or dismisses the share sheet and invalidates pending file lookups so a stale asynchronous result cannot reopen deleted media.
 - The catalog accepts only unique UUID identifiers, known lowercase audio-container extensions, positive bounded byte counts, finite bounded durations and finite import timestamps. Extensions are never used to construct paths until allowlisted.
 - On the first catalog save, the service seeds `recordings.json.backup` with the initial valid catalog. Before each later replacement, it atomically stores the previous last-known-good contents as the backup. If the primary catalog cannot be decoded or validated, the backup is validated and restored.
 - If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings.
