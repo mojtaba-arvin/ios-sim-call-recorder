@@ -65,4 +65,6 @@ private struct StubAdapter: RecordingPathwayAdapter {
             remoteAudioVerified: true
         )
     }
+
+    func cancel(sessionID: UUID) async throws {}
 }

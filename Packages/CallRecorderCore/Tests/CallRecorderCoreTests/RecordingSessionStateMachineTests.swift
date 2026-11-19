@@ -35,8 +35,24 @@ final class RecordingSessionStateMachineTests: XCTestCase {
         XCTAssertEqual(machine.state, .connecting)
     }
 
+    func testCancellationHasAnExplicitReservedAndTerminalPath() throws {
+        var machine = RecordingSessionStateMachine()
+        try machine.transition(to: .preparing)
+        try machine.transition(to: .awaitingConsent)
+        try machine.transition(to: .connecting)
+        try machine.transition(to: .recording)
+        try machine.transition(to: .cancelling)
+        try machine.transition(to: .cancelled)
+
+        XCTAssertThrowsError(try machine.transition(to: .preparing))
+        XCTAssertEqual(machine.state, .cancelled)
+    }
+
     func testTerminalStateCannotBeReopened() throws {
         var machine = RecordingSessionStateMachine()
+        try machine.transition(to: .preparing)
+        try machine.transition(to: .awaitingConsent)
+        try machine.transition(to: .cancelling)
         try machine.transition(to: .cancelled)
         XCTAssertThrowsError(try machine.transition(to: .preparing))
         XCTAssertEqual(machine.state, .cancelled)

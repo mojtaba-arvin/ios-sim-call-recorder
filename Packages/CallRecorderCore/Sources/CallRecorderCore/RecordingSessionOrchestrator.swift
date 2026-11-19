@@ -4,6 +4,7 @@ public enum RecordingSessionOrchestratorError: Error, Equatable, Sendable {
     case sessionAlreadyActive
     case noActiveSession
     case sessionMismatch
+    case sessionCancelled
     case consentEvidenceIncomplete
     case consentEvidenceRejected
     case pathwayUnavailable(PathwayAvailability)
@@ -95,13 +96,18 @@ public actor RecordingSessionOrchestrator {
             guard try await consentVerifier.verify(consentEvidence, sessionID: sessionID) else {
                 throw RecordingSessionOrchestratorError.consentEvidenceRejected
             }
+            try ensureConnectionStillActive(sessionID: sessionID)
 
             try await adapter.connect(sessionID: sessionID)
+            try ensureConnectionStillActive(sessionID: sessionID)
+
             try await adapter.startCapture(sessionID: sessionID)
+            try ensureConnectionStillActive(sessionID: sessionID)
             try machine.transition(to: .recording)
         } catch {
-            try? machine.transition(to: .failed)
-            activeSessionID = nil
+            if failUnlessCancellationIsInProgress() {
+                throw RecordingSessionOrchestratorError.sessionCancelled
+            }
             throw error
         }
     }
@@ -123,8 +129,38 @@ public actor RecordingSessionOrchestrator {
         try machine.transition(to: .connecting)
         do {
             try await adapter.connect(sessionID: sessionID)
+            try ensureConnectionStillActive(sessionID: sessionID)
+
             try await adapter.startCapture(sessionID: sessionID)
+            try ensureConnectionStillActive(sessionID: sessionID)
             try machine.transition(to: .recording)
+        } catch {
+            if failUnlessCancellationIsInProgress() {
+                throw RecordingSessionOrchestratorError.sessionCancelled
+            }
+            throw error
+        }
+    }
+
+    /// Cancels a prepared, connecting, recording or interrupted session.
+    /// Preparation itself is not cancellable; callers may cancel once prepare
+    /// has returned. The cancelling state reserves the operation before I/O.
+    public func cancel(sessionID: UUID) async throws {
+        try validate(sessionID: sessionID)
+        guard [
+            .awaitingConsent,
+            .connecting,
+            .recording,
+            .interrupted,
+        ].contains(machine.state) else {
+            throw RecordingSessionOrchestratorError.invalidState(machine.state)
+        }
+
+        try machine.transition(to: .cancelling)
+        do {
+            try await adapter.cancel(sessionID: sessionID)
+            try machine.transition(to: .cancelled)
+            activeSessionID = nil
         } catch {
             try? machine.transition(to: .failed)
             activeSessionID = nil
@@ -150,6 +186,27 @@ public actor RecordingSessionOrchestrator {
             try? machine.transition(to: .failed)
             activeSessionID = nil
             throw error
+        }
+    }
+
+    private func failUnlessCancellationIsInProgress() -> Bool {
+        guard machine.state != .cancelling, machine.state != .cancelled else {
+            return true
+        }
+        try? machine.transition(to: .failed)
+        activeSessionID = nil
+        return false
+    }
+
+    private func ensureConnectionStillActive(sessionID: UUID) throws {
+        guard activeSessionID == sessionID else {
+            throw RecordingSessionOrchestratorError.sessionCancelled
+        }
+        guard machine.state == .connecting else {
+            if machine.state == .cancelling || machine.state == .cancelled {
+                throw RecordingSessionOrchestratorError.sessionCancelled
+            }
+            throw RecordingSessionOrchestratorError.invalidState(machine.state)
         }
     }
 
