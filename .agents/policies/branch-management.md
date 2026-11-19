@@ -28,3 +28,8 @@ Recommended next configuration after the workflow foundations are integrated int
 - do not add broad bypass actors
 
 Do not mutate repository rulesets or branch protection from an agent without explicit owner authorization. First ensure required workflows exist on the default branch and run for every PR targeting it; a required check that is skipped or never created can block all merges.
+
+
+## Review evidence
+
+A task may record either an actual independent human review or an explicitly owner-authorized automated review. These are distinct evidence modes. Never label an automated/self-review as an independent human approval, fabricate a GitHub review, or use an owner waiver to bypass branch protection or required human approval. The task validator requires the selected mode and its corresponding evidence.
