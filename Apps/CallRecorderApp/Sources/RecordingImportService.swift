@@ -135,6 +135,7 @@ actor RecordingImportService {
         }
 
         let container = try AudioContainerProbe.detect(at: stagedURL)
+        try AudioContainerProbe.validateDeclaredPayloadLength(at: stagedURL, container: container)
         let attributes = try fileManager.attributesOfItem(atPath: stagedURL.path)
         guard let size = (attributes[.size] as? NSNumber)?.int64Value,
               let sourceByteCount else {
@@ -172,6 +173,15 @@ actor RecordingImportService {
             throw RecordingImportServiceError.validation(error)
         }
 
+        // AVAudioFile construction validates the container/header, not every
+        // compressed or PCM frame. Decode the payload in bounded chunks so a
+        // truncated tail cannot be committed as a playable library item.
+        try validateAudioPayload(audioFile)
+
+        // Resolve/recover the catalog before moving staged media into the
+        // managed directory. Otherwise a first import would look like an
+        // unexplained orphan to the missing-catalog fail-closed guard.
+        var entries = try loadCatalog()
         let entry = ImportedRecording(
             id: UUID(),
             fileExtension: container.rawValue,
@@ -185,7 +195,6 @@ actor RecordingImportService {
         stagedFileExists = false
 
         do {
-            var entries = try loadCatalog()
             entries.append(entry)
             try saveCatalog(entries)
         } catch {
@@ -229,6 +238,47 @@ actor RecordingImportService {
         }
         entries.removeAll { $0.id == id }
         try saveCatalog(entries)
+    }
+
+    private func validateAudioPayload(_ audioFile: AVAudioFile) throws {
+        let expectedFrameCount = audioFile.length
+        let format = audioFile.processingFormat
+        guard expectedFrameCount > 0,
+              format.sampleRate.isFinite,
+              format.sampleRate > 0,
+              (1...2).contains(Int(format.channelCount)),
+              let buffer = AVAudioPCMBuffer(
+                pcmFormat: format,
+                frameCapacity: 65_536
+              ) else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        var decodedFrameCount: AVAudioFramePosition = 0
+        while decodedFrameCount < expectedFrameCount {
+            let remainingFrames = expectedFrameCount - decodedFrameCount
+            let requestedFrames = AVAudioFrameCount(
+                min(Int64(buffer.frameCapacity), remainingFrames)
+            )
+            let previousFramePosition = audioFile.framePosition
+            do {
+                try audioFile.read(into: buffer, frameCount: requestedFrames)
+            } catch {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+
+            let nextFramePosition = audioFile.framePosition
+            guard buffer.frameLength > 0,
+                  nextFramePosition > previousFramePosition,
+                  nextFramePosition <= expectedFrameCount else {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+            decodedFrameCount = nextFramePosition
+        }
+
+        guard decodedFrameCount == expectedFrameCount else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
     }
 
     private func performMaintenance(retentionPolicy: RecordingRetentionPolicy) throws {
@@ -367,6 +417,19 @@ actor RecordingImportService {
                 try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
                 return recovered
             }
+
+            // A genuinely new install has no catalog and no managed media.
+            // If media exists without either catalog copy, do not treat data loss
+            // as an empty library: fail closed and preserve every file for recovery.
+            let recordingsDirectory = try privateDirectory(named: "Recordings")
+            let existingMedia = try fileManager.contentsOfDirectory(
+                at: recordingsDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            guard existingMedia.isEmpty else {
+                throw RecordingImportServiceError.catalogCorrupted
+            }
             return []
         }
 
@@ -448,5 +511,73 @@ private enum AudioContainerProbe {
         }
 
         throw RecordingImportServiceError.unsupportedContainer
+    }
+
+    /// AVAudioFile may synthesize silence for missing PCM frames in a truncated
+    /// WAV. Validate RIFF's declared chunk boundaries against the physical file
+    /// length before asking AVFoundation to decode it.
+    static func validateDeclaredPayloadLength(
+        at url: URL,
+        container: RecordingAudioContainer
+    ) throws {
+        guard container == .wav else { return }
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let fileSize = (attributes[.size] as? NSNumber)?.uint64Value,
+              fileSize >= 12 else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        func read(_ count: Int, at offset: UInt64) throws -> Data {
+            try handle.seek(toOffset: offset)
+            let data = try handle.read(upToCount: count) ?? Data()
+            guard data.count == count else {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+            return data
+        }
+
+        func uint32LE(_ data: Data) -> UInt64 {
+            UInt64(data[data.startIndex])
+                | (UInt64(data[data.startIndex + 1]) << 8)
+                | (UInt64(data[data.startIndex + 2]) << 16)
+                | (UInt64(data[data.startIndex + 3]) << 24)
+        }
+
+        let header = try read(12, at: 0)
+        guard String(decoding: header[0..<4], as: UTF8.self) == "RIFF",
+              String(decoding: header[8..<12], as: UTF8.self) == "WAVE" else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        let riffEnd = 8 + uint32LE(header.subdata(in: 4..<8))
+        guard riffEnd <= fileSize, riffEnd >= 12 else {
+            throw RecordingImportServiceError.unreadableAudio
+        }
+
+        var offset: UInt64 = 12
+        while offset + 8 <= riffEnd {
+            let chunkHeader = try read(8, at: offset)
+            let chunkID = String(decoding: chunkHeader[0..<4], as: UTF8.self)
+            let chunkLength = uint32LE(chunkHeader.subdata(in: 4..<8))
+            let chunkEnd = offset + 8 + chunkLength + (chunkLength & 1)
+
+            guard chunkEnd >= offset, chunkEnd <= riffEnd, chunkEnd <= fileSize else {
+                throw RecordingImportServiceError.unreadableAudio
+            }
+
+            if chunkID == "data" {
+                guard chunkLength > 0 else {
+                    throw RecordingImportServiceError.unreadableAudio
+                }
+                return
+            }
+            offset = chunkEnd
+        }
+
+        throw RecordingImportServiceError.unreadableAudio
     }
 }
