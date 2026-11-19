@@ -19,7 +19,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 3. The source size is checked against the core 500 MiB limit before copying, preventing oversized files from consuming app staging storage.
 4. A lightweight container signature probe checks RIFF/WAVE, AIFF/AIFC, CAF, MP3 and ISO-BMFF/MP4-family headers. The filename extension is checked independently by the core validator.
 5. The selected file is copied into an app-private staging directory under an opaque UUID filename.
-6. AVAudioFile must successfully decode the staged file. Duration, sample rate and channel count are read from the decoded media, not guessed from its filename.
+6. AVAudioFile must successfully open the staged file. Duration, sample rate and channel count are read from decoded media, not guessed from its filename. WAV files additionally have their RIFF and chunk-declared lengths checked against the physical file size because AVAudioFile can synthesize silence for missing PCM data in a truncated WAV. After metadata limits pass, the decoded frame range is read in bounded 65,536-frame chunks; a decoder error, zero-progress read or inconsistent frame position is rejected without loading the full recording into memory.
 7. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
 8. A validated file is moved into app-private recording storage under a new opaque UUID filename.
 9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups.
@@ -32,7 +32,6 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - Audio interruptions pause playback. Playback does not resume automatically after an interruption; the user must explicitly press play.
 - Disconnecting the current audio output (for example, unplugging headphones) pauses playback to avoid unexpectedly sending private audio to another output.
 - The system share sheet exports the selected app-private audio file to a user-chosen destination or app. Export is user initiated; the app does not upload audio to a service.
-- VoiceOver labels recording metadata, per-recording share/play actions, playback position and elapsed/total time; import progress and changing status/error messages have accessible descriptions.
 - Playback and export URLs are resolved through the catalog and checked for file existence before use.
 - Users should listen for both their own voice and the remote participant. Playback is a listening aid, not proof of two-way call capture; channel count alone is insufficient.
 
@@ -40,7 +39,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 - The current UI is an import shell, not a call recorder. It does not capture native Phone.app audio.
 - It does not read Notes private storage or automate the Phone app. The user must export/share a recording from Notes or another source and select it.
-- Container signature checks and successful AVAudioFile decoding establish that a file is parseable audio; they do not prove that both call participants are audible.
+- Container signature checks, RIFF boundary validation for WAV and successful AVAudioFile decoding establish structural/decoding validity within the implemented checks; they do not prove that both call participants are audible or that every compressed format's full physical payload is semantically intact.
 - Hardware compatibility remains unverified until physical tests from Issue #20 are completed.
 - Imported audio stays on-device until the user explicitly chooses a destination in the system share sheet. No background network transfer is implemented.
 - Transcription, cloud upload and automated two-way speaker verification remain future work.
@@ -53,8 +52,9 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - When retention removes the currently playing or shared recording, the library stops playback or dismisses the share sheet and invalidates pending file lookups so a stale asynchronous result cannot reopen deleted media.
 - The catalog accepts only unique UUID identifiers, known lowercase audio-container extensions, positive bounded byte counts, finite bounded durations and finite import timestamps. Extensions are never used to construct paths until allowlisted.
 - On the first catalog save, the service seeds `recordings.json.backup` with the initial valid catalog. Before each later replacement, it atomically stores the previous last-known-good contents as the backup. If the primary catalog cannot be decoded or validated, the backup is validated and restored.
-- If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings.
+- If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings. If both catalog files are missing but managed media already exists, it also fails closed rather than treating the installation as new and deleting those files as orphans.
 - On library maintenance, abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
 - The Swift core package tests cover retention boundaries. The app-target XCTest suite exercises catalog recovery, fail-closed behavior, retention deletion and filesystem maintenance on an isolated temporary storage root. Simulator tests do not replace physical-device validation.
 
-- Pending playback file lookups are tracked by a request token scoped to the recording ID. A newer request supersedes an older one; deletion, retention cleanup and view teardown invalidate the matching pending lookup. A resolved URL is used only if its request token is still current and the recording remains in the catalog.
+
+Catalog recovery/validation is performed before moving staged media into the managed recordings directory. This preserves the missing-catalog fail-closed guard without misclassifying a first import as an orphan.
