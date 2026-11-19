@@ -15,6 +15,9 @@ struct RecordingLibraryView: View {
     @State private var playbackDuration = 0.0
     @State private var isSeeking = false
     @State private var periodicTimeObserver: Any?
+    @State private var playbackRequestID = UUID()
+    @State private var shareRequestID = UUID()
+    @State private var sharedRecordingID: UUID?
     @State private var sharedRecordingURL: URL?
     @State private var isShareSheetPresented = false
     @State private var statusMessage = "Import an audio file exported from Phone, Notes, or an external recorder."
@@ -141,6 +144,8 @@ struct RecordingLibraryView: View {
                 onCompletion: handleImportSelection
             )
             .sheet(isPresented: $isShareSheetPresented, onDismiss: {
+                shareRequestID = UUID()
+                sharedRecordingID = nil
                 sharedRecordingURL = nil
             }) {
                 if let sharedRecordingURL {
@@ -255,10 +260,13 @@ struct RecordingLibraryView: View {
             return
         }
 
+        let requestID = UUID()
+        playbackRequestID = requestID
         Task {
             do {
                 let url = try await importService.playbackURL(for: recording.id)
-                stopPlayback()
+                guard playbackRequestID == requestID else { return }
+                stopPlayback(invalidatePendingRequests: false)
                 let nextPlayer = AVPlayer(url: url)
                 player = nextPlayer
                 playingRecordingID = recording.id
@@ -270,6 +278,7 @@ struct RecordingLibraryView: View {
                 statusMessage = "Playing selected recording. Check that both sides of the conversation are audible."
                 isError = false
             } catch {
+                guard playbackRequestID == requestID else { return }
                 statusMessage = error.localizedDescription
                 isError = true
                 stopPlayback()
@@ -320,7 +329,10 @@ struct RecordingLibraryView: View {
         )
     }
 
-    private func stopPlayback() {
+    private func stopPlayback(invalidatePendingRequests: Bool = true) {
+        if invalidatePendingRequests {
+            playbackRequestID = UUID()
+        }
         player?.pause()
         removePeriodicTimeObserver()
         player = nil
@@ -376,14 +388,22 @@ struct RecordingLibraryView: View {
     }
 
     private func shareRecording(_ recording: ImportedRecording) {
+        let requestID = UUID()
+        shareRequestID = requestID
         Task {
             do {
                 let url = try await importService.playbackURL(for: recording.id)
+                guard shareRequestID == requestID,
+                      recordings.contains(where: { $0.id == recording.id }) else {
+                    return
+                }
+                sharedRecordingID = recording.id
                 sharedRecordingURL = url
                 isShareSheetPresented = true
                 statusMessage = "Choose an app or destination to export this recording."
                 isError = false
             } catch {
+                guard shareRequestID == requestID else { return }
                 statusMessage = error.localizedDescription
                 isError = true
             }
@@ -393,7 +413,19 @@ struct RecordingLibraryView: View {
     @discardableResult
     private func refreshRecordings() async -> Bool {
         do {
-            recordings = try await importService.recordings(retentionDays: retentionDays)
+            let updatedRecordings = try await importService.recordings(retentionDays: retentionDays)
+            recordings = updatedRecordings
+            if let playingRecordingID,
+               !updatedRecordings.contains(where: { $0.id == playingRecordingID }) {
+                stopPlayback()
+            }
+            if let sharedRecordingID,
+               !updatedRecordings.contains(where: { $0.id == sharedRecordingID }) {
+                shareRequestID = UUID()
+                isShareSheetPresented = false
+                self.sharedRecordingID = nil
+                sharedRecordingURL = nil
+            }
             return true
         } catch {
             statusMessage = error.localizedDescription
@@ -404,17 +436,15 @@ struct RecordingLibraryView: View {
 
     private func deleteRecordings(at offsets: IndexSet) {
         let ids = offsets.map { recordings[$0].id }
+        // Invalidate any in-flight file lookup before deleting from storage.
+        shareRequestID = UUID()
         if let playingRecordingID, ids.contains(playingRecordingID) {
             stopPlayback()
         }
-        if let sharedRecordingURL,
-           ids.contains(where: { id in
-               recordings.first(where: { $0.id == id }).map {
-                   sharedRecordingURL.deletingPathExtension().lastPathComponent == $0.id.uuidString
-               } ?? false
-           }) {
+        if let sharedRecordingID, ids.contains(sharedRecordingID) {
             isShareSheetPresented = false
-            self.sharedRecordingURL = nil
+            self.sharedRecordingID = nil
+            sharedRecordingURL = nil
         }
         Task {
             do {
