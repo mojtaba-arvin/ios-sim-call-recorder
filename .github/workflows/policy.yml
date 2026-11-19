@@ -28,3 +28,5 @@ jobs:
         run: python3 scripts/validate_repo_policy.py
       - name: Validate agent roles, skills and templates
         run: python3 scripts/validate_agent_assets.py
+      - name: Validate example R&D task graph
+        run: python3 scripts/validate_agent_tasks.py .agents/templates/task.example.json
