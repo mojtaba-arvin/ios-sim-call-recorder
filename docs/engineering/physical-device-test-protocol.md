@@ -95,7 +95,7 @@ Create one record per run. Never put phone numbers, names, raw audio or other pe
 
 ## 7. Pathway-level decision
 
-A compatibility tuple is marked supported only after at least 20 consecutive successful runs for the declared core scenario, with all failures and exclusions retained in the evidence record. Additional interruption and route-change scenarios must be tested before production claims.
+For feasibility confirmation, run the core scenario at least three times on the exact compatibility tuple and retain every failure and exclusion. Three successful repeats support a bounded feasibility result; they do not establish production support. A tuple may be called production-supported only after at least 20 consecutive successful core-scenario runs, with the required interruption and route-change scenarios also passing. Keep the two thresholds distinct in every report.
 
 Possible outcomes:
 - **Pass:** all required criteria met for this exact tuple.
