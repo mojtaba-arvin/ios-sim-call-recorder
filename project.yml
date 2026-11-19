@@ -31,5 +31,22 @@ targets:
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         CODE_SIGNING_ALLOWED: NO
     scheme:
-      testTargets: []
+      testTargets:
+        - CallRecorderAppTests
       gatherCoverageData: false
+
+  CallRecorderAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Apps/CallRecorderApp/Tests
+    dependencies:
+      - target: CallRecorderApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mojtabaarvin.callrecorder.tests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CallRecorder.app/CallRecorder"
+        BUNDLE_LOADER: "$(TEST_HOST)"

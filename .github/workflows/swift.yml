@@ -2,7 +2,7 @@ name: Swift package checks
 
 on:
   pull_request:
-    branches: [main, feat/swift-recording-core-foundation, feat/iphone-capture-pathway-discovery, feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle]
+    branches: [main, feat/swift-recording-core-foundation, feat/iphone-capture-pathway-discovery, feat/recording-import-validation, feat/ios-app-import-shell, feat/ios-share-export-playback-lifecycle, feat/ios-recording-retention-catalog-recovery-v2]
   workflow_dispatch:
 
 permissions:
