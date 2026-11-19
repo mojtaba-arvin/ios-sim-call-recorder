@@ -105,6 +105,12 @@ class BridgeSession:
             raise ConsentRequired("participants can join only after affirmative consent")
         if len(self.joined_participants) > self.expected_participants:
             raise ValueError("too many joined participants")
+        if self.state in {
+            SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING,
+            SessionState.FINALIZING, SessionState.VERIFYING,
+            SessionState.COMPLETED, SessionState.DEGRADED,
+        } and not self.all_participants_consented:
+            raise ConsentRequired("active provider phases require pre-join consent from every expected participant")
 
     @property
     def all_participants_joined(self) -> bool:
