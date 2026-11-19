@@ -83,6 +83,38 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
         assertExperimental(result, containing: "exact iPhone model identifier")
     }
 
+    func testUSBCAccessoryIsRejectedForLightningGeneration() {
+        let context = makeContext(route: .wired, model: "iPhone14,5")
+        let result = AccessoryCaptureAssessment.assess(
+            context: context,
+            accessory: profile(.usbC)
+        )
+        guard case .unavailable(let reason) = result.availability else {
+            return XCTFail("USB-C accessory must not be assumed directly compatible with a Lightning iPhone")
+        }
+        XCTAssertTrue(reason.contains("connector does not match"))
+    }
+
+    func testLightningAccessoryIsRejectedForUSBCGeneration() {
+        let context = makeContext(route: .wired, model: "iPhone16,1")
+        let result = AccessoryCaptureAssessment.assess(
+            context: context,
+            accessory: profile(.lightning)
+        )
+        guard case .unavailable = result.availability else {
+            return XCTFail("Lightning accessory must not be assumed directly compatible with a USB-C iPhone")
+        }
+    }
+
+    func testUnknownIPhoneGenerationDoesNotGuessConnector() {
+        let context = makeContext(route: .wired, model: "iPhone-unknown")
+        let result = AccessoryCaptureAssessment.assess(
+            context: context,
+            accessory: profile(.usbC)
+        )
+        assertExperimental(result, containing: "does not match a recognized iPhone generation")
+    }
+
     func testAssessmentRetainsEvidenceReference() {
         let result = AccessoryCaptureAssessment.assess(
             context: makeContext(route: .bluetoothHFP),
@@ -114,9 +146,12 @@ final class AccessoryCaptureAssessmentTests: XCTestCase {
         )
     }
 
-    private func makeContext(route: CallAudioRoute) -> DeviceCompatibilityContext {
+    private func makeContext(
+        route: CallAudioRoute,
+        model: String = "iPhone16,1"
+    ) -> DeviceCompatibilityContext {
         DeviceCompatibilityContext(
-            deviceModelIdentifier: "iPhone16,1",
+            deviceModelIdentifier: model,
             operatingSystemVersion: "18.7.1",
             operatingSystemBuild: "22H",
             deviceRegionCode: "US",
