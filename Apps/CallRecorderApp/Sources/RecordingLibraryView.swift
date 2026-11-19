@@ -38,11 +38,16 @@ struct RecordingLibraryView: View {
                 }
 
                 if recordings.isEmpty {
-                    ContentUnavailableView(
-                        "No Recordings",
-                        systemImage: "waveform",
-                        description: Text("Select an audio file to add it to your library.")
-                    )
+                    VStack(spacing: 8) {
+                        Image(systemName: "waveform")
+                            .font(.title)
+                            .foregroundStyle(.secondary)
+                        Text("No recordings yet")
+                            .font(.headline)
+                        Text("Select an audio file to add it to your library.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     .frame(maxHeight: .infinity)
                 } else {
                     List {
