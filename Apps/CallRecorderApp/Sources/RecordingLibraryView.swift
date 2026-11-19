@@ -151,11 +151,11 @@ struct RecordingLibraryView: View {
                 isPlaying = false
             }
             .task {
-                await refreshRecordings()
+                _ = await refreshRecordings()
             }
             .onChange(of: retentionDays) { _ in
                 Task {
-                    await refreshRecordings()
+                    guard await refreshRecordings() else { return }
                     statusMessage = retentionDays == 0
                         ? "Automatic deletion is off. Recordings will be kept until you delete them."
                         : "Retention updated. Recordings older than \(retentionDays) days were removed."
@@ -251,12 +251,15 @@ struct RecordingLibraryView: View {
         }
     }
 
-    private func refreshRecordings() async {
+    @discardableResult
+    private func refreshRecordings() async -> Bool {
         do {
             recordings = try await importService.recordings(retentionDays: retentionDays)
+            return true
         } catch {
             statusMessage = error.localizedDescription
             isError = true
+            return false
         }
     }
 
@@ -282,7 +285,7 @@ struct RecordingLibraryView: View {
                 for id in ids {
                     try await importService.deleteRecording(id: id)
                 }
-                await refreshRecordings()
+                guard await refreshRecordings() else { return }
                 statusMessage = "Selected recording(s) deleted."
                 isError = false
             } catch {
