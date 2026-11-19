@@ -81,6 +81,16 @@ class AgentTaskValidatorTests(unittest.TestCase):
         errors = validate_task_graph([task])
         self.assertTrue(any("require a blocker" in error for error in errors))
 
+    def test_malformed_classification_types_return_errors_not_exceptions(self) -> None:
+        task = make_task("IOS-1")
+        task["status"] = ["done"]
+        task["risk"] = []
+        task["required_evidence_tier"] = {}
+        errors = validate_task_graph([task])
+        self.assertTrue(any("invalid status" in error for error in errors))
+        self.assertTrue(any("invalid risk" in error for error in errors))
+        self.assertTrue(any("invalid evidence tier" in error for error in errors))
+
     def test_rejects_missing_observable_acceptance_criteria(self) -> None:
         task = make_task("IOS-1")
         task["acceptance_criteria"] = []
