@@ -24,8 +24,8 @@ class ProviderResourceMappingTests(unittest.TestCase):
         cls.connect = staticmethod(lambda: psycopg.connect(DATABASE_URL))
         migrations = Path(__file__).parents[1] / "migrations"
         with cls.connect() as conn:
-            conn.execute((migrations / "0001_bridge_persistence.sql").read_text())
-            conn.execute((migrations / "0002_provider_resources.sql").read_text())
+            for migration in sorted(migrations.glob("*.sql")):
+                conn.execute(migration.read_text())
 
     def setUp(self):
         with self.connect() as conn:
@@ -35,7 +35,9 @@ class ProviderResourceMappingTests(unittest.TestCase):
             )
         self.repo = PostgresBridgeRepository(self.connect)
         self.repo.create_session(BridgeSession(
-            "mapping-session", 2, state=SessionState.AWAITING_USER_ACTION,
+            "mapping-session", 2,
+            expected_participant_refs=frozenset({"participant-a", "participant-b"}),
+            state=SessionState.AWAITING_USER_ACTION,
         ))
 
     def test_conference_mapping_is_scoped_and_immutable(self):
@@ -56,7 +58,9 @@ class ProviderResourceMappingTests(unittest.TestCase):
             "twilio", "account-a", "mapping-session", "CF" + "c" * 32,
         )
         self.repo.create_session(BridgeSession(
-            "other-session", 2, state=SessionState.AWAITING_USER_ACTION,
+            "other-session", 2,
+            expected_participant_refs=frozenset({"other-a", "other-b"}),
+            state=SessionState.AWAITING_USER_ACTION,
         ))
         with self.assertRaises(psycopg.errors.UniqueViolation):
             self.repo.put_provider_resource(
