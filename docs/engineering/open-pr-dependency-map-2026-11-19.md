@@ -17,7 +17,8 @@ main
 │       │           └── #25 feat/ios-recording-retention-catalog-recovery-v2
 │       │               └── #26 feat/ios-storage-integration-tests
 │       │                   └── #27 feat/ios-playback-controls-interruption-handling
-│       │                       └── #31 feat/ios-library-accessibility-states
+│       │                       ├── #31 feat/ios-library-accessibility-states
+│                       └── #32 fix/ios-import-full-decode-validation
 │       ├── #29 test/audio-quality-analysis-tooling
 │       └── #30 feat/recording-session-cancellation
 ├── #9  chore/agent-git-engineering-governance
@@ -47,8 +48,9 @@ PR #1 is an independent research baseline. PR #7, #9 and #11 are independent mai
 | #24 | `feat/ios-share-export-playback-lifecycle` | `39d724920deba51c14acbd5ec78992eb74c0c92b` | #23 | iOS stack |
 | #25 | `feat/ios-recording-retention-catalog-recovery-v2` | `871162e3b4799590054b87305aef57671827a8fd` | #24 | iOS stack |
 | #26 | `feat/ios-storage-integration-tests` | `cabda934c1f2e593d5efaae7934bcf30b12f2235` | #25 | iOS stack |
-| #27 | `feat/ios-playback-controls-interruption-handling` | `c46c4c62817313a43a23400da4d743b7adcd6ed0` | #26 | iOS stack |
+| #27 | `feat/ios-playback-controls-interruption-handling` | `9517157e3dc48813ecede33a87d3c1d88105bf62` | #26 | iOS stack |
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
+| #32 | `fix/ios-import-full-decode-validation` | `019789cc7644bd540c49065c2c2133927aaed1b0` | #27 | iOS import validation |
 | #28 | `chore/agent-rd-skills-and-templates` | `17583c0db879028cc09f52a3a3f9f8192f19d0c9` | #9 | Governance stack |
 | #29 | `test/audio-quality-analysis-tooling` | `f67d27df1ced580202da90fcf3fb57dc920cae22` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `c399f35f6c416a5957e6f39d7191367e772c03d7` | #19 | Core lifecycle |
