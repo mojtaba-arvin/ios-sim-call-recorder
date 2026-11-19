@@ -60,6 +60,8 @@ class AgentTaskValidatorTests(unittest.TestCase):
             with self.subTest(current=current):
                 with self.assertRaisesRegex(ValueError, "reset_reason"):
                     validate_state_transition(current, "queued")
+                with self.assertRaisesRegex(ValueError, "reset_reason"):
+                    validate_state_transition(current, "queued", reset_reason=[])
                 self.assertTrue(validate_state_transition(
                     current, "queued", reset_reason="Reassign after worker timeout"
                 ))
