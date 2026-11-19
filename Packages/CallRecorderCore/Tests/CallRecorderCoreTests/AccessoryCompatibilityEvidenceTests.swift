@@ -152,7 +152,10 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
     ) -> AccessoryCaptureTrial {
         AccessoryCaptureTrial(
             attemptIdentifier: identifier,
-            observedAt: Date(timeIntervalSince1970: 1_800_000_000 + Double(identifier.count)),
+            observedAt: Date(
+                timeIntervalSince1970: 1_800_000_000
+                    + Double(identifier.unicodeScalars.reduce(0) { $0 + Int($1.value) })
+            ),
             consentConfirmed: consent,
             recordingNoticeConfirmed: notice,
             localSpeechIntelligible: local,
