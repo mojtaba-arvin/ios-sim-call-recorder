@@ -29,7 +29,7 @@ Use Conventional Commits:
 - Link issues and attach reproducible evidence for device/carrier behavior.
 - State clearly whether claims are confirmed, observed, hypothetical or rejected.
 - Do not merge with failing required checks or unresolved high-impact review comments.
-- Prefer squash merge for focused changes.
+- Use the repository-approved merge strategy. Do not squash a dependency stack when doing so would erase prerequisite ancestry or make downstream review ambiguous.
 
 ## Testing and evidence
 
