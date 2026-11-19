@@ -130,6 +130,8 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
             sha = evidence.get("exact_head_sha")
             if not isinstance(sha, str) or not SHA_PATTERN.fullmatch(sha):
                 errors.append(f"{task_id}: done tasks require a 40-character exact_head_sha")
+            if evidence.get("ci_run_sha") != sha:
+                errors.append(f"{task_id}: CI run SHA must match exact_head_sha")
             if evidence.get("tests_status") != "success":
                 errors.append(f"{task_id}: done tasks require successful exact-head tests")
             if evidence.get("independent_review") is not True:
