@@ -78,6 +78,55 @@ _ALLOWED = {
 
 
 @dataclass(frozen=True, slots=True)
+class ConsentEvidence:
+    participant_ref: str
+    provider: str
+    provider_account_id: str
+    event_id: str
+    policy_version: str
+    consent_method: str
+    evidence_digest: str
+    occurred_at: datetime
+
+    def __post_init__(self) -> None:
+        for name in (
+            "participant_ref", "provider", "provider_account_id", "event_id",
+            "policy_version", "consent_method", "evidence_digest",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"consent evidence {name} must not be empty")
+        BridgeSession._require_ref(self.participant_ref)
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("consent evidence timestamp must be timezone-aware")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "participant_ref": self.participant_ref,
+            "provider": self.provider,
+            "provider_account_id": self.provider_account_id,
+            "event_id": self.event_id,
+            "policy_version": self.policy_version,
+            "consent_method": self.consent_method,
+            "evidence_digest": self.evidence_digest,
+            "occurred_at": self.occurred_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, str]) -> ConsentEvidence:
+        return cls(
+            participant_ref=value["participant_ref"],
+            provider=value["provider"],
+            provider_account_id=value["provider_account_id"],
+            event_id=value["event_id"],
+            policy_version=value["policy_version"],
+            consent_method=value["consent_method"],
+            evidence_digest=value["evidence_digest"],
+            occurred_at=datetime.fromisoformat(value["occurred_at"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class BridgeSession:
     session_id: str
     expected_participants: int
@@ -85,6 +134,7 @@ class BridgeSession:
     state: SessionState = SessionState.CREATED
     joined_participants: frozenset[str] = field(default_factory=frozenset)
     consented_participants: frozenset[str] = field(default_factory=frozenset)
+    consent_evidence: tuple[ConsentEvidence, ...] = field(default_factory=tuple)
     failure_code: str | None = None
     updated_at: datetime | None = None
 
@@ -103,6 +153,11 @@ class BridgeSession:
             raise InvalidParticipant("consented participant is not expected for this session")
         if not self.joined_participants.issubset(self.consented_participants):
             raise ConsentRequired("participants can join only after affirmative consent")
+        evidence_refs = [record.participant_ref for record in self.consent_evidence]
+        if len(evidence_refs) != len(set(evidence_refs)):
+            raise ValueError("each participant may have only one consent evidence record")
+        if set(evidence_refs) != set(self.consented_participants):
+            raise ValueError("consented participants must have matching durable consent evidence")
         if len(self.joined_participants) > self.expected_participants:
             raise ValueError("too many joined participants")
         if self.state in {
@@ -143,6 +198,12 @@ class BridgeSession:
         self,
         participant_ref: str,
         *,
+        provider: str,
+        provider_account_id: str,
+        event_id: str,
+        policy_version: str,
+        consent_method: str,
+        evidence_digest: str,
         at: datetime | None = None,
     ) -> BridgeSession:
         self._require_ref(participant_ref)
@@ -154,9 +215,22 @@ class BridgeSession:
             return self
         if self.state not in {SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
             raise InvalidTransition("consent is accepted only during the pre-join consent phase")
+        if at is None:
+            raise ValueError("consent evidence requires a provider event timestamp")
+        evidence = ConsentEvidence(
+            participant_ref=participant_ref,
+            provider=provider,
+            provider_account_id=provider_account_id,
+            event_id=event_id,
+            policy_version=policy_version,
+            consent_method=consent_method,
+            evidence_digest=evidence_digest,
+            occurred_at=at,
+        )
         updated = replace(
             self,
             consented_participants=self.consented_participants | {participant_ref},
+            consent_evidence=self.consent_evidence + (evidence,),
             updated_at=at,
         )
         if updated.all_participants_consented:
