@@ -10,6 +10,7 @@
 main
 ├── #1  docs/recording-pathways-research
 ├── #35 docs/product-readme-and-status
+├── #39 research/conference-bridge-provider-evaluation
 ├── #7  feat/swift-recording-core-foundation
 │   └── #19 feat/iphone-capture-pathway-discovery
 │       ├── #21 feat/recording-import-validation
@@ -58,6 +59,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 | #32 | `fix/ios-import-full-decode-validation` | `ac345260f794e30dff030d11802eca41d4bdaee8` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
 | #35 | `docs/product-readme-and-status` | `6bfd6c5c22c93934f411720ca599cd94b72effcf` | `main` | Independent product/release documentation |
+| #39 | `research/conference-bridge-provider-evaluation` | `1b530ee5965bc95a4a4d757e91035dd6609fcfc4` | `main` | Provider-neutral bridge contract and evaluation proposal |
 | #36 | `fix/backend-dispatcher-validate-command-inputs` | `7107b72ccf4cf108ba14aa739790c9565ffebce4` | #17 | Backend command validation |
 | #37 | `feat/accessory-compatibility-assessment` | `131474f9b4aaa8f142133eaee484d58e077e3bd3` | #19 | Accessory compatibility/evidence gate |
 | #38 | `fix/ios-pending-playback-request-invalidation` | `8952c356e8fed25704d2aef65ec935a5c7751e77` | #27 | Playback lifecycle race fix |
@@ -67,7 +69,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 
 ## Integration order
 
-1. Review and integrate independent foundations only after their own CI/review gates: #1, #7, #9, #11 and #35.
+1. Review and integrate independent foundations only after their own CI/review gates: #1, #7, #9, #11 and #35. PR #39 is a separate documentation proposal and should be reviewed against the backend implementation before merge.
 2. Integrate governance extension #28 after #9.
 3. Integrate backend stack in order #13 → #15 → #17 → #36 after #11.
 4. Integrate the iOS core/capture stack #19 after #7. PR #29 and #30 can then be reviewed independently against #19.
@@ -80,7 +82,7 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 - The branch name alone is not proof that a PR is current; refresh head/base SHAs before every write.
 - A PR base must be its immediate prerequisite branch. Do not retarget a stacked PR to main merely to make it mergeable.
 - A successful check applies only to the exact head SHA that ran it.
-- If a workflow's `pull_request.branches` filter omits a stacked PR's base branch, the check may never run. Add the base branch to the workflow in the prerequisite branch and verify a new run.
+- Use file-path filters rather than enumerating stacked base branches. Each workflow should run only when its owned source/test paths change, regardless of the PR's target branch; policy CI owns workflow-file changes. Keep manual dispatch for deliberate full runs.
 - Keep all PRs unmerged until independent review and exact-head required checks are complete. No direct main commits, auto-merge or force-push.
 - Physical-device and carrier tests cannot be substituted with CI, unit tests or Simulator runs.
 
@@ -91,3 +93,13 @@ PR #1 and #35 are independent research/product documentation baselines. PR #7, #
 - PR #38 is stacked on #27 and prevents stale asynchronous playback lookups from reopening deleted/expired recordings. Exact-head Swift run #44511369730 passed; iOS Simulator app-hosted run #44511369716 passed 13 tests (0 failures) on head `8952c356e8fed25704d2aef65ec935a5c7751e77`.
 - Neither PR is merged. PR #37 has no physical-device evidence; PR #38 validates local playback lifecycle only.
 - This map refresh is being committed on the #28 governance branch; refresh its own head SHA after this commit and rerun the repository policy workflow.
+
+
+## CI and branch hygiene refresh (2026-11-19)
+
+- PR #9 now centralizes four path-scoped workflows: Swift/audio analyzer checks, backend tests, iOS Simulator build and repository policy validation. The Swift workflow covers `Packages/CallRecorderCore/**` and the WAV analyzer source/tests; backend CI covers `backend/**`; macOS build covers app sources, package dependencies and `project.yml`; policy CI covers workflows, validators, agent instructions and tests.
+- These workflows intentionally do not trigger on edits to their own workflow files. Such changes are validated by the policy workflow, avoiding expensive false-positive runs when a new workflow is introduced without its corresponding source tree.
+- Backend Python dependency installation now uses the setup-python pip cache keyed by `backend/requirements.txt`.
+- PR #9 current head at this snapshot: `97a73c853eee1dff28fea026cd895da16b7c58b5`. Policy run #44515351015 was in progress at map update time; do not mark it green until its exact-head conclusion is fetched.
+- PR #39 converts the previously untracked research branch into a draft documentation PR; its contract is proposal-only and does not prove provider or carrier compatibility.
+- Branch audit found 27 branches total: 25 are heads of open PRs, one is `main`, and `feat/ios-recording-retention-catalog-recovery` is the only orphan. It is superseded by the active `-v2` PR #25 branch, is not a base/head of any open PR, and has no commits ahead of `main`; safe to delete. The connected GitHub actions do not expose delete-ref, so repository owner must run the supplied `gh api -X DELETE ...` command.
