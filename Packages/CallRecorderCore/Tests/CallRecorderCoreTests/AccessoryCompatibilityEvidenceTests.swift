@@ -24,7 +24,35 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         guard case .insufficient(let reason) = evidence.status else {
             return XCTFail("A failed remote speech check must block confirmation")
         }
-        XCTAssertTrue(reason.contains("local and remote speech"))
+        XCTAssertTrue(reason.contains("audio quality"))
+    }
+
+    func testLocalClippingBlocksEvidencePromotion() {
+        let evidence = makeEvidence(trials: [
+            trial("a"), trial("b"), trial("c", localClipping: false)
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testRemoteAudioGapBlocksEvidencePromotion() {
+        let evidence = makeEvidence(trials: [
+            trial("a"), trial("b"), trial("c", remoteGaps: false)
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testRemoteEchoOutsideAcceptableRangeBlocksEvidencePromotion() {
+        let evidence = makeEvidence(trials: [
+            trial("a"), trial("b"), trial("c", remoteEcho: false)
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
+    }
+
+    func testSpeechMustBeIntelligibleAtBeginningMiddleAndEnd() {
+        let evidence = makeEvidence(trials: [
+            trial("a"), trial("b"), trial("c", remoteMiddle: false)
+        ])
+        XCTAssertFalse(evidence.isConfirmed)
     }
 
     func testMissingConsentBlocksConfirmation() {
@@ -214,9 +242,31 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         notice: Bool = true,
         local: Bool = true,
         remote: Bool = true,
-        integrity: Bool = true
+        integrity: Bool = true,
+        remoteMiddle: Bool = true,
+        localClipping: Bool = true,
+        remoteGaps: Bool = true,
+        remoteEcho: Bool = true
     ) -> AccessoryCaptureTrial {
-        AccessoryCaptureTrial(
+        func quality(
+            speech: Bool,
+            middle: Bool = true,
+            clipping: Bool = true,
+            gaps: Bool = true,
+            echo: Bool = true
+        ) -> AccessoryAudioDirectionEvidence {
+            AccessoryAudioDirectionEvidence(
+                intelligibleAtBeginning: speech,
+                intelligibleAtMiddle: speech && middle,
+                intelligibleAtEnd: speech,
+                clippingAcceptable: clipping,
+                gapsAcceptable: gaps,
+                echoAcceptable: echo,
+                noiseAcceptable: true
+            )
+        }
+
+        return AccessoryCaptureTrial(
             attemptIdentifier: identifier,
             observedAt: Date(
                 timeIntervalSince1970: 1_800_000_000
@@ -224,8 +274,13 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
             ),
             consentConfirmed: consent,
             recordingNoticeConfirmed: notice,
-            localSpeechIntelligible: local,
-            remoteSpeechIntelligible: remote,
+            localAudioQuality: quality(speech: local, clipping: localClipping),
+            remoteAudioQuality: quality(
+                speech: remote,
+                middle: remoteMiddle,
+                gaps: remoteGaps,
+                echo: remoteEcho
+            ),
             artifactIntegrityVerified: integrity
         )
     }
