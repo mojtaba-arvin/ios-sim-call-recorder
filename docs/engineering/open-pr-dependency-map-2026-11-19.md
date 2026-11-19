@@ -9,6 +9,7 @@
 ```text
 main
 ├── #1  docs/recording-pathways-research
+├── #35 docs/product-readme-and-status
 ├── #7  feat/swift-recording-core-foundation
 │   └── #19 feat/iphone-capture-pathway-discovery
 │       ├── #21 feat/recording-import-validation
@@ -29,7 +30,7 @@ main
             └── #17 feat/provider-command-dispatcher-core
 ```
 
-PR #1 is an independent research baseline. PR #7, #9 and #11 are independent main-based foundations. The iOS/app stack is serial because later changes build on prior storage, UI and CI behavior. PRs #29 and #30 are independent side branches from #19; PR #28 extends the governance branch from #9.
+PR #1 and #35 are independent research/product documentation baselines. PR #7, #9 and #11 are independent main-based foundations. The iOS/app stack is serial because later changes build on prior storage, UI and CI behavior. PRs #29 and #30 are independent side branches from #19; PR #28 extends the governance branch from #9.
 
 ## Snapshot heads and bases
 
@@ -52,8 +53,9 @@ PR #1 is an independent research baseline. PR #7, #9 and #11 are independent mai
 | #31 | `feat/ios-library-accessibility-states` | `95b95fd5748ea75fd40fb46f1effc0a46bc067cc` | #27 | iOS stack |
 | #32 | `fix/ios-import-full-decode-validation` | `80e8d4b59e007d9593e070d56c98d4d597dfb3b7` | #27 | iOS import validation |
 | #34 | `fix/core-adapter-failure-cleanup` | `21d9e8895a10537c643d94ae8e4a1890780514c2` | #30 | Core lifecycle cleanup |
+| #35 | `docs/product-readme-and-status` | `e471d90221c386e6185f890abe07f7562ea076c8` | `main` | Independent product/release documentation |
 | #28 | `chore/agent-rd-skills-and-templates` | `99e949bf3a52ce43978ceb3cd765e17ece5c7861` | #9 | Governance stack |
-| #29 | `test/audio-quality-analysis-tooling` | `f67d27df1ced580202da90fcf3fb57dc920cae22` | #19 | iOS test tooling |
+| #29 | `test/audio-quality-analysis-tooling` | `3992ab85f0156c380ceabf07ed50f5fb534f7397` | #19 | iOS test tooling |
 | #30 | `feat/recording-session-cancellation` | `c399f35f6c416a5957e6f39d7191367e772c03d7` | #19 | Core lifecycle |
 
 ## Integration order
