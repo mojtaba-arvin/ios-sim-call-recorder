@@ -174,7 +174,7 @@ final class AccessoryCompatibilityEvidenceTests: XCTestCase {
         guard case .insufficient(let reason) = evidence.status else {
             return XCTFail("A user-reported route is not physical route evidence")
         }
-        XCTAssertTrue(reason.contains("physically observed"))
+        XCTAssertTrue(reason.contains("physical-device test"))
     }
 
     func testAppOwnedAudioSessionRouteCannotPromotePhoneCallEvidence() {
