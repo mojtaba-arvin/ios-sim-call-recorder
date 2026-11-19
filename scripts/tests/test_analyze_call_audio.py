@@ -45,6 +45,16 @@ class CallAudioAnalysisTests(unittest.TestCase):
             self.assertGreater(metrics[1]["rms_dbfs"], metrics[0]["rms_dbfs"] - 8)
             self.assertEqual(metrics[0]["silent_window_ratio"], 0.0)
 
+    def test_reports_longest_silent_gap_in_frames_not_rounded_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.wav"
+            active = [int(12_000 * math.sin(2 * math.pi * 330 * i / 8_000)) for i in range(4_000)]
+            self.write_wav(path, [[0] * 4_000 + active])
+
+            result = analyze_wav(path)
+
+            self.assertEqual(result["analysis"]["channels"][0]["longest_silent_gap_seconds"], 0.5)
+
     def test_identifies_a_silent_channel_without_claiming_speaker_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fixture.wav"
