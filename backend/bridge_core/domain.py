@@ -139,10 +139,20 @@ class BridgeSession:
     updated_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if not self.session_id.strip():
-            raise ValueError("session_id must not be empty")
-        if self.expected_participants < 2:
-            raise ValueError("a bridge requires at least two participants")
+        if not isinstance(self.session_id, str) or not self.session_id.strip():
+            raise ValueError("session_id must be a non-empty string")
+        if (
+            isinstance(self.expected_participants, bool)
+            or not isinstance(self.expected_participants, int)
+            or self.expected_participants < 2
+        ):
+            raise ValueError("a bridge requires an integer participant count of at least two")
+        if not isinstance(self.expected_participant_refs, frozenset):
+            raise ValueError("expected_participant_refs must be an immutable set")
+        if not isinstance(self.joined_participants, frozenset) or not isinstance(self.consented_participants, frozenset):
+            raise ValueError("joined and consented participants must be immutable sets")
+        if not isinstance(self.consent_evidence, tuple):
+            raise ValueError("consent_evidence must be an immutable tuple")
         if len(self.expected_participant_refs) != self.expected_participants:
             raise ValueError("expected participant references must match expected_participants")
         for participant_ref in self.expected_participant_refs:
