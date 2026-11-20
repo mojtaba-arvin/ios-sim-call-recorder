@@ -105,6 +105,8 @@ class WebhookProcessor:
             return EventApplication(session)
 
         if kind is EventType.PARTICIPANT_DECLINED:
+            if event.participant_ref in session.consented_participants:
+                return EventApplication(session)
             updated = session.participant_declined(event.participant_ref, at=at)
             cancel_commands = tuple(
                 OutboxCommand(
