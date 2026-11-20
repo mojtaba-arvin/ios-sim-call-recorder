@@ -96,6 +96,9 @@ class WebhookProcessor:
                 return EventApplication(session)
             return EventApplication(session.transition(SessionState.BRIDGE_LEG_RINGING, at=at))
 
+        if kind is EventType.PROVIDER_STATUS:
+            return EventApplication(session)
+
         if kind is EventType.PARTICIPANT_DECLINED:
             return EventApplication(session.participant_declined(event.participant_ref, at=at))
 
