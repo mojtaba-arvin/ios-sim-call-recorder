@@ -112,7 +112,7 @@ class TwilioAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.conference_sid, CONF)
         args = self.client.resources[CONF].participants.created[0]
-        self.assertEqual(args["conference_record"], "true")
+        self.assertEqual(args["conference_record"], "record-from-start")
         self.assertEqual(args["label"], "participant-b")
 
     def test_reconciliation_matches_opaque_participant_label(self):
