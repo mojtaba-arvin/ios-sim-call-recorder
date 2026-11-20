@@ -40,6 +40,7 @@ class TwilioConferenceCommandAdapter:
         public_origin: str,
         consent_disclosure: str,
         address_resolver: Callable[[str, str], str],
+        session_guard: Callable[[str], None] | None = None,
         request_timeout_seconds: float = 10.0,
     ) -> None:
         if not _SID["AC"].fullmatch(account_sid):
@@ -58,6 +59,7 @@ class TwilioConferenceCommandAdapter:
         self.public_origin = public_origin
         self.consent_disclosure = consent_disclosure
         self.address_resolver = address_resolver
+        self.session_guard = session_guard
         self.request_timeout_seconds = request_timeout_seconds
 
     @staticmethod
@@ -110,10 +112,19 @@ class TwilioConferenceCommandAdapter:
         kind = command.command_type
         ref = command.payload.get("participant_ref")
         try:
-            if kind == "consent.request":
+            if kind in {"consent.request", "consent.cancel"}:
                 if call_sid:
                     call = self.client.calls(call_sid).fetch()
+                    status = getattr(call, "status", "")
+                    if kind == "consent.cancel" and status in {
+                        "completed", "canceled", "busy", "failed", "no-answer",
+                    }:
+                        return ReconciliationResult(ReconciliationState.APPLIED, call_sid=call.sid)
+                    if kind == "consent.cancel":
+                        return ReconciliationResult(ReconciliationState.NOT_APPLIED, call_sid=call.sid)
                     return ReconciliationResult(ReconciliationState.APPLIED, call_sid=call.sid)
+                if kind == "consent.cancel":
+                    return ReconciliationResult(ReconciliationState.APPLIED)
                 # Calls.create has no general idempotency-key contract. After an
                 # uncertain first attempt, never dial the same person a second time.
                 return ReconciliationResult(
@@ -192,6 +203,8 @@ class TwilioConferenceCommandAdapter:
         try:
             kind = command.command_type
             if kind == "consent.request":
+                if self.session_guard is not None:
+                    self.session_guard(command.session_id)
                 address = self._address(command)
                 action = self.public_origin + "/v1/twilio/consent"
                 twiml = build_consent_gather_twiml(
@@ -207,6 +220,12 @@ class TwilioConferenceCommandAdapter:
                     status_callback_event=["completed"],
                 )
                 return ProviderExecutionResult(call_sid=call.sid)
+
+            if kind == "consent.cancel":
+                if call_sid:
+                    call = self.client.calls(call_sid).update(status="completed")
+                    return ProviderExecutionResult(call_sid=getattr(call, "sid", call_sid))
+                return ProviderExecutionResult()
 
             if kind in {"conference.create", "participant.add"}:
                 if kind == "conference.create" and command.payload.get("recording_mode") != "from_start":
