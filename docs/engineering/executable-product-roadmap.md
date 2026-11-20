@@ -25,7 +25,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - Audio quality analyzer and deterministic WAV fixtures.
 - Provider-neutral bridge state machine, consent gate, signed-webhook verification boundary, PostgreSQL persistence, transactional outbox, lease-based dispatcher, reconciliation contract and immutable provider-resource mappings.
 - Authenticated tenant-scoped ASGI session create/read/cancel component, PostgreSQL tenant ownership, liveness/readiness endpoints and ordered migration runner.
-- Signed Twilio webhook ASGI transport adapter (injected event decoder), graceful outbox worker loop, encrypted tenant-scoped participant-address vault and local staging container/Compose scaffold.
+- Signed Twilio webhook ASGI transport adapter plus an account-bound Twilio form-event decoder (consent, Conference and Recording normalization; PR #51), graceful outbox worker loop, encrypted tenant-scoped participant-address vault and local staging container/Compose scaffold. The decoder still requires production route mounting, an immutable provider-resource resolver and a deployed consent/TwiML flow.
 - Bounded server-side WAV structural validation with digest, format, channel-count, sample-rate, duration and chunk-boundary checks.
 - KMS-encrypted S3-compatible WAV object-storage adapter with tenant-derived opaque keys, validation-before-upload and bounded presigned download URLs.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
@@ -33,7 +33,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 ### Not implemented / not proven
 
 - Production ASGI deployment with TLS ingress, rate limiting, durable API idempotency and automated credential rotation; the current ASGI app component and local staging scaffold are not a public service.
-- A concrete Twilio/Telnyx command adapter, production webhook event decoder/account preflight and verified live account configuration.
+- A concrete Twilio/Telnyx command adapter, production account preflight and verified live account configuration. Twilio callback normalization exists in PR #51, but the routes are not yet mounted in the production ASGI app.
 - Production worker supervision/lease renewal and provider-backed remote cancellation; the current worker is a graceful polling loop only.
 - Provider media retrieval, encrypted object storage, two-sided/channel identity verification and provider/product deletion reconciliation; current backend media validation is WAV-only structural validation.
 - Physical iPhone/carrier/accessory evidence for two-way intelligible capture.
@@ -95,7 +95,7 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 - [x] Implement authenticated tenant-scoped ASGI session create/read/cancel component and PostgreSQL tenant ownership; [ ] add durable API idempotency, rate limits and production token rotation.
 - [ ] Implement canonical public-origin configuration and trusted-proxy handling; reject arbitrary forwarded-host reconstruction.
-- [x] Implement bounded signed-webhook ASGI transport that preserves raw body, exact configured public URL and parsed multi-value form parameters before signature-gated decoding; [ ] implement production Twilio event decoder, account/resource ownership checks and replay policy.
+- [x] Implement bounded signed-webhook ASGI transport that preserves raw body, exact configured public URL and parsed multi-value form parameters before signature-gated decoding; [x] add strict account-bound Twilio consent/Conference/Recording event normalization with opaque resource resolution (PR #51); [ ] mount the routes in the production ASGI app and verify the full provider callback/replay lifecycle.
 - [x] Implement AES-GCM encrypted tenant-scoped participant-address vault and opaque-reference resolver; [ ] wire it to a reviewed provider adapter and provision addresses through an audited administrative path.
 - [ ] Implement Twilio conference creation/join semantics using the documented TwiML/Participants flow; do not assume a Conference can be directly created through the Conference resource.
 - [ ] Implement provider reconciliation for timeout-after-acceptance, duplicate participant labels, concurrent joins, stale resources and account mismatch. Unknown outcomes must defer, never blindly retry.
@@ -153,7 +153,7 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Finish the M3 live-provider boundary: production Twilio event decoding/account ownership, audited participant-address provisioning, consent IVR and a concrete command adapter with reconciliation.
+1. Finish the M3 live-provider boundary: mount the Twilio event routes, add audited participant-address provisioning, implement the consent IVR and concrete command adapter with reconciliation.
 2. Complete M4 media retrieval, encrypted tenant object storage, two-sided/channel verification and provider/product deletion reconciliation.
 3. Execute M2 physical iPhone/SIM/accessory/acoustic tests and publish the sanitized compatibility matrix; no software-only test can replace these.
 4. Complete M5 jurisdiction-specific legal/privacy review, App Store privacy labels and independent security testing.
