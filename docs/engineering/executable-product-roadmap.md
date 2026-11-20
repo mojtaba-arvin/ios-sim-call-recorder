@@ -152,10 +152,12 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Delete the five superseded branch refs listed in the repository audit; verify that automatic branch deletion remains enabled for future merged PRs.
-2. Complete mainline ruleset enforcement (PR requirement and feasible required checks); this needs repository administration permission unavailable to the current GitHub connection.
-3. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
-4. Keep M2 physical-device validation as an explicit external dependency; do not mark capture support complete until real device/SIM/accessory evidence is attached.
+1. Finish the M3 live-provider boundary: production Twilio event decoding/account ownership, audited participant-address provisioning, consent IVR and a concrete command adapter with reconciliation.
+2. Complete M4 media retrieval, encrypted tenant object storage, two-sided/channel verification and provider/product deletion reconciliation.
+3. Execute M2 physical iPhone/SIM/accessory/acoustic tests and publish the sanitized compatibility matrix; no software-only test can replace these.
+4. Complete M5 jurisdiction-specific legal/privacy review, App Store privacy labels and independent security testing.
+5. Deploy the local staging scaffold to an isolated remote environment, add real monitoring/alerts/rollback evidence, and configure Apple distribution signing.
+6. Remove the five superseded branch refs and strengthen mainline ruleset enforcement when repository administration permissions are available.
 
 
 ## Verified repository controls (2026-11-19)
