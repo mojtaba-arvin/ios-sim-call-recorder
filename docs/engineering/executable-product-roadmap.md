@@ -30,12 +30,12 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - KMS-encrypted S3-compatible WAV object-storage adapter with tenant-derived opaque keys, validation-before-upload and bounded presigned download URLs.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
 
-### Not implemented / not proven
+### Implemented foundations and remaining external acceptance
 
 - Production ASGI composition root and signed webhook ingress are implemented. AWS ECS/RDS/S3/KMS/ALB Terraform and a manual OIDC deployment workflow are prepared, but no AWS account, DNS, ACM certificate, secret or cloud environment has been provisioned. Rate limiting and automated secret rotation remain open.
 - Live Twilio adapter and consent/webhook/media routes are implemented in PR #52; live Twilio account preflight, billing, real outbound-call acceptance, conference callback ordering and account-level dual-channel recording setting remain unverified.
 - A standalone supervised outbox worker, cancellation of outstanding consent calls and provider-backed Conference close adapter are implemented; long-running lease renewal and provider-side cancellation reconciliation for every edge case remain open.
-- Twilio Conference recording retrieval with RequestedChannels=2, bounded WAV validation, two-channel activity verification, deterministic channel ownership metadata for exactly two expected participants, KMS-backed S3 upload, session verification finalization and retryable Twilio/S3 retention deletion. Channel 1 is the first conference participant; channel 2 is all remaining audio. With exactly two participants this separates the two legs, but it is not biometric speaker identification.
+- Twilio Conference recording retrieval with RequestedChannels=2, bounded WAV validation, two-channel activity verification, deterministic channel ownership metadata for exactly two expected participants, KMS-backed S3 upload, session verification finalization and retryable Twilio/S3 retention deletion. Rejected/oversized media is retained as a rejection record for provider cleanup; verified media is available only through a tenant-authorized 120-second presigned URL with audit. Channel 1 is the first conference participant; channel 2 is all remaining audio. With exactly two participants this separates the two legs, but it is not biometric speaker identification.
 - Physical iPhone/carrier/accessory evidence for two-way intelligible capture.
 - Legal review and App Store approval for each launch market.
 - Production deployment or end-to-end paid provider call.
