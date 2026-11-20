@@ -58,9 +58,15 @@ class TwilioWebhookASGI:
             await self.respond(send,400); return
         except Exception:
             await self.respond(send,500); return
+        if urlsplit(public_url).path.rstrip('/').endswith('/consent'):
+            body = b'<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+            await self.respond(send,200,body=body,content_type=b'application/xml; charset=utf-8')
+            return
         await self.respond(send,204)
 
     @staticmethod
-    async def respond(send, status):
-        await send({'type':'http.response.start','status':status,'headers':[(b'cache-control',b'no-store'),(b'content-length',b'0')]})
-        await send({'type':'http.response.body','body':b''})
+    async def respond(send, status, *, body=b'', content_type=None):
+        headers=[(b'cache-control',b'no-store'),(b'content-length',str(len(body)).encode('ascii'))]
+        if content_type: headers.append((b'content-type',content_type))
+        await send({'type':'http.response.start','status':status,'headers':headers})
+        await send({'type':'http.response.body','body':body})
