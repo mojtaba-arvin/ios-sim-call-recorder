@@ -183,7 +183,7 @@ class TwilioRecordingMediaIngestor:
                 )
 
     def _download(self, recording_sid: str) -> Path:
-        url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Recordings/{recording_sid}.wav"
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Recordings/{recording_sid}.wav?RequestedChannels=2"
         credentials = base64.b64encode(f"{self.username}:{self.password}".encode()).decode("ascii")
         request = urllib.request.Request(url, headers={"Authorization": "Basic " + credentials})
         fd, filename = tempfile.mkstemp(prefix="twilio-recording-", suffix=".wav")
