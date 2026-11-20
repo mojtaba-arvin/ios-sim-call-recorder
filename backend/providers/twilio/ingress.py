@@ -7,12 +7,13 @@ from bridge_core.webhooks import InvalidWebhookSignature, UnknownSession
 
 class TwilioWebhookASGI:
     MAX_BODY_BYTES = 256 * 1024
-    def __init__(self, *, processor, decode_verified_request, canonical_public_origin):
+    def __init__(self, *, processor, decode_verified_request, canonical_public_origin, after_process=None):
         parts = urlsplit(canonical_public_origin)
         if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.path not in ('','/') or parts.query or parts.fragment:
             raise ValueError('canonical public origin must be an HTTPS origin without path/query')
         self.processor = processor
         self.decode = decode_verified_request
+        self.after_process = after_process
         self.origin = f'https://{parts.netloc}'
 
     async def __call__(self, scope: dict[str, Any], receive, send):
@@ -49,7 +50,9 @@ class TwilioWebhookASGI:
         except ValueError:
             await self.respond(send,400); return
         try:
-            self.processor.process(request=request, decode=self.decode)
+            accepted = self.processor.process(request=request, decode=self.decode)
+            if self.after_process is not None:
+                self.after_process(request, accepted)
         except InvalidWebhookSignature:
             await self.respond(send,403); return
         except UnknownSession:
