@@ -43,7 +43,7 @@ Trust boundaries:
 | T09 | Local file exposed while device locked or included in backups | Complete file protection, app-private paths, backup exclusion, explicit export | Production media/catalog protection and directory backup exclusion implemented; physical lock/reboot test remains |
 | T10 | Low storage or process death corrupts catalog/media | Preflight capacity, staging, atomic catalog, known-good backup, foreground reconciliation | Implemented with deterministic low-space test and existing catalog recovery tests; physical kill/low-space matrix remains |
 | T11 | Malicious/corrupt media exhausts memory/CPU or parser | Size/duration limits, bounded reads, container/chunk validation, decoder limits | iOS import and backend WAV structural validator cover bounded supported inputs; other backend media codecs not supported |
-| T12 | Operator or backup access exposes recordings | Least privilege, encryption, access audit, backup lifecycle and tested deletion | Not implemented for production because object storage/deployment is not present |
+| T12 | Operator or backup access exposes recordings | Least privilege, encryption, access audit, backup lifecycle and tested deletion | KMS-encrypted S3 adapter with tenant-derived opaque keys implemented; bucket policy, IAM/KMS grants, versioning, access audit and backup lifecycle remain deployment tasks |
 | T13 | Retention deletion succeeds in one system but not another | Durable tombstones, retries, reconciliation and observable terminal state | Local retention exists; provider/object-store deletion reconciliation remains open |
 
 ## Abuse-case test requirements
