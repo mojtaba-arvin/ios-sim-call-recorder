@@ -13,7 +13,7 @@
 
 The repository already has a useful companion foundation: user-mediated audio import, private storage, catalog, playback, export, retention and recovery. That is technically credible as a companion/archive workflow, but it is not yet differentiated enough to establish a standalone paid product.
 
-The conference-bridge route is plausible only on specific carrier/device/plan combinations. The backend now includes authenticated tenant-scoped session API components, signed-webhook transport ingress, a tenant-encrypted address vault and a graceful worker loop, but it is still not a deployed or working recording service: no production Twilio event decoder/command adapter, consent IVR, media retrieval or carrier merge proof exists. More importantly, a manually merged SIM call may arrive as one mixed PSTN leg; this creates a consent-verification and channel-attribution problem that backend work cannot solve.
+The conference-bridge route is plausible only on specific carrier/device/plan combinations. The backend now includes authenticated tenant-scoped session API components, signed-webhook transport ingress, a tenant-encrypted address vault and a graceful worker loop, but it is still not a deployed or working recording service: no production Twilio event decoder/command adapter, consent IVR, media retrieval integration or carrier merge proof exists; a KMS-backed S3 storage adapter is implemented but not configured against a live bucket. More importantly, a manually merged SIM call may arrive as one mixed PSTN leg; this creates a consent-verification and channel-attribution problem that backend work cannot solve.
 
 **Recommended product decision:**
 
@@ -239,7 +239,7 @@ Next actions, in order:
 | Platform/API desk research | Completed for current source snapshot; re-check before release |
 | Technical pathway inventory | Completed as a research baseline |
 | Companion/import software foundation | Implemented in main; not a capture solution |
-| Provider foundation and consent sequencing | Domain/outbox, tenant-scoped API component, encrypted address vault, signed webhook transport and worker loop implemented; no production decoder/adapter, deployed service or live call |
+| Provider foundation and consent sequencing | Domain/outbox, tenant-scoped API component, encrypted address vault, signed webhook transport, worker loop and KMS-backed S3 adapter implemented; no production decoder/adapter, deployed service or live call |
 | Physical carrier/device capture | Not tested / not proven |
 | Accessory signal path | Not tested / not certified |
 | Customer problem validation | Not done |
