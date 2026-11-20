@@ -130,8 +130,8 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Complete the fresh iOS Simulator run for PR #45; review and merge only when all applicable exact-head checks are green and no blocking review finding remains.
-2. Complete mainline ruleset enforcement and remove the five superseded branches.
+1. Delete the five superseded branch refs listed in the repository audit; verify that automatic branch deletion remains enabled for future merged PRs.
+2. Complete mainline ruleset enforcement (PR requirement and feasible required checks); this needs repository administration permission unavailable to the current GitHub connection.
 3. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
 4. Keep M2 physical-device validation as an explicit external dependency; do not mark capture support complete until real device/SIM/accessory evidence is attached.
 
