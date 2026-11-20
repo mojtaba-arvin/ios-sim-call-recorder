@@ -17,17 +17,24 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 ### Implemented in main (software evidence)
 
 - Swift recording core and cancellation/resource-lifecycle behavior.
+- VoiceOver status announcements, accessibility labels/identifiers and Dynamic Type-compatible system text styles; physical accessibility review remains open.
+- Low-storage import preflight with a 64 MiB reserve, foreground catalog/staging recovery and explicit complete file protection for production media/catalog files.
+- Bundled PrivacyInfo.xcprivacy declaring app-owned UserDefaults (CA92.1) and disk-space access (E174.1); signing and full App Store review remain open.
 - SwiftUI companion shell with user-mediated file import, app-private storage, local catalog, playback, seeking, system share/export, opt-in retention and catalog recovery.
 - WAV RIFF/chunk boundary checks and bounded AVFoundation decode validation are merged in PR #40; software import validation is complete for the covered formats and fixtures.
 - Audio quality analyzer and deterministic WAV fixtures.
 - Provider-neutral bridge state machine, consent gate, signed-webhook verification boundary, PostgreSQL persistence, transactional outbox, lease-based dispatcher, reconciliation contract and immutable provider-resource mappings.
+- Authenticated tenant-scoped ASGI session create/read/cancel component, PostgreSQL tenant ownership, liveness/readiness endpoints and ordered migration runner.
+- Signed Twilio webhook ASGI transport adapter (injected event decoder), graceful outbox worker loop, encrypted tenant-scoped participant-address vault and local staging container/Compose scaffold.
+- Bounded server-side WAV structural validation with digest, format, channel-count, sample-rate, duration and chunk-boundary checks.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
 
 ### Not implemented / not proven
 
-- A deployable authenticated HTTP service and public webhook ingress.
-- A concrete Twilio/Telnyx provider adapter with safe address resolution, provider-account preflight and live account validation.
-- Production outbox worker process, secrets management, infrastructure, media ingestion/object storage, audio verification and retention/deletion jobs.
+- Production ASGI deployment with TLS ingress, rate limiting, durable API idempotency and automated credential rotation; the current ASGI app component and local staging scaffold are not a public service.
+- A concrete Twilio/Telnyx command adapter, production webhook event decoder/account preflight and verified live account configuration.
+- Production worker supervision/lease renewal and provider-backed remote cancellation; the current worker is a graceful polling loop only.
+- Provider media retrieval, encrypted object storage, two-sided/channel identity verification and provider/product deletion reconciliation; current backend media validation is WAV-only structural validation.
 - Physical iPhone/carrier/accessory evidence for two-way intelligible capture.
 - Legal review and App Store approval for each launch market.
 - Production deployment or end-to-end paid provider call.
@@ -63,9 +70,11 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Local playback, seeking, interruptions/output-route handling and user-initiated export.
 - [x] Opt-in retention, backup catalog recovery and fail-closed storage behavior.
 - [x] Complete import adversarial cases on the current mainline with PR #40; keep format-specific claims bounded by decoder evidence.
-- [ ] Run VoiceOver and Dynamic Type review on physical devices; record OS/device tuples.
-- [ ] Add app lifecycle/background/low-storage recovery checks and verify file protection after device lock/reboot.
-- [ ] Add release signing, privacy manifest/permission review, app icon/metadata and a reproducible archive build.
+- [x] Add VoiceOver status announcements, accessible status/progress semantics and Dynamic Type-compatible system typography; [ ] complete physical VoiceOver/Switch Control/Dynamic Type review on device.
+- [x] Add low-storage preflight and foreground recovery of interrupted imports/catalog/staging; [ ] execute physical low-storage/process-kill scenarios.
+- [x] Apply complete file protection to production media and catalog files and exclude app storage from backups; [ ] verify lock/reboot/first-unlock behavior on a physical device.
+- [x] Bundle PrivacyInfo.xcprivacy with the UserDefaults and DiskSpace required-reason declarations; [ ] complete transitive SDK/privacy-label review.
+- [ ] Configure Apple Developer Team, distribution signing identity/provisioning and reproducible signed Release archive; credentials are not available in this repository workflow.
 
 **Exit gate:** app builds from a clean checkout; import/play/export/delete/retention survive relaunch and interruption; accessibility and privacy review evidence attached. This mode remains a companion/import app, not a native Phone-call recorder.
 
@@ -83,23 +92,23 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ### M3 — Turn the backend foundation into a deployable service
 
-- [ ] Define and implement authenticated session create/read/cancel endpoints, tenant authorization, idempotency and rate limits.
+- [x] Implement authenticated tenant-scoped ASGI session create/read/cancel component and PostgreSQL tenant ownership; [ ] add durable API idempotency, rate limits and production token rotation.
 - [ ] Implement canonical public-origin configuration and trusted-proxy handling; reject arbitrary forwarded-host reconstruction.
-- [ ] Implement Twilio webhook decoding after signature verification, account/resource ownership checks, event normalization, deduplication and out-of-order handling.
-- [ ] Implement a provider address resolver keyed by opaque participant references. Resolve phone numbers only in memory from a protected vault; never place them in outbox rows, logs or ordinary audit payloads.
+- [x] Implement bounded signed-webhook ASGI transport that preserves raw body, exact configured public URL and parsed multi-value form parameters before signature-gated decoding; [ ] implement production Twilio event decoder, account/resource ownership checks and replay policy.
+- [x] Implement AES-GCM encrypted tenant-scoped participant-address vault and opaque-reference resolver; [ ] wire it to a reviewed provider adapter and provision addresses through an audited administrative path.
 - [ ] Implement Twilio conference creation/join semantics using the documented TwiML/Participants flow; do not assume a Conference can be directly created through the Conference resource.
 - [ ] Implement provider reconciliation for timeout-after-acceptance, duplicate participant labels, concurrent joins, stale resources and account mismatch. Unknown outcomes must defer, never blindly retry.
 - [ ] Gate recording start on joined-participant completeness and durable affirmative consent evidence for every participant.
 - [ ] Implement recording stop/finalization, callback reconciliation and provider-side deletion.
-- [ ] Add a supervised worker entry point, graceful shutdown, bounded network timeouts shorter than leases, lease renewal strategy, health/readiness endpoints and structured redacted logs.
-- [ ] Add migration runner, deployment configuration, secret injection/rotation, least-privilege database/provider credentials and backup/restore procedures.
+- [x] Add a graceful polling worker loop and API liveness/readiness endpoints; [ ] wire concrete adapters, enforce provider timeouts below leases, implement lease renewal and service-manager supervision.
+- [x] Add ordered migration runner, minimal API Docker image and local PostgreSQL/API staging Compose scaffold with externally injected environment values; [ ] deploy to isolated cloud staging, integrate a managed secret store/rotation, least-privilege provider credentials and verify backup/restore.
 
 **Exit gate:** deterministic mock/contract tests cover the full lifecycle and crash windows; staging preflight confirms provider account configuration; no real call or production credential is used in CI.
 
 ### M4 — Media ingestion and verification
 
 - [ ] Fetch completed media server-side using authenticated provider APIs; never trust arbitrary callback URLs.
-- [ ] Validate content type, byte limits, duration, container structure and full decodability before persistence.
+- [x] Add bounded server-side WAV structural validation (RIFF/chunk lengths, PCM/IEEE-float format, frame alignment, duration, sample rate, channels, size and SHA-256); [ ] integrate media retrieval and full decoder validation for provider output formats.
 - [ ] Store encrypted media in tenant-scoped object storage with opaque keys and short-lived authorized downloads.
 - [ ] Verify channel semantics and analyze each channel independently (RMS/peak, silence, clipping, gaps, duration and sample rate).
 - [ ] Require human or independently validated speech evidence for both directions; channel count or provider metadata alone is insufficient.
@@ -110,10 +119,10 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ### M5 — Security, privacy and market readiness
 
-- [ ] Threat-model tenant isolation, webhook forgery/replay, SSRF, signed media URL leakage, object authorization, credential rotation and outbox tampering.
+- [x] Add a threat model covering tenant isolation, token theft, participant address exposure, webhook forgery/replay, consent bypass, SSRF, media leakage, outbox replay and local file protection; [ ] validate controls through independent security testing and close residual deployment risks.
 - [ ] Review consent/disclosure wording and affirmative-consent capture for each launch jurisdiction.
 - [ ] Complete data-protection impact assessment, lawful basis, data residency, retention defaults, user export/deletion and incident response.
-- [ ] Review Apple App Store rules, privacy labels, background behavior, audio recording disclosure and all required permissions.
+- [x] Add the app privacy manifest for currently used required-reason APIs; [ ] complete App Store privacy-label, permission, background-mode and recording-disclosure review against the final SDK/deployment configuration.
 - [ ] Verify emergency-call exclusion and safe failure behavior; never silently record or bypass system disclosure.
 - [ ] Run dependency, secret, static-analysis and backup/restore checks.
 
@@ -121,10 +130,10 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ### M6 — Staging, production and controlled rollout
 
-- [ ] Deploy a non-production environment with isolated provider subaccount, test numbers, synthetic data and budget/usage alerts.
-- [ ] Run end-to-end staging scenarios with consenting participants; validate both audio directions and cleanup.
+- [x] Add a local containerized staging scaffold with PostgreSQL, explicit migration job, API health checks and externally injected configuration; [ ] deploy a remote isolated provider subaccount/test-number staging environment with budget alerts.
+- [x] Add ASGI lifecycle/tenant-isolation tests, PostgreSQL tenant/cancellation tests and WAV validation tests; [ ] run full provider-to-media end-to-end staging scenarios with consenting participants and verify both audio directions/cleanup.
 - [ ] Exercise worker crash/restart, webhook replay, provider timeout, database failover, object-store outage and deletion retry.
-- [ ] Publish runbooks, dashboards, alerts, SLOs, support diagnostics and rollback procedures.
+- [x] Publish a pre-production incident/recovery/rollback runbook; [ ] implement dashboards, alerts, SLOs and support diagnostics from real staging telemetry.
 - [ ] Release to a small allowlisted compatibility cohort only after all gates pass.
 - [ ] Expand support tuple-by-tuple using measured evidence; never infer support for untested carriers/regions/devices.
 
