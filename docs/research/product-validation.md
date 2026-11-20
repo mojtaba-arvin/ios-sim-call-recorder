@@ -13,7 +13,7 @@
 
 The repository already has a useful companion foundation: user-mediated audio import, private storage, catalog, playback, export, retention and recovery. That is technically credible as a companion/archive workflow, but it is not yet differentiated enough to establish a standalone paid product.
 
-The conference-bridge route is plausible only on specific carrier/device/plan combinations. The backend now includes authenticated tenant-scoped session API components, signed-webhook transport ingress, a tenant-encrypted address vault and a graceful worker loop, but it is still not a deployed or working recording service: no production Twilio event decoder/command adapter, consent IVR, media retrieval integration or carrier merge proof exists; a KMS-backed S3 storage adapter is implemented but not configured against a live bucket. More importantly, a manually merged SIM call may arrive as one mixed PSTN leg; this creates a consent-verification and channel-attribution problem that backend work cannot solve.
+The backend now contains an executable Twilio outbound consent/Conference/Recording path: DTMF consent calls, signed call-status/Conference/Recording webhooks, account-scoped resource mapping, recording-from-start participant creation, RequestedChannels=2 media retrieval, dual-channel WAV verification, KMS-backed S3 storage and coordinated provider/object retention deletion. It is still not deployed or live-account-verified. Critically, this Twilio path creates two app-owned outbound PSTN call legs; it is not the user's existing native SIM call and does not prove carrier add-call/merge or Phone.app audio capture. The native-SIM merge route remains a separate physical-device feasibility gate.
 
 **Recommended product decision:**
 
@@ -52,7 +52,8 @@ No segment is selected. Do not infer demand from the fact that a technical worka
 | Concept | What the user actually gets | Strength | Critical limitation | Recommendation |
 |---|---|---|---|---|
 | Companion / recording library | Imports a file the user already obtained; validates, stores, plays, exports and deletes it | Most mature software in this repository; avoids private API claims | Does not create a recording; weak standalone differentiation | Keep as foundation / possible utility |
-| Native SIM-call conference bridge | Attempts to merge a carrier call with a provider leg and records server-side | Could capture without Phone.app interception | Carrier-specific; merge may mix both speakers into one provider leg; consent may be impossible to verify on that topology | Feasibility gate only |
+| Native SIM-call conference merge | User merges an existing carrier call with a provider leg, if iOS/carrier topology permits | Could potentially preserve a SIM-call workflow | Carrier/device/plan-specific; merge and two-channel attribution are unproven | Physical feasibility gate only |
+| App-owned Twilio Conference | Service calls both participants after independent DTMF consent, then records a provider Conference | Backend control over consent, recording, callbacks and media | Both participants answer separate provider calls; this is not native SIM-call capture | Implemented in code; live-account validation required |
 | External accessory | Hardware independently captures the required call signals; app manages/retrieves files | Could bypass app-only audio-access limitation | No accessory has been physically certified; hardware and certification costs unknown | Prototype only after signal-path proof |
 | App-owned VoIP | User places/receives calls through an app-controlled media path | Strongest technical control over media, consent and channels | It is a different calling product; users must change their calling behavior | Evaluate as a separate product |
 | Carrier recording service | Carrier/network provides recording capability | Potentially robust if a commercial API/contract exists | Market, plan, access and contract dependence | Research per named carrier only |
@@ -249,3 +250,16 @@ Next actions, in order:
 | Jurisdiction-specific legal approval | Not done |
 
 **Overall status: Product validation is not complete.** The desk-research phase is complete enough to make a bounded technical/product decision; customer demand, commercial viability and real-world capture remain hard gates. This status must not be changed to "validated" until the corresponding evidence exists.
+
+## 2026-11-20 implementation and commercial update
+
+The backend implementation now includes the app-owned Twilio outbound Conference flow and a media pipeline. This improves technical feasibility for a separate app-owned calling mode; it does not change the native-SIM product claim. No real Twilio call or recording has been created by CI.
+
+The commercial baseline is documented in [Twilio bridge unit economics](unit-economics.md). Under the explicit assumptions in that model, a ten-minute two-party recorded call is approximately $0.374 Twilio variable cost in the US/Canada example and $0.990 for Germany mobile destinations, before infrastructure, tax, support, compliance and failed-call costs. This is vendor-rate arithmetic, not observed usage or a validated price.
+
+Executable substitutes for unavailable external evidence are prepared:
+- [Remote physical-device validation kit](../validation/remote-device-validation-kit.md): ready-to-post tester brief and evidence acceptance rules for two physical iPhones, active SIMs, carrier merge and audio-route tests.
+- [Customer discovery and paid-pilot kit](../validation/customer-discovery-kit.md): interview guide, segment hypotheses and a paid-pilot evidence standard.
+- [Counsel-ready legal brief](../legal/counsel-brief.md): data flow, consent design and jurisdiction-specific questions.
+
+These documents reduce the work required to obtain external evidence. They are not evidence that interviews, hardware tests, paid commitments or legal review have occurred.
