@@ -26,6 +26,14 @@ class PostgresMediaDownloadService:
             tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
             expires_seconds=120,
         )
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO media_access_audit
+                       (tenant_id, session_id, media_id, action, expires_in_seconds)
+                       VALUES (%s,%s,%s,'download_url_issued',120)""",
+                    (tenant_id, session_id, media_id),
+                )
         return {
             "media_id": str(media_id),
             "sha256": digest,
