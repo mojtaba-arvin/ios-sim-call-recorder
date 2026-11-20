@@ -60,7 +60,9 @@ class BridgeSessionsASGI:
             await self.respond(send,404,{'error':'not_found'})
         except InvalidTransition:
             await self.respond(send,409,{'error':'session_cannot_be_cancelled'})
-        except (ValueError,KeyError):
+        except KeyError:
+            await self.respond(send,404,{'error':'not_found'})
+        except ValueError:
             await self.respond(send,400,{'error':'invalid_request'})
         except Exception:
             await self.respond(send,500,{'error':'internal_error'})
