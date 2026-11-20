@@ -24,6 +24,7 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bridge_core.object_storage import S3MediaObjectStore
+from bridge_core.media_validation import validate_wav
 from providers.twilio.events import TwilioEventDecodeError
 
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
@@ -124,12 +125,42 @@ class TwilioRecordingMediaIngestor:
             return
         source = self._download(recording_sid)
         try:
-            analysis = analyze_dual_channel_wav(source)
+            metadata = validate_wav(source, max_bytes=self.max_bytes)
+            participants = self.resolver.expected_participants(session_id)
+            try:
+                analysis = analyze_dual_channel_wav(source)
+                if len(participants) != 2:
+                    raise ValueError("dual-channel ownership requires exactly two expected participants")
+            except ValueError:
+                self._persist_asset(
+                    media_id=media_id, tenant_id=tenant_id, session_id=session_id,
+                    recording_sid=recording_sid, object_key=None, sha256=metadata.sha256,
+                    byte_count=metadata.byte_count, duration=metadata.duration_seconds,
+                    sample_rate=metadata.sample_rate_hz, channels=metadata.channel_count,
+                    activity=[], channel_map=[], state="rejected",
+                    validation_error="dual_channel_verification_failed",
+                )
+                return
             stored = self.object_store.put_wav(
                 tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
             )
+            self._persist_asset(
+                media_id=media_id, tenant_id=tenant_id, session_id=session_id,
+                recording_sid=recording_sid, object_key=stored.object_key, sha256=stored.sha256,
+                byte_count=stored.byte_count, duration=analysis.duration_seconds,
+                sample_rate=analysis.sample_rate_hz, channels=2,
+                activity=list(analysis.channel_activity),
+                channel_map={"channel_1": participants[0], "channel_2": participants[1]},
+                state="verified", validation_error=None,
+            )
         finally:
             source.unlink(missing_ok=True)
+
+    def _persist_asset(
+        self, *, media_id, tenant_id, session_id, recording_sid, object_key,
+        sha256, byte_count, duration, sample_rate, channels, activity,
+        channel_map, state, validation_error,
+    ):
         expires = datetime.now(timezone.utc) + timedelta(days=self.retention_days)
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -137,13 +168,13 @@ class TwilioRecordingMediaIngestor:
                     """INSERT INTO media_assets
                     (media_id, tenant_id, session_id, provider, provider_account_id,
                      provider_recording_sid, object_key, sha256, byte_count, duration_seconds,
-                     sample_rate_hz, channel_count, channel_activity, verification_state,
-                     retention_expires_at)
-                    VALUES (%s,%s,%s,'twilio',%s,%s,%s,%s,%s,%s,%s,2,%s::jsonb,'verified',%s)
+                     sample_rate_hz, channel_count, channel_activity, channel_map,
+                     verification_state, validation_error, retention_expires_at)
+                    VALUES (%s,%s,%s,'twilio',%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s)
                     ON CONFLICT (provider, provider_account_id, provider_recording_sid) DO NOTHING""",
                     (media_id, tenant_id, session_id, self.provider_account_id, recording_sid,
-                     stored.object_key, stored.sha256, stored.byte_count, analysis.duration_seconds,
-                     analysis.sample_rate_hz, json.dumps(list(analysis.channel_activity)), expires),
+                     object_key, sha256, byte_count, duration, sample_rate, channels,
+                     json.dumps(activity), json.dumps(channel_map), state, validation_error, expires),
                 )
 
     def _download(self, recording_sid: str) -> Path:
@@ -229,9 +260,10 @@ class TwilioMediaRetentionWorker:
                 with self.connect() as conn:
                     conn.execute("UPDATE media_assets SET twilio_deleted_at=now() WHERE media_id=%s", (media_id,))
             if not object_deleted:
-                self.object_store.delete(
-                    tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
-                )
+                if object_key:
+                    self.object_store.delete(
+                        tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
+                    )
                 with self.connect() as conn:
                     conn.execute("UPDATE media_assets SET object_deleted_at=now() WHERE media_id=%s", (media_id,))
             with self.connect() as conn:
