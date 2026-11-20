@@ -204,10 +204,10 @@ actor RecordingImportService {
         let finalURL = try recordingURL(for: entry)
 
         try fileManager.moveItem(at: stagedURL, to: finalURL)
-        try applyCompleteFileProtection(to: finalURL)
         stagedFileExists = false
 
         do {
+            try applyCompleteFileProtection(to: finalURL)
             entries.append(entry)
             try saveCatalog(entries)
         } catch {
