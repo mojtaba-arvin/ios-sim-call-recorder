@@ -130,7 +130,7 @@ class OutboxCommandDispatcher:
 
         try:
             participant_ref = command.payload.get("participant_ref")
-            if command.command_type in {"conference.create", "participant.add"} and (
+            if command.command_type in {"consent.request", "conference.create", "participant.add"} and (
                 not isinstance(participant_ref, str)
                 or not participant_ref
                 or participant_ref != participant_ref.strip()
@@ -191,6 +191,8 @@ class OutboxCommandDispatcher:
                 conference_sid = reconciliation.conference_sid or conference_sid
                 call_sid = reconciliation.call_sid or call_sid
 
+            if command.command_type == "consent.request" and not call_sid:
+                raise ProviderOperationError("provider_call_sid_missing", retryable=True)
             if command.command_type == "conference.create" and (not conference_sid or not call_sid):
                 raise ProviderOperationError("provider_conference_or_participant_sid_missing", retryable=True)
             if command.command_type == "participant.add" and (not conference_sid or not call_sid):
