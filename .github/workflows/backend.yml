@@ -2,11 +2,7 @@ name: Backend core checks
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/backend.yml"
-      - "backend/**"
-      - "compose.staging.yml"
-      - ".dockerignore"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
