@@ -38,6 +38,17 @@ class FakeRepository:
         return updated
 
 
+class FakeAddressVault:
+    def __init__(self):
+        self.entries = {}
+        self.deleted = []
+    def store(self, *, tenant_id, participant_ref, address):
+        self.entries[(tenant_id, participant_ref)] = address
+    def delete(self, *, tenant_id, participant_ref):
+        self.entries.pop((tenant_id, participant_ref), None)
+        self.deleted.append((tenant_id, participant_ref))
+
+
 class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.token = "a" * 48
@@ -111,6 +122,26 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 404)
         self.assertEqual(payload["error"], "not_found")
+
+    async def test_address_vault_provisioning_is_tenant_scoped_and_never_echoes_number(self):
+        self.app.address_vault = FakeAddressVault()
+        status, body = await self.request(
+            "PUT", "/v1/participants/participant-opaque/address", token=self.token,
+            body={"phone_number": "+14155550123"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"status": "stored"})
+        self.assertEqual(
+            self.app.address_vault.entries[("tenant-a", "participant-opaque")],
+            "+14155550123",
+        )
+        self.assertNotIn("+14155550123", json.dumps(body))
+        status, body = await self.request(
+            "DELETE", "/v1/participants/participant-opaque/address", token=self.token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"status": "deleted"})
+        self.assertEqual(self.app.address_vault.deleted, [("tenant-a", "participant-opaque")])
 
     async def test_create_session_atomically_enqueues_one_consent_command_per_participant(self):
         from providers.twilio.factory import TwilioConsentCommandFactory
