@@ -94,6 +94,12 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         event = self.decoder(self.request("consent", self.base()))
         self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
 
+    def test_absent_recording_callback_fails_closed(self):
+        event = self.decoder(self.request("recording", {
+            **self.base(), "ConferenceSid": CONFERENCE, "RecordingStatus": "absent",
+        }))
+        self.assertEqual(event.event_type, EventType.RECORDING_FAILED)
+
     def test_recording_start_is_normalized_before_completed_callback(self):
         event = self.decoder(self.request("recording", {
             **self.base(), "ConferenceSid": CONFERENCE, "RecordingStatus": "in-progress",
