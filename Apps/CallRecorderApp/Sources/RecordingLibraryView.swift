@@ -3,6 +3,26 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Keeps a user-initiated import eligible for Apple's finite background
+/// execution window. If the OS expires the lease or terminates the process,
+/// foreground maintenance reconciles any remaining staging artifact.
+@MainActor
+private final class BackgroundExecutionLease {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
+    }
+}
+
 /// Tracks one asynchronous playback-file lookup and rejects stale results
 /// after a newer request, deletion, retention cleanup or view teardown.
 struct PlaybackRequestGate {
@@ -297,6 +317,7 @@ struct RecordingLibraryView: View {
             : "Retention: automatically delete recordings after \(retentionDays) days."
     }
 
+    @MainActor
     private func handleImportSelection(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
@@ -307,7 +328,9 @@ struct RecordingLibraryView: View {
             isImporting = true
             isError = false
             announceStatus("Import started. Validating and copying the selected audio file.")
-            Task {
+            let backgroundLease = BackgroundExecutionLease(name: "RecordingImport")
+            Task { @MainActor in
+                defer { backgroundLease.end() }
                 do {
                     let recording = try await importService.importRecording(
                         from: url,
