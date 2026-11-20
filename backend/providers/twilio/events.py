@@ -110,11 +110,11 @@ class TwilioWebhookEventDecoder:
                 event_type = EventType.PARTICIPANT_DECLINED
         elif route == "call-status":
             status = fields.get("CallStatus", "")
-            if status in {"busy", "no-answer", "failed", "canceled"}:
+            if status in {"busy", "no-answer", "failed", "canceled", "completed"}:
                 if participant_ref is None:
-                    raise TwilioEventDecodeError("failed call callback has no mapped participant")
+                    raise TwilioEventDecodeError("terminal call callback has no mapped participant")
                 event_type = EventType.PARTICIPANT_DECLINED
-            elif status in {"completed", "in-progress", "ringing", "queued"}:
+            elif status in {"in-progress", "ringing", "queued", "initiated"}:
                 event_type = EventType.PROVIDER_STATUS
             else:
                 raise TwilioEventDecodeError("unsupported Twilio call status")
