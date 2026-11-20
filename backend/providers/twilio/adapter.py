@@ -219,6 +219,13 @@ class TwilioConferenceCommandAdapter:
                     status_callback_method="POST",
                     status_callback_event=["completed"],
                 )
+                if self.session_guard is not None:
+                    try:
+                        self.session_guard(command.session_id)
+                    except Exception:
+                        # Close the just-created leg if the session was cancelled
+                        # while the provider request was in flight.
+                        self.client.calls(call.sid).update(status="completed")
                 return ProviderExecutionResult(call_sid=call.sid)
 
             if kind == "consent.cancel":
