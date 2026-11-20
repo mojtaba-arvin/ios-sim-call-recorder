@@ -9,7 +9,7 @@ class TwilioWebhookASGI:
     MAX_BODY_BYTES = 256 * 1024
     def __init__(self, *, processor, decode_verified_request, canonical_public_origin):
         parts = urlsplit(canonical_public_origin)
-        if parts.scheme != 'https' or not parts.netloc or parts.path not in ('','/') or parts.query or parts.fragment:
+        if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.path not in ('','/') or parts.query or parts.fragment:
             raise ValueError('canonical public origin must be an HTTPS origin without path/query')
         self.processor = processor
         self.decode = decode_verified_request
@@ -37,14 +37,17 @@ class TwilioWebhookASGI:
         media_type = content_type.split(';',1)[0].strip().lower()
         if media_type == 'application/x-www-form-urlencoded':
             try:
-                parsed = parse_qs(body.decode('utf-8'), keep_blank_values=True, strict_parsing=True)
+                parsed = parse_qs(body.decode('utf-8'), keep_blank_values=True, strict_parsing=True, max_num_fields=256)
                 form = {key: tuple(values) for key,values in parsed.items()}
             except (UnicodeDecodeError, ValueError):
                 await self.respond(send,400); return
-        request = SignedWebhookRequest(
-            method='POST', public_url=public_url, content_type=content_type,
-            raw_body=bytes(body), headers=headers, form_parameters=form,
-        )
+        try:
+            request = SignedWebhookRequest(
+                method='POST', public_url=public_url, content_type=content_type,
+                raw_body=bytes(body), headers=headers, form_parameters=form,
+            )
+        except ValueError:
+            await self.respond(send,400); return
         try:
             self.processor.process(request=request, decode=self.decode)
         except InvalidWebhookSignature:
