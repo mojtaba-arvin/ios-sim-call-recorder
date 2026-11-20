@@ -99,6 +99,11 @@ class WebhookProcessor:
         if kind is EventType.PROVIDER_STATUS:
             return EventApplication(session)
 
+        if kind in {EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED} and session.state in {
+            SessionState.FAILED, SessionState.CANCELLED, SessionState.DEGRADED, SessionState.COMPLETED,
+        }:
+            return EventApplication(session)
+
         if kind is EventType.PARTICIPANT_DECLINED:
             updated = session.participant_declined(event.participant_ref, at=at)
             cancel_commands = tuple(
