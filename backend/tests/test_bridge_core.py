@@ -262,6 +262,14 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(session.failure_code, "participant_declined_consent")
         self.assertEqual(self.repo.get_outbox_commands(), ())
 
+    def test_call_completion_after_consent_does_not_revoke_consent(self):
+        self.preconsent()
+        before = self.repo.get_session("session-opaque-1")
+        self.send(self.event("call-completed-a", EventType.PARTICIPANT_DECLINED, "a"))
+        after = self.repo.get_session("session-opaque-1")
+        self.assertEqual(after.state, before.state)
+        self.assertEqual(after.consented_participants, before.consented_participants)
+
     def test_call_end_before_recording_fails_closed(self):
         self.send(self.event("ended", EventType.CALL_ENDED))
         session = self.repo.get_session("session-opaque-1")
