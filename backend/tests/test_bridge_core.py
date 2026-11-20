@@ -270,6 +270,20 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(after.state, before.state)
         self.assertEqual(after.consented_participants, before.consented_participants)
 
+    def test_call_end_before_recording_started_callback_waits_for_recording_ready(self):
+        self.preconsent()
+        self.send(self.event("call-ended-early", EventType.CALL_ENDED))
+        self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.FINALIZING)
+        self.send(self.event("recording-ready-late", EventType.RECORDING_READY))
+        self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.VERIFYING)
+
+    def test_recording_ready_before_conference_end_is_not_reverted(self):
+        self.preconsent()
+        self.send(self.event("recording-ready-first", EventType.RECORDING_READY))
+        self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.VERIFYING)
+        self.send(self.event("conference-end-late", EventType.CALL_ENDED))
+        self.assertEqual(self.repo.get_session("session-opaque-1").state, SessionState.VERIFYING)
+
     def test_call_end_before_recording_fails_closed(self):
         self.send(self.event("ended", EventType.CALL_ENDED))
         session = self.repo.get_session("session-opaque-1")
