@@ -48,6 +48,7 @@ struct PlaybackRequestGate {
 }
 
 struct RecordingLibraryView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("recordingRetentionDays") private var retentionDays = 0
     @State private var isImporterPresented = false
     @State private var isImporting = false
@@ -79,11 +80,15 @@ struct RecordingLibraryView: View {
 
                 Text("Call Recordings")
                     .font(.largeTitle.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(isError ? "Error: \(statusMessage)" : statusMessage)
                     .multilineTextAlignment(.center)
                     .foregroundColor(isError ? .red : .secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(isError ? "Error: \(statusMessage)" : statusMessage)
                     .accessibilityAddTraits(.updatesFrequently)
+                    .accessibilityIdentifier("library.status")
 
                 Button {
                     isImporterPresented = true
@@ -99,6 +104,7 @@ struct RecordingLibraryView: View {
                     ProgressView("Validating and importing…")
                         .accessibilityLabel("Importing recording")
                         .accessibilityValue("Validating and copying the selected audio file")
+                        .accessibilityIdentifier("library.importProgress")
                 }
 
                 if recordings.isEmpty {
@@ -227,6 +233,13 @@ struct RecordingLibraryView: View {
             .task {
                 _ = await refreshRecordings()
             }
+            .onChange(of: scenePhase) { phase in
+                guard phase == .active else { return }
+                // A prior process may have been suspended or terminated during
+                // import. Maintenance validates the catalog and removes only
+                // abandoned staging files when the app becomes active again.
+                Task { _ = await refreshRecordings() }
+            }
             .onChange(of: retentionDays) { _ in
                 Task {
                     guard await refreshRecordings() else { return }
@@ -293,6 +306,7 @@ struct RecordingLibraryView: View {
             guard let url = urls.first else { return }
             isImporting = true
             isError = false
+            announceStatus("Import started. Validating and copying the selected audio file.")
             Task {
                 do {
                     let recording = try await importService.importRecording(
@@ -300,9 +314,9 @@ struct RecordingLibraryView: View {
                         source: .filesApp
                     )
                     recordings.insert(recording, at: 0)
-                    statusMessage = "Recording imported and validated successfully."
+                    announceStatus("Recording imported and validated successfully.")
                 } catch {
-                    statusMessage = error.localizedDescription
+                    announceStatus(error.localizedDescription, isError: true)
                     isError = true
                 }
                 isImporting = false
@@ -516,6 +530,17 @@ struct RecordingLibraryView: View {
                 statusMessage = "A recording could not be deleted."
                 isError = true
             }
+        }
+    }
+
+    private func announceStatus(_ message: String, isError: Bool = false) {
+        statusMessage = message
+        DispatchQueue.main.async {
+            guard UIAccessibility.isVoiceOverRunning else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: isError ? "Error. \(message)" : message
+            )
         }
     }
 
