@@ -100,13 +100,14 @@ class TwilioWebhookEventDecoder:
         consent_method = None
         policy_version = None
         if route == "consent":
-            if fields.get("Digits") != "1":
-                raise TwilioEventDecodeError("affirmative consent digit was not received")
             if participant_ref is None:
                 raise TwilioEventDecodeError("consent callback has no mapped participant")
-            event_type = EventType.PARTICIPANT_CONSENTED
-            consent_method = "dtmf_1"
-            policy_version = self._consent_policy_version
+            if fields.get("Digits") == "1":
+                event_type = EventType.PARTICIPANT_CONSENTED
+                consent_method = "dtmf_1"
+                policy_version = self._consent_policy_version
+            else:
+                event_type = EventType.PARTICIPANT_DECLINED
         elif route == "conference":
             callback_event = fields.get("StatusCallbackEvent", "")
             if callback_event == "conference-start":
@@ -123,7 +124,7 @@ class TwilioWebhookEventDecoder:
             status = fields.get("RecordingStatus", "")
             if status == "completed":
                 event_type = EventType.RECORDING_READY
-            elif status == "failed":
+            elif status in {"failed", "absent"}:
                 event_type = EventType.RECORDING_FAILED
             else:
                 raise TwilioEventDecodeError("unsupported Twilio Recording callback")
