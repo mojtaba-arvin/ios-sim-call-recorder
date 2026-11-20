@@ -13,11 +13,12 @@ This is a provider-neutral domain/persistence foundation with an authenticated t
 - Bounded retries, lease-token ownership and dead-letter state.
 - Opaque participant references rather than phone numbers.
 - Framework-neutral authenticated ASGI create/read/cancel endpoints with tenant-scoped PostgreSQL session ownership (migration 0005).
-- AES-GCM encrypted tenant-scoped participant-address vault (migration 0006); addresses are decrypted only in process memory for an authorized resolver call.
+- AES-GCM encrypted tenant-scoped participant-address vault (migration 0006); addresses are decrypted only in process memory for a trusted caller that has already authorized the tenant.
+- KMS-encrypted S3-compatible WAV object-storage adapter with opaque tenant-derived keys, bounded presigned downloads and validation-before-upload.
 
 ## Persistence and migrations
 
-PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver, Twilio webhook SDK, ASGI server and AES-GCM address-vault crypto):
+PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver, Twilio webhook SDK, ASGI server, AES-GCM address-vault crypto and S3 SDK):
 
 ```sh
 python -m pip install -r backend/requirements.txt
@@ -135,7 +136,7 @@ Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secr
 
 The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
 
-This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The signed webhook transport ingress and encrypted address resolver components now exist; the production Twilio event decoder, audited address-provisioning workflow and live provider command adapter remain separate work.
+This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The signed webhook transport ingress, encrypted address resolver and KMS-backed S3 storage adapter components now exist; production event decoding, audited address provisioning, bucket policy/IAM setup, retention lifecycle and live provider command adapter remain separate work.
 
 
 ## Running the ASGI API locally
@@ -164,3 +165,20 @@ trusted TLS reverse proxy before any remote access.
 The Docker image and compose file are staging scaffolding only. No public
 deployment, TLS certificate, secret manager integration, provider account,
 live provider adapter or production readiness is implied.
+
+
+## Media object storage adapter
+
+`bridge_core.object_storage.S3MediaObjectStore` validates WAV structure and
+size before upload, computes a SHA-256 digest, and uploads with
+`ServerSideEncryption=aws:kms`, a configured KMS key and opaque tenant-derived
+object prefixes. Session and media identifiers must be UUIDs. Download,
+delete and presigned-URL operations derive the object key from the authorized
+tenant/session/media tuple; URL expiry is restricted to 60–300 seconds.
+
+The caller must authorize the tenant before invoking download or URL creation.
+The bucket must have Block Public Access enabled, a restrictive bucket policy,
+least-privilege IAM/KMS grants, versioning/lifecycle rules appropriate to the
+retention policy, access logging and deletion/replication controls. The adapter
+is not wired to a live provider retrieval pipeline and no AWS bucket or KMS key
+is configured by this repository.
