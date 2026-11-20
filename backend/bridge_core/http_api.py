@@ -34,6 +34,24 @@ class BridgeSessionsASGI:
     async def __call__(self, scope, receive, send):
         if scope.get('type') != 'http':
             await self.respond(send, 404, {'error':'not_found'}); return
+        method = scope.get('method', 'GET').upper()
+        path = scope.get('path', '')
+        if path == '/health/live':
+            if method != 'GET':
+                await self.respond(send, 405, {'error': 'method_not_allowed'})
+            else:
+                await self.respond(send, 200, {'status': 'ok'})
+            return
+        if path == '/health/ready':
+            if method != 'GET':
+                await self.respond(send, 405, {'error': 'method_not_allowed'})
+            else:
+                try:
+                    self.repository.ping()
+                    await self.respond(send, 200, {'status': 'ready'})
+                except Exception:
+                    await self.respond(send, 503, {'status': 'not_ready'})
+            return
         headers = {k.decode('latin-1').lower():v.decode('latin-1') for k,v in scope.get('headers',[])}
         tenant = self.authenticator.tenant_for(headers.get('authorization'))
         if tenant is None:
