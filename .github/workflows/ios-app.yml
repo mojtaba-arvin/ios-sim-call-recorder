@@ -2,11 +2,7 @@ name: iOS app build
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ios-app.yml"
-      - "Apps/CallRecorderApp/**"
-      - "Packages/CallRecorderCore/**"
-      - "project.yml"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
