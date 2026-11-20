@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 from .application import EventApplication, OutboxCommand
-from .domain import BridgeSession, ConsentEvidence, SessionState
+from .domain import BridgeSession, ConsentEvidence, InvalidTransition, SessionState
 
 class EventIdentityConflict(ValueError):
     """A provider reused an event ID for a different session."""
@@ -59,15 +59,17 @@ class PostgresBridgeRepository:
     def __init__(self, connect: Callable[[], Any]):
         self._connect = connect
 
-    def create_session(self, session: BridgeSession) -> None:
+    def create_session(self, session: BridgeSession, *, tenant_id: str = "default") -> None:
+        if not tenant_id or not tenant_id.strip() or len(tenant_id) > 128:
+            raise ValueError("tenant_id must be a non-empty bounded identifier")
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO bridge_sessions
-                    (session_id, expected_participants, expected_participant_refs, state, joined_participants,
-                     consented_participants, consent_evidence, failure_code, updated_at)
-                    VALUES (%s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)""",
-                    (session.session_id, session.expected_participants,
+                    (tenant_id, session_id, expected_participants, expected_participant_refs, state,
+                     joined_participants, consented_participants, consent_evidence, failure_code, updated_at)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)""",
+                    (tenant_id, session.session_id, session.expected_participants,
                      json.dumps(sorted(session.expected_participant_refs)), session.state.value,
                      json.dumps(sorted(session.joined_participants)),
                      json.dumps(sorted(session.consented_participants)),
@@ -75,15 +77,47 @@ class PostgresBridgeRepository:
                      session.failure_code, session.updated_at),
                 )
 
-    def get_session(self, session_id: str) -> BridgeSession | None:
+    def get_session(self, session_id: str, *, tenant_id: str | None = None) -> BridgeSession | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                if tenant_id is None:
+                    cur.execute(
+                        """SELECT session_id, expected_participants, expected_participant_refs, state,
+                        joined_participants, consented_participants, consent_evidence, failure_code, updated_at
+                        FROM bridge_sessions WHERE session_id = %s""", (session_id,))
+                else:
+                    cur.execute(
+                        """SELECT session_id, expected_participants, expected_participant_refs, state,
+                        joined_participants, consented_participants, consent_evidence, failure_code, updated_at
+                        FROM bridge_sessions WHERE session_id = %s AND tenant_id = %s""",
+                        (session_id, tenant_id))
+                row = cur.fetchone()
+        return self._session_from_row(row) if row else None
+
+    def cancel_session(self, session_id: str, *, tenant_id: str) -> BridgeSession:
+        """Cancel only before provider side effects can exist; never fake remote closure."""
+        if not tenant_id or not tenant_id.strip():
+            raise ValueError("tenant_id is required")
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT session_id, expected_participants, expected_participant_refs, state,
                     joined_participants, consented_participants, consent_evidence, failure_code, updated_at
-                    FROM bridge_sessions WHERE session_id = %s""", (session_id,))
+                    FROM bridge_sessions WHERE session_id = %s AND tenant_id = %s FOR UPDATE""",
+                    (session_id, tenant_id))
                 row = cur.fetchone()
-        return self._session_from_row(row) if row else None
+                if row is None:
+                    raise KeyError(session_id)
+                current = self._session_from_row(row)
+                if current.state is SessionState.CANCELLED:
+                    return current
+                if current.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION}:
+                    raise InvalidTransition("provider activity may already exist; remote close is required")
+                updated = current.transition(SessionState.CANCELLED)
+                cur.execute(
+                    "UPDATE bridge_sessions SET state = %s, updated_at = %s WHERE session_id = %s AND tenant_id = %s",
+                    (updated.state.value, updated.updated_at, session_id, tenant_id))
+                return updated
 
     def apply_event_once(
         self, provider: str, event_id: str, session_id: str,
