@@ -13,6 +13,9 @@ class FakeRepository:
         self.sessions = {}
         self.owners = {}
 
+    def ping(self):
+        return None
+
     def create_session(self, session, *, tenant_id):
         self.sessions[session.session_id] = session
         self.owners[session.session_id] = tenant_id
@@ -66,6 +69,15 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         start = next(item for item in sent if item["type"] == "http.response.start")
         response = next(item for item in sent if item["type"] == "http.response.body")
         return start["status"], json.loads(response["body"])
+
+    async def test_health_endpoints_are_available_without_tenant_credentials(self):
+        status, payload = await self.request("GET", "/health/live")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "ok")
+
+        status, payload = await self.request("GET", "/health/ready")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "ready")
 
     async def test_authentication_required(self):
         status, payload = await self.request("GET", "/v1/bridge-sessions/unknown")
