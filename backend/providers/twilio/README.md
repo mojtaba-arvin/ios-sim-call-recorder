@@ -45,3 +45,17 @@ The implementation uses the official SDK's default request-validation behavior.
 If a Twilio account is configured for a non-default signature algorithm or a
 different webhook mode, treat that as a compatibility change and add explicit
 SDK-backed tests before enabling it; do not silently fall back to custom crypto.
+
+
+## ASGI transport ingress
+
+The bounded ASGI transport wrapper lives in `ingress.py`. It reconstructs
+the public URL from a configured HTTPS origin plus the ASGI raw path/query,
+preserves the exact request bytes, parses form fields once (including duplicate
+values), and passes the same request object through `WebhookProcessor`.
+The event decoder is injected and runs only after signature verification.
+
+See [ingress boundary and remaining deployment gates](ingress.md). The
+transport wrapper is implemented, but a production Twilio event decoder,
+provider-account ownership checks, replay policy, TLS deployment and live
+provider command adapter are not complete.
