@@ -107,7 +107,7 @@ class TwilioRecordingMediaIngestor:
         self.retention_days, self.max_bytes = retention_days, max_bytes
 
     def __call__(self, request, accepted: bool = True) -> None:
-        if not accepted or not request.public_url.rstrip("/").endswith("/recording"):
+        if not request.public_url.rstrip("/").endswith("/recording"):
             return
         fields = self._fields(request.form_parameters or {})
         if fields.get("AccountSid") != self.account_sid or fields.get("RecordingStatus") != "completed":
