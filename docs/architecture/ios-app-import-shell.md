@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. Simulator CI currently builds the app; app-hosted XCTest execution is being added in this change and must pass on the exact PR head commit. Physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. The iOS workflow is configured to lint the bundled privacy manifest, build the simulator app and execute the app-hosted XCTest suite; its result must pass on the exact PR head commit. Physical-device and call-audio verification remain QA gates.
 
 ## Build
 
