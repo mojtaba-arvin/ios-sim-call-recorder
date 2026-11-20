@@ -83,7 +83,7 @@ def _twilio_runtime(connect):
         resource_resolver=resolver, object_store=object_store,
         retention_days=int(os.environ.get("MEDIA_RETENTION_DAYS", "30")),
     )
-    return client, adapter, decoder, processor, media_ingestor, provider_account_id
+    return client, adapter, decoder, processor, media_ingestor, provider_account_id, vault
 
 
 def create_app():
@@ -108,11 +108,12 @@ def create_app():
             repository=repository, authenticator=authenticator,
         ))
 
-    client, adapter, decoder, processor, media_ingestor, provider_account_id = _twilio_runtime(connect)
+    client, adapter, decoder, processor, media_ingestor, provider_account_id, vault = _twilio_runtime(connect)
     sessions = BridgeSessionsASGI(
         repository=repository,
         authenticator=authenticator,
         initial_commands=TwilioConsentCommandFactory(provider_account_id=provider_account_id),
+        address_vault=vault,
     )
     webhooks = TwilioWebhookASGI(
         processor=processor,
