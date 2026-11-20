@@ -137,7 +137,7 @@ class OutboxCommandDispatcher:
 
         try:
             participant_ref = command.payload.get("participant_ref")
-            if command.command_type in {"consent.request", "conference.create", "participant.add"} and (
+            if command.command_type in {"consent.request", "consent.cancel", "conference.create", "participant.add"} and (
                 not isinstance(participant_ref, str)
                 or not participant_ref
                 or participant_ref != participant_ref.strip()
@@ -158,7 +158,7 @@ class OutboxCommandDispatcher:
             )
             call_sid = None
             if isinstance(participant_ref, str):
-                if command.command_type == "consent.request":
+                if command.command_type in {"consent.request", "consent.cancel"}:
                     call_sid = self._repository.get_provider_consent_call_resource(
                         command.provider, command.provider_account_id,
                         command.session_id, participant_ref,
@@ -216,7 +216,7 @@ class OutboxCommandDispatcher:
                     command.session_id, conference_sid,
                 )
             if call_sid and isinstance(participant_ref, str):
-                if command.command_type == "consent.request":
+                if command.command_type in {"consent.request", "consent.cancel"}:
                     self._repository.put_provider_consent_call_resource(
                         command.provider, command.provider_account_id,
                         command.session_id, participant_ref, call_sid,
