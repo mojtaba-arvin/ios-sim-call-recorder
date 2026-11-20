@@ -1,0 +1,30 @@
+name: Infrastructure validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: AWS Terraform validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check Terraform formatting
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 fmt -check -recursive infra/aws
+      - name: Initialize providers without a backend
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws init -backend=false -input=false
+      - name: Validate Terraform configuration
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws validate

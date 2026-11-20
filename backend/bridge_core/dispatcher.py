@@ -80,9 +80,16 @@ class DispatchRepository(Protocol):
     def get_provider_participant_resource(self, provider: str, provider_account_id: str,
                                           session_id: str, participant_ref: str) -> str | None: ...
 
+    def get_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str) -> str | None: ...
+
     def put_provider_participant_resource(self, provider: str, provider_account_id: str,
                                           session_id: str, participant_ref: str,
                                           call_sid: str) -> None: ...
+
+    def put_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str,
+                                           call_sid: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +137,7 @@ class OutboxCommandDispatcher:
 
         try:
             participant_ref = command.payload.get("participant_ref")
-            if command.command_type in {"conference.create", "participant.add"} and (
+            if command.command_type in {"consent.request", "consent.cancel", "conference.create", "participant.add"} and (
                 not isinstance(participant_ref, str)
                 or not participant_ref
                 or participant_ref != participant_ref.strip()
@@ -151,10 +158,16 @@ class OutboxCommandDispatcher:
             )
             call_sid = None
             if isinstance(participant_ref, str):
-                call_sid = self._repository.get_provider_participant_resource(
-                    command.provider, command.provider_account_id,
-                    command.session_id, participant_ref,
-                )
+                if command.command_type in {"consent.request", "consent.cancel"}:
+                    call_sid = self._repository.get_provider_consent_call_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref,
+                    )
+                else:
+                    call_sid = self._repository.get_provider_participant_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref,
+                    )
             reconciliation = adapter.reconcile(
                 command, conference_sid=conference_sid, call_sid=call_sid,
             )
@@ -191,6 +204,8 @@ class OutboxCommandDispatcher:
                 conference_sid = reconciliation.conference_sid or conference_sid
                 call_sid = reconciliation.call_sid or call_sid
 
+            if command.command_type == "consent.request" and not call_sid:
+                raise ProviderOperationError("provider_call_sid_missing", retryable=True)
             if command.command_type == "conference.create" and (not conference_sid or not call_sid):
                 raise ProviderOperationError("provider_conference_or_participant_sid_missing", retryable=True)
             if command.command_type == "participant.add" and (not conference_sid or not call_sid):
@@ -201,10 +216,16 @@ class OutboxCommandDispatcher:
                     command.session_id, conference_sid,
                 )
             if call_sid and isinstance(participant_ref, str):
-                self._repository.put_provider_participant_resource(
-                    command.provider, command.provider_account_id,
-                    command.session_id, participant_ref, call_sid,
-                )
+                if command.command_type in {"consent.request", "consent.cancel"}:
+                    self._repository.put_provider_consent_call_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref, call_sid,
+                    )
+                else:
+                    self._repository.put_provider_participant_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref, call_sid,
+                    )
             self._repository.acknowledge_outbox(command.command_id, command.lease_token)
             return DispatchResult(str(command.command_id), "acknowledged")
 

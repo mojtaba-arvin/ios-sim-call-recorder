@@ -1,5 +1,7 @@
 # Authenticated tenant-scoped ASGI endpoints for bridge sessions.
 from __future__ import annotations
+
+from bridge_core.address_vault import ParticipantAddressInUseError
 import hashlib, hmac, json
 from typing import Any
 from uuid import uuid4
@@ -27,9 +29,12 @@ class BearerTokenAuthenticator:
 
 class BridgeSessionsASGI:
     MAX_BODY_BYTES = 16384
-    MAX_PARTICIPANTS = 10
-    def __init__(self, *, repository, authenticator):
+    MAX_PARTICIPANTS = 2
+    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None, media_service=None):
         self.repository, self.authenticator = repository, authenticator
+        self.initial_commands = initial_commands
+        self.address_vault = address_vault
+        self.media_service = media_service
 
     async def __call__(self, scope, receive, send):
         if scope.get('type') != 'http':
@@ -59,14 +64,54 @@ class BridgeSessionsASGI:
         method, path = scope.get('method','GET').upper(), scope.get('path','')
         parts = [p for p in path.split('/') if p]
         try:
+            if len(parts) == 4 and parts[:2] == ['v1', 'participants'] and parts[3] == 'address':
+                participant_ref = parts[2]
+                if (not participant_ref or len(participant_ref) > 128
+                        or participant_ref != participant_ref.strip()
+                        or any(character.isspace() for character in participant_ref)
+                        or '/' in participant_ref):
+                    await self.respond(send, 400, {'error': 'invalid_request'}); return
+                if self.address_vault is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                if method == 'PUT':
+                    payload = await self.read_json(receive)
+                    if set(payload) != {'phone_number'} or not isinstance(payload['phone_number'], str):
+                        await self.respond(send, 400, {'error': 'invalid_request'}); return
+                    try:
+                        self.address_vault.store(
+                            tenant_id=tenant, participant_ref=participant_ref,
+                            address=payload['phone_number'],
+                        )
+                    except ParticipantAddressInUseError:
+                        await self.respond(send, 409, {'error': 'address_in_use'}); return
+                    await self.respond(send, 200, {'status': 'stored'}); return
+                if method == 'DELETE':
+                    try:
+                        self.address_vault.delete(tenant_id=tenant, participant_ref=participant_ref)
+                    except ParticipantAddressInUseError:
+                        await self.respond(send, 409, {'error': 'address_in_use'}); return
+                    await self.respond(send, 200, {'status': 'deleted'}); return
+                await self.respond(send, 405, {'error': 'method_not_allowed'}); return
             if method == 'POST' and parts == ['v1','bridge-sessions']:
                 payload = await self.read_json(receive)
                 refs = payload.get('participant_refs')
                 if set(payload) != {'participant_refs'} or not isinstance(refs,list) or not 2 <= len(refs) <= self.MAX_PARTICIPANTS or any(not isinstance(x,str) for x in refs) or len(set(refs)) != len(refs):
                     await self.respond(send,400,{'error':'invalid_request'}); return
-                session = BridgeSession(str(uuid4()),len(refs),frozenset(refs),state=SessionState.CREATED)
-                self.repository.create_session(session,tenant_id=tenant)
+                state = SessionState.AWAITING_USER_ACTION if self.initial_commands else SessionState.CREATED
+                session = BridgeSession(str(uuid4()),len(refs),frozenset(refs),state=state)
+                commands = tuple(self.initial_commands(session)) if self.initial_commands else ()
+                if self.initial_commands:
+                    self.repository.create_session(session,tenant_id=tenant,commands=commands)
+                else:
+                    self.repository.create_session(session,tenant_id=tenant)
                 await self.respond(send,201,self.serialize(session)); return
+            if len(parts) == 4 and parts[:2] == ['v1','bridge-sessions'] and parts[3] == 'media' and method == 'GET':
+                if self.media_service is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                result = self.media_service.create_download(tenant_id=tenant, session_id=parts[2])
+                if result is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                await self.respond(send, 200, result); return
             if len(parts) == 3 and parts[:2] == ['v1','bridge-sessions'] and method == 'GET':
                 session = self.repository.get_session(parts[2],tenant_id=tenant)
                 if session is None: await self.respond(send,404,{'error':'not_found'})

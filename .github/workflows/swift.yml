@@ -2,9 +2,7 @@ name: Swift core checks
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/swift.yml"
-      - "Packages/CallRecorderCore/**"
+    branches: [main]
   workflow_dispatch:
 
 permissions:

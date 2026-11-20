@@ -1,0 +1,91 @@
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_staging_deploy:
+        description: Confirm deployment to the AWS staging environment
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm_staging_deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.2.1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Authenticate to ECR
+        id: ecr
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          REGISTRY="${ECR_REPOSITORY%%/*}"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build and publish immutable source commit
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          docker build --pull -f backend/Dockerfile -t "$ECR_REPOSITORY:$GITHUB_SHA" -t "$ECR_REPOSITORY:staging" .
+          docker push "$ECR_REPOSITORY:$GITHUB_SHA"
+          docker push "$ECR_REPOSITORY:staging"
+
+      - name: Run ordered database migrations
+        env:
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+          ECS_API_SERVICE: ${{ vars.ECS_API_SERVICE }}
+        run: |
+          SERVICE="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_API_SERVICE")"
+          TASK_DEFINITION="$(echo "$SERVICE" | jq -r '.services[0].taskDefinition')"
+          NETWORK="$(echo "$SERVICE" | jq -c '.services[0].networkConfiguration')"
+          TASK="$(aws ecs run-task --cluster "$ECS_CLUSTER" --launch-type FARGATE --task-definition "$TASK_DEFINITION" --network-configuration "$NETWORK" --overrides '{"containerOverrides":[{"name":"api","command":["python","migrate.py"]}]}')"
+          test "$(echo "$TASK" | jq '.failures | length')" -eq 0
+          TASK_ARN="$(echo "$TASK" | jq -r '.tasks[0].taskArn')"
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE="$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" | jq -r '.tasks[0].containers[] | select(.name=="api") | .exitCode')"
+          test "$EXIT_CODE" = "0"
+
+      - name: Roll out API and provider services
+        env:
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+          ECS_API_SERVICE: ${{ vars.ECS_API_SERVICE }}
+          ECS_WORKER_SERVICE: ${{ vars.ECS_WORKER_SERVICE }}
+          ECS_RETENTION_SERVICE: ${{ vars.ECS_RETENTION_SERVICE }}
+        run: |
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_API_SERVICE" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_API_SERVICE"
+          for SERVICE in "$ECS_WORKER_SERVICE" "$ECS_RETENTION_SERVICE"; do
+            DESIRED="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$SERVICE" | jq -r '.services[0].desiredCount')"
+            if [ "$DESIRED" -gt 0 ]; then
+              aws ecs update-service --cluster "$ECS_CLUSTER" --service "$SERVICE" --force-new-deployment >/dev/null
+              aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$SERVICE"
+            fi
+          done
+
+      - name: Verify staging readiness
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 5 "$STAGING_API_URL/health/ready"

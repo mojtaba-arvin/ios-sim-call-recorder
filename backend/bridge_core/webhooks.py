@@ -38,7 +38,7 @@ class NormalizedProviderEvent:
                 raise ValueError(f"{name} must be a non-empty string")
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware")
-        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED}:
+        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED}:
             if not isinstance(self.participant_ref, str) or not self.participant_ref.strip():
                 raise ValueError("participant event requires opaque participant_ref")
         if self.event_type is EventType.PARTICIPANT_CONSENTED:
@@ -92,7 +92,38 @@ class WebhookProcessor:
             raise InvalidTransition("stale provider event cannot move session state backwards")
 
         if kind is EventType.BRIDGE_RINGING:
+            if session.state in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
+                return EventApplication(session)
             return EventApplication(session.transition(SessionState.BRIDGE_LEG_RINGING, at=at))
+
+        if kind is EventType.PROVIDER_STATUS:
+            return EventApplication(session)
+
+        if kind in {EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED} and session.state in {
+            SessionState.FAILED, SessionState.CANCELLED, SessionState.DEGRADED, SessionState.COMPLETED,
+        }:
+            return EventApplication(session)
+
+        if kind is EventType.PARTICIPANT_DECLINED:
+            if event.participant_ref in session.consented_participants:
+                return EventApplication(session)
+            updated = session.participant_declined(event.participant_ref, at=at)
+            cancel_commands = tuple(
+                OutboxCommand(
+                    command_type="consent.cancel",
+                    idempotency_key=(
+                        f"consent-cancel:{event.provider}:{event.provider_account_id}:"
+                        f"{event.session_id}:{participant_ref}"
+                    ),
+                    session_id=event.session_id,
+                    provider=event.provider,
+                    provider_account_id=event.provider_account_id,
+                    payload={"participant_ref": participant_ref},
+                )
+                for participant_ref in sorted(session.expected_participant_refs)
+                if participant_ref != event.participant_ref
+            )
+            return EventApplication(updated, cancel_commands)
 
         if kind is EventType.PARTICIPANT_CONSENTED:
             updated = session.participant_consented(
@@ -154,11 +185,19 @@ class WebhookProcessor:
             return EventApplication(updated, commands)
 
         if kind is EventType.RECORDING_STARTED:
-            return EventApplication(session.transition(SessionState.RECORDING, at=at))
+            if session.state is SessionState.PARTICIPANTS_JOINING:
+                return EventApplication(session.transition(SessionState.RECORDING, at=at))
+            return EventApplication(session)
 
         if kind is EventType.CALL_ENDED:
-            if session.state is SessionState.RECORDING:
+            if session.state in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
                 return EventApplication(session.transition(SessionState.FINALIZING, at=at))
+            if session.state in {
+                SessionState.FINALIZING, SessionState.VERIFYING,
+                SessionState.COMPLETED, SessionState.DEGRADED,
+                SessionState.FAILED, SessionState.CANCELLED,
+            }:
+                return EventApplication(session)
             return EventApplication(
                 session.transition(
                     SessionState.FAILED,
@@ -168,11 +207,20 @@ class WebhookProcessor:
             )
 
         if kind is EventType.RECORDING_READY:
-            return EventApplication(session.transition(SessionState.VERIFYING, at=at))
+            if session.state in {
+                SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING, SessionState.FINALIZING,
+            }:
+                return EventApplication(session.transition(SessionState.VERIFYING, at=at))
+            return EventApplication(session)
 
         if kind is EventType.RECORDING_FAILED:
-            return EventApplication(
-                session.transition(SessionState.FAILED, failure_code="provider_recording_failed", at=at)
-            )
+            if session.state in {
+                SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING,
+                SessionState.FINALIZING, SessionState.VERIFYING,
+            }:
+                return EventApplication(
+                    session.transition(SessionState.FAILED, failure_code="provider_recording_failed", at=at)
+                )
+            return EventApplication(session)
 
         raise InvalidTransition(f"unsupported provider event: {kind}")

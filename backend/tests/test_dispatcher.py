@@ -19,6 +19,7 @@ class FakeRepository:
         self.commands = tuple(commands)
         self.resources = {}
         self.participant_resources = {}
+        self.consent_resources = {}
         self.acked = []
         self.failed = []
         self.terminals = []
@@ -39,6 +40,16 @@ class FakeRepository:
 
     def get_provider_participant_resource(self, provider, account, session, participant_ref):
         return self.participant_resources.get((provider, account, session, participant_ref))
+
+    def get_provider_consent_call_resource(self, provider, account, session, participant_ref):
+        return self.consent_resources.get((provider, account, session, participant_ref))
+
+    def put_provider_consent_call_resource(self, provider, account, session, participant_ref, call_sid):
+        key = (provider, account, session, participant_ref)
+        existing = self.consent_resources.get(key)
+        if existing is not None and existing != call_sid:
+            raise AssertionError("consent call mapping must be immutable")
+        self.consent_resources[key] = call_sid
 
     def put_provider_participant_resource(self, provider, account, session, participant_ref, call_sid):
         key = (provider, account, session, participant_ref)
@@ -178,6 +189,23 @@ class DispatcherTests(unittest.TestCase):
                                         "participant-opaque-1")],
             "CA" + "e" * 32,
         )
+
+    def test_consent_call_sid_is_stored_separately_from_conference_leg(self):
+        command = leased_command(participant_ref="participant-opaque-1", command_type="consent.request")
+        repo = FakeRepository([command])
+        adapter = FakeAdapter(
+            ReconciliationResult(ReconciliationState.NOT_APPLIED),
+            ProviderExecutionResult(call_sid="CA" + "f" * 32),
+        )
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo, adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+        result = dispatcher.dispatch_once()
+        self.assertEqual(result[0].outcome, "acknowledged")
+        key = ("twilio", "account-opaque", "session-opaque", "participant-opaque-1")
+        self.assertEqual(repo.consent_resources[key], "CA" + "f" * 32)
+        self.assertNotIn(key, repo.participant_resources)
 
     def test_malformed_reconciliation_state_is_never_treated_as_applied(self):
         command = leased_command()

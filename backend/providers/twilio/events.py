@@ -100,13 +100,24 @@ class TwilioWebhookEventDecoder:
         consent_method = None
         policy_version = None
         if route == "consent":
-            if fields.get("Digits") != "1":
-                raise TwilioEventDecodeError("affirmative consent digit was not received")
             if participant_ref is None:
                 raise TwilioEventDecodeError("consent callback has no mapped participant")
-            event_type = EventType.PARTICIPANT_CONSENTED
-            consent_method = "dtmf_1"
-            policy_version = self._consent_policy_version
+            if fields.get("Digits") == "1":
+                event_type = EventType.PARTICIPANT_CONSENTED
+                consent_method = "dtmf_1"
+                policy_version = self._consent_policy_version
+            else:
+                event_type = EventType.PARTICIPANT_DECLINED
+        elif route == "call-status":
+            status = fields.get("CallStatus", "")
+            if status in {"busy", "no-answer", "failed", "canceled", "completed"}:
+                if participant_ref is None:
+                    raise TwilioEventDecodeError("terminal call callback has no mapped participant")
+                event_type = EventType.PARTICIPANT_DECLINED
+            elif status in {"in-progress", "ringing", "queued", "initiated"}:
+                event_type = EventType.PROVIDER_STATUS
+            else:
+                raise TwilioEventDecodeError("unsupported Twilio call status")
         elif route == "conference":
             callback_event = fields.get("StatusCallbackEvent", "")
             if callback_event == "conference-start":
@@ -117,13 +128,17 @@ class TwilioWebhookEventDecoder:
                 event_type = EventType.PARTICIPANT_JOINED
             elif callback_event == "conference-end":
                 event_type = EventType.CALL_ENDED
+            elif callback_event == "participant-leave":
+                event_type = EventType.PROVIDER_STATUS
             else:
                 raise TwilioEventDecodeError("unsupported Twilio Conference callback")
         elif route == "recording":
             status = fields.get("RecordingStatus", "")
-            if status == "completed":
+            if status == "in-progress":
+                event_type = EventType.RECORDING_STARTED
+            elif status == "completed":
                 event_type = EventType.RECORDING_READY
-            elif status == "failed":
+            elif status in {"failed", "absent"}:
                 event_type = EventType.RECORDING_FAILED
             else:
                 raise TwilioEventDecodeError("unsupported Twilio Recording callback")
@@ -156,7 +171,8 @@ class TwilioWebhookEventDecoder:
             event_type=event_type,
             occurred_at=occurred_at,
             participant_ref=participant_ref if event_type in {
-                EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED
+                EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED,
+                EventType.PARTICIPANT_DECLINED,
             } else None,
             payload_digest=payload_digest,
             consent_policy_version=policy_version,
