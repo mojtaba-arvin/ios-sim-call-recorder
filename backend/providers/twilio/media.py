@@ -24,7 +24,7 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bridge_core.object_storage import S3MediaObjectStore
-from bridge_core.media_validation import validate_wav
+from bridge_core.media_validation import validate_wav, MediaValidationError
 from bridge_core.domain import SessionState
 from bridge_core.persistence import PostgresBridgeRepository
 from providers.twilio.events import TwilioEventDecodeError
@@ -32,6 +32,12 @@ from providers.twilio.events import TwilioEventDecodeError
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
 _ACCOUNT_SID = re.compile(r"^AC[0-9a-fA-F]{32}$")
 _MAX_MEDIA_BYTES = 500 * 1024 * 1024
+
+
+class MediaRejected(ValueError):
+    def __init__(self, code: str, byte_count: int = 0):
+        self.code, self.byte_count = code, byte_count
+        super().__init__(code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,9 +132,31 @@ class TwilioRecordingMediaIngestor:
         if existing:
             self._finalize_session(session_id, verified=(existing == "verified"))
             return
-        source = self._download(recording_sid)
         try:
-            metadata = validate_wav(source, max_bytes=self.max_bytes)
+            source = self._download(recording_sid)
+        except MediaRejected as rejected:
+            self._persist_asset(
+                media_id=media_id, tenant_id=tenant_id, session_id=session_id,
+                recording_sid=recording_sid, object_key=None, sha256=None,
+                byte_count=rejected.byte_count, duration=None, sample_rate=None,
+                channels=None, activity=[], channel_map=[], state="rejected",
+                validation_error=rejected.code,
+            )
+            self._finalize_session(session_id, verified=False)
+            return
+        try:
+            try:
+                metadata = validate_wav(source, max_bytes=self.max_bytes)
+            except MediaValidationError as rejected:
+                self._persist_asset(
+                    media_id=media_id, tenant_id=tenant_id, session_id=session_id,
+                    recording_sid=recording_sid, object_key=None,
+                    sha256=self._sha256_file(source), byte_count=source.stat().st_size,
+                    duration=None, sample_rate=None, channels=None, activity=[],
+                    channel_map=[], state="rejected", validation_error=rejected.code,
+                )
+                self._finalize_session(session_id, verified=False)
+                return
             participants = self.resolver.expected_participants(session_id)
             try:
                 analysis = analyze_dual_channel_wav(source)
@@ -200,14 +228,22 @@ class TwilioRecordingMediaIngestor:
                         break
                     total += len(chunk)
                     if total > self.max_bytes:
-                        raise ValueError("Twilio recording exceeds media size limit")
+                        raise MediaRejected("media_size_exceeded", total)
                     output.write(chunk)
             if path.stat().st_size == 0:
-                raise ValueError("Twilio returned an empty recording")
+                raise MediaRejected("media_empty", 0)
             return path
         except Exception:
             path.unlink(missing_ok=True)
             raise
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def _existing(self, recording_sid: str) -> str | None:
         with self.connect() as conn:
