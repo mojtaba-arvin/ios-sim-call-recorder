@@ -54,8 +54,9 @@ Review the plan and estimated monthly cost. Only then apply:
 terraform -chdir=infra/aws apply
 ```
 
-The RDS database secret is created by Terraform. The application secret is
-created/managed separately by the operator. The output
+RDS manages its master password in Secrets Manager; Terraform never receives or
+stores the password in its state. The application secret is created/managed
+separately by the operator. The output
 `github_deploy_role_arn` is the IAM role for GitHub OIDC; add it as the
 repository Actions secret `AWS_ROLE_ARN`. Add repository variables
 `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_API_SERVICE`,
