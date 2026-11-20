@@ -28,6 +28,7 @@ def main():
                 row[0]
                 for row in conn.execute("SELECT version FROM schema_migrations").fetchall()
             }
+            conn.commit()
             for path in sorted(migrations.glob("*.sql")):
                 if path.name in applied:
                     continue
