@@ -132,3 +132,31 @@ Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secr
 The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
 
 This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The secure participant-address resolver, webhook HTTP ingress and live provider adapter remain separate work.
+
+
+## Running the ASGI API locally
+
+Install `backend/requirements.txt`, apply ordered migrations with
+`DATABASE_URL=... python backend/migrate.py`, and configure
+`BRIDGE_API_TOKEN_HASHES` as a JSON object mapping SHA-256 token digests to
+tenant IDs. Start the application from the backend directory:
+
+```sh
+cd backend
+uvicorn asgi:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Liveness and readiness are available at `/health/live` and
+`/health/ready`. Readiness checks PostgreSQL and does not disclose connection
+details. The authenticated session routes are described in
+`bridge_core/http_api.py`.
+
+A local isolated stack template is provided in
+`compose.staging.yml`. It requires externally injected `DATABASE_URL`,
+`POSTGRES_PASSWORD` and `BRIDGE_API_TOKEN_HASHES`; do not commit a populated
+environment file. The API binds to loopback by default. Put it behind a
+trusted TLS reverse proxy before any remote access.
+
+The Docker image and compose file are staging scaffolding only. No public
+deployment, TLS certificate, secret manager integration, provider account,
+live provider adapter or production readiness is implied.
