@@ -185,11 +185,19 @@ class WebhookProcessor:
             return EventApplication(updated, commands)
 
         if kind is EventType.RECORDING_STARTED:
-            return EventApplication(session.transition(SessionState.RECORDING, at=at))
+            if session.state is SessionState.PARTICIPANTS_JOINING:
+                return EventApplication(session.transition(SessionState.RECORDING, at=at))
+            return EventApplication(session)
 
         if kind is EventType.CALL_ENDED:
-            if session.state is SessionState.RECORDING:
+            if session.state in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
                 return EventApplication(session.transition(SessionState.FINALIZING, at=at))
+            if session.state in {
+                SessionState.FINALIZING, SessionState.VERIFYING,
+                SessionState.COMPLETED, SessionState.DEGRADED,
+                SessionState.FAILED, SessionState.CANCELLED,
+            }:
+                return EventApplication(session)
             return EventApplication(
                 session.transition(
                     SessionState.FAILED,
@@ -199,11 +207,20 @@ class WebhookProcessor:
             )
 
         if kind is EventType.RECORDING_READY:
-            return EventApplication(session.transition(SessionState.VERIFYING, at=at))
+            if session.state in {
+                SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING, SessionState.FINALIZING,
+            }:
+                return EventApplication(session.transition(SessionState.VERIFYING, at=at))
+            return EventApplication(session)
 
         if kind is EventType.RECORDING_FAILED:
-            return EventApplication(
-                session.transition(SessionState.FAILED, failure_code="provider_recording_failed", at=at)
-            )
+            if session.state in {
+                SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING,
+                SessionState.FINALIZING, SessionState.VERIFYING,
+            }:
+                return EventApplication(
+                    session.transition(SessionState.FAILED, failure_code="provider_recording_failed", at=at)
+                )
+            return EventApplication(session)
 
         raise InvalidTransition(f"unsupported provider event: {kind}")
