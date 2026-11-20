@@ -38,7 +38,7 @@ class NormalizedProviderEvent:
                 raise ValueError(f"{name} must be a non-empty string")
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware")
-        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED}:
+        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED}:
             if not isinstance(self.participant_ref, str) or not self.participant_ref.strip():
                 raise ValueError("participant event requires opaque participant_ref")
         if self.event_type is EventType.PARTICIPANT_CONSENTED:
@@ -92,7 +92,12 @@ class WebhookProcessor:
             raise InvalidTransition("stale provider event cannot move session state backwards")
 
         if kind is EventType.BRIDGE_RINGING:
+            if session.state in {SessionState.PARTICIPANTS_JOINING, SessionState.RECORDING}:
+                return EventApplication(session)
             return EventApplication(session.transition(SessionState.BRIDGE_LEG_RINGING, at=at))
+
+        if kind is EventType.PARTICIPANT_DECLINED:
+            return EventApplication(session.participant_declined(event.participant_ref, at=at))
 
         if kind is EventType.PARTICIPANT_CONSENTED:
             updated = session.participant_consented(
