@@ -8,6 +8,7 @@ from bridge_core.http_api import BearerTokenAuthenticator, BridgeSessionsASGI
 from bridge_core.persistence import PostgresBridgeRepository
 from bridge_core.domain import BridgeSession, SessionState
 from providers.twilio.factory import TwilioConsentCommandFactory
+from bridge_core.media_access import PostgresMediaDownloadService
 
 DATABASE_URL=os.environ.get('TEST_DATABASE_URL')
 SKIP=psycopg is None or not DATABASE_URL
@@ -73,5 +74,38 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
             ).fetchall()
         self.assertEqual(sum(1 for kind, status in rows if kind == "consent.request" and status == "dead"), 2)
         self.assertEqual(sum(1 for kind, status in rows if kind == "consent.cancel" and status == "pending"), 2)
+
+    async def test_verified_media_download_is_scoped_and_audited(self):
+        session_id = "session-media-audit"
+        session = BridgeSession(session_id, 2, frozenset({"a", "b"}))
+        self.repo.create_session(session, tenant_id="tenant-media")
+        media_id = "00000000-0000-4000-8000-000000000001"
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO media_assets
+                (media_id,tenant_id,session_id,provider,provider_account_id,
+                 provider_recording_sid,object_key,sha256,byte_count,duration_seconds,
+                 sample_rate_hz,channel_count,channel_activity,channel_map,
+                 verification_state,retention_expires_at)
+                VALUES (%s,%s,%s,'twilio','account-opaque','RE00000000000000000000000000000001',
+                        'tenants/x/object.wav',%s,1024,1.0,8000,2,'[0.8,0.9]'::jsonb,
+                        '{"channel_1":"a","channel_2":"b"}'::jsonb,'verified',now()+interval '30 days')""",
+                (media_id, "tenant-media", session_id, "a" * 64),
+            )
+        class FakeStore:
+            def presigned_download_url(self, **kwargs):
+                self.kwargs = kwargs
+                return "https://media.example.test/signed"
+        store = FakeStore()
+        service = PostgresMediaDownloadService(connect=self.connect, object_store=store)
+        result = service.create_download(tenant_id="tenant-media", session_id=session_id)
+        self.assertEqual(result["download_url"], "https://media.example.test/signed")
+        self.assertEqual(result["channel_map"], {"channel_1": "a", "channel_2": "b"})
+        with self.connect() as conn:
+            audit = conn.execute(
+                "SELECT tenant_id, session_id, media_id, action, expires_in_seconds FROM media_access_audit WHERE media_id=%s",
+                (media_id,),
+            ).fetchone()
+        self.assertEqual(audit, ("tenant-media", session_id, media_id, "download_url_issued", 120))
 
 if __name__=='__main__': unittest.main()
