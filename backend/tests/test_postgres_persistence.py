@@ -44,6 +44,27 @@ class PostgresPersistenceTests(unittest.TestCase):
                              self.session.session_id, "twilio", "account-test",
                              {"session_id": self.session.session_id})
 
+    def test_tenant_scope_hides_sessions_from_other_tenants(self):
+        self.repo.create_session(BridgeSession(
+            "tenant-private-session", 2,
+            expected_participant_refs=frozenset({"tenant-a-p1", "tenant-a-p2"}),
+            state=SessionState.CREATED,
+        ), tenant_id="tenant-a")
+        self.assertIsNotNone(self.repo.get_session("tenant-private-session", tenant_id="tenant-a"))
+        self.assertIsNone(self.repo.get_session("tenant-private-session", tenant_id="tenant-b"))
+
+    def test_session_cancellation_is_tenant_scoped_and_pre_provider_only(self):
+        self.repo.create_session(BridgeSession(
+            "tenant-cancel-session", 2,
+            expected_participant_refs=frozenset({"cancel-a", "cancel-b"}),
+            state=SessionState.CREATED,
+        ), tenant_id="tenant-a")
+        with self.assertRaises(KeyError):
+            self.repo.cancel_session("tenant-cancel-session", tenant_id="tenant-b")
+        cancelled = self.repo.cancel_session("tenant-cancel-session", tenant_id="tenant-a")
+        self.assertEqual(cancelled.state, SessionState.CANCELLED)
+        self.assertIsNotNone(cancelled.updated_at)
+
     def test_expected_participant_references_round_trip_through_postgres(self):
         loaded = self.repo.get_session(self.session.session_id)
         self.assertEqual(loaded.expected_participant_refs, self.session.expected_participant_refs)
