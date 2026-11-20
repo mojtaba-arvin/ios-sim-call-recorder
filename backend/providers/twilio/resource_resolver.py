@@ -23,12 +23,18 @@ class PostgresTwilioResourceResolver:
                     cur.execute(
                         """SELECT session_id, participant_ref
                            FROM provider_participant_resources
+                           WHERE provider='twilio' AND provider_account_id=%s AND call_sid=%s
+                           UNION ALL
+                           SELECT session_id, participant_ref
+                           FROM provider_consent_call_resources
                            WHERE provider='twilio' AND provider_account_id=%s AND call_sid=%s""",
-                        (self.provider_account_id, call_sid),
+                        (self.provider_account_id, call_sid, self.provider_account_id, call_sid),
                     )
-                    row = cur.fetchone()
-                    if row:
-                        session_from_call, participant_ref = row
+                    rows = cur.fetchall()
+                    if len(rows) > 1:
+                        raise ProviderResourceConflict("Twilio Call SID has multiple internal owners")
+                    if rows:
+                        session_from_call, participant_ref = rows[0]
                 if conference_sid:
                     cur.execute(
                         """SELECT session_id FROM provider_resources
