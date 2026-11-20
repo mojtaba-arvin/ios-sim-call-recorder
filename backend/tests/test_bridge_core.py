@@ -260,7 +260,7 @@ class BridgeCoreTests(unittest.TestCase):
         session = self.repo.get_session("session-opaque-1")
         self.assertEqual(session.state, SessionState.FAILED)
         self.assertEqual(session.failure_code, "participant_declined_consent")
-        self.assertEqual(self.repo.outbox, [])
+        self.assertEqual(self.repo.get_outbox_commands(), ())
 
     def test_call_end_before_recording_fails_closed(self):
         self.send(self.event("ended", EventType.CALL_ENDED))
