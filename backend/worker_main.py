@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from bridge_core.config import database_url_from_env
 import socket
 import psycopg
 from twilio.rest import Client
@@ -15,9 +16,10 @@ from providers.twilio.resource_resolver import PostgresTwilioResourceResolver
 
 
 def main():
-    dsn = os.environ.get("DATABASE_URL", "").strip()
-    if not dsn:
-        raise SystemExit("DATABASE_URL is required")
+    try:
+        dsn = database_url_from_env()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
     def connect():
         return psycopg.connect(dsn)
     def required(name):
