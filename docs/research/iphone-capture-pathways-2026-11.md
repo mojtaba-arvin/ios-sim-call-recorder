@@ -1,6 +1,6 @@
 # iPhone call-audio capture pathway research
 
-**Research snapshot:** 2026-11-19  
+**Research snapshot:** 2026-11-20  
 **Scope:** native cellular calls across iPhone generations, iOS releases, regions, SIM/network configurations and external accessories.  
 **Status:** public-source assessment; no physical-device or carrier certification is implied.
 
