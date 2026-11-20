@@ -53,7 +53,25 @@ class PostgresParticipantAddressResolver:
         ciphertext=self._codec.encrypt(tenant_id=tenant_id,participant_ref=participant_ref,address=address)
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute('''INSERT INTO participant_address_vault(tenant_id,participant_ref,ciphertext,updated_at) VALUES (%s,%s,%s,now()) ON CONFLICT (tenant_id,participant_ref) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,updated_at=now()''',(tenant_id,participant_ref,ciphertext))
+                cur.execute(
+                    "SELECT 1 FROM participant_address_vault WHERE tenant_id=%s AND participant_ref=%s FOR UPDATE",
+                    (tenant_id, participant_ref),
+                )
+                action = "replaced" if cur.fetchone() else "created"
+                cur.execute(
+                    """INSERT INTO participant_address_vault
+                       (tenant_id,participant_ref,ciphertext,updated_at)
+                       VALUES (%s,%s,%s,now())
+                       ON CONFLICT (tenant_id,participant_ref)
+                       DO UPDATE SET ciphertext=EXCLUDED.ciphertext,updated_at=now()""",
+                    (tenant_id, participant_ref, ciphertext),
+                )
+                cur.execute(
+                    """INSERT INTO participant_address_audit
+                       (tenant_id,participant_ref,action,actor_tenant_id)
+                       VALUES (%s,%s,%s,%s)""",
+                    (tenant_id, participant_ref, action, tenant_id),
+                )
 
     def resolve(self, *, tenant_id: str, participant_ref: str) -> str:
         with self._connect() as conn:
@@ -67,4 +85,14 @@ class PostgresParticipantAddressResolver:
     def delete(self, *, tenant_id: str, participant_ref: str) -> None:
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute('DELETE FROM participant_address_vault WHERE tenant_id=%s AND participant_ref=%s',(tenant_id,participant_ref))
+                cur.execute(
+                    "DELETE FROM participant_address_vault WHERE tenant_id=%s AND participant_ref=%s",
+                    (tenant_id, participant_ref),
+                )
+                if cur.rowcount:
+                    cur.execute(
+                        """INSERT INTO participant_address_audit
+                           (tenant_id,participant_ref,action,actor_tenant_id)
+                           VALUES (%s,%s,'deleted',%s)""",
+                        (tenant_id, participant_ref, tenant_id),
+                    )
