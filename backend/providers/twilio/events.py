@@ -108,6 +108,16 @@ class TwilioWebhookEventDecoder:
                 policy_version = self._consent_policy_version
             else:
                 event_type = EventType.PARTICIPANT_DECLINED
+        elif route == "call-status":
+            status = fields.get("CallStatus", "")
+            if status in {"busy", "no-answer", "failed", "canceled"}:
+                if participant_ref is None:
+                    raise TwilioEventDecodeError("failed call callback has no mapped participant")
+                event_type = EventType.PARTICIPANT_DECLINED
+            elif status in {"completed", "in-progress", "ringing", "queued"}:
+                event_type = EventType.PROVIDER_STATUS
+            else:
+                raise TwilioEventDecodeError("unsupported Twilio call status")
         elif route == "conference":
             callback_event = fields.get("StatusCallbackEvent", "")
             if callback_event == "conference-start":
