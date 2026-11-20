@@ -84,7 +84,7 @@ class TwilioConferenceCommandAdapter:
             "conference_status_callback_event": ["start", "end", "join", "leave"],
             "recording_status_callback": self.public_origin + "/v1/twilio/recording",
             "recording_status_callback_method": "POST",
-            "recording_status_callback_event": ["completed", "failed", "absent"],
+            "recording_status_callback_event": ["in-progress", "completed", "failed", "absent"],
             "recording_channels": "dual",
             "beep": "false",
             "start_conference_on_enter": True,
