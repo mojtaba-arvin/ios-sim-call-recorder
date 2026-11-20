@@ -43,6 +43,7 @@ def main():
         address_resolver=lambda session_id, ref: vault.resolve(
             tenant_id=resolver.tenant_for_session(session_id), participant_ref=ref,
         ),
+        session_guard=resolver.ensure_consent_open,
     )
     dispatcher = OutboxCommandDispatcher(
         repository=PostgresBridgeRepository(connect),
