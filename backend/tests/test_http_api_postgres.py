@@ -106,6 +106,8 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
                 "SELECT tenant_id, session_id, media_id, action, expires_in_seconds FROM media_access_audit WHERE media_id=%s",
                 (media_id,),
             ).fetchone()
-        self.assertEqual(audit, ("tenant-media", session_id, media_id, "download_url_issued", 120))
+        self.assertEqual(audit[:2], ("tenant-media", session_id))
+        self.assertEqual(str(audit[2]), media_id)
+        self.assertEqual(audit[3:], ("download_url_issued", 120))
 
 if __name__=='__main__': unittest.main()
