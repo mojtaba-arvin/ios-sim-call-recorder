@@ -80,9 +80,16 @@ class DispatchRepository(Protocol):
     def get_provider_participant_resource(self, provider: str, provider_account_id: str,
                                           session_id: str, participant_ref: str) -> str | None: ...
 
+    def get_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str) -> str | None: ...
+
     def put_provider_participant_resource(self, provider: str, provider_account_id: str,
                                           session_id: str, participant_ref: str,
                                           call_sid: str) -> None: ...
+
+    def put_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str,
+                                           call_sid: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,10 +158,16 @@ class OutboxCommandDispatcher:
             )
             call_sid = None
             if isinstance(participant_ref, str):
-                call_sid = self._repository.get_provider_participant_resource(
-                    command.provider, command.provider_account_id,
-                    command.session_id, participant_ref,
-                )
+                if command.command_type == "consent.request":
+                    call_sid = self._repository.get_provider_consent_call_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref,
+                    )
+                else:
+                    call_sid = self._repository.get_provider_participant_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref,
+                    )
             reconciliation = adapter.reconcile(
                 command, conference_sid=conference_sid, call_sid=call_sid,
             )
@@ -203,10 +216,16 @@ class OutboxCommandDispatcher:
                     command.session_id, conference_sid,
                 )
             if call_sid and isinstance(participant_ref, str):
-                self._repository.put_provider_participant_resource(
-                    command.provider, command.provider_account_id,
-                    command.session_id, participant_ref, call_sid,
-                )
+                if command.command_type == "consent.request":
+                    self._repository.put_provider_consent_call_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref, call_sid,
+                    )
+                else:
+                    self._repository.put_provider_participant_resource(
+                        command.provider, command.provider_account_id,
+                        command.session_id, participant_ref, call_sid,
+                    )
             self._repository.acknowledge_outbox(command.command_id, command.lease_token)
             return DispatchResult(str(command.command_id), "acknowledged")
 
