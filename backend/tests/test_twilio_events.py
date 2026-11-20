@@ -100,6 +100,12 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         }))
         self.assertEqual(event.event_type, EventType.RECORDING_STARTED)
 
+    def test_completed_call_status_is_not_mistaken_for_consent(self):
+        event = self.decoder(self.request("call-status", {
+            **self.base(), "CallStatus": "completed",
+        }))
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+
     def test_no_answer_call_status_fails_the_session_participant_closed(self):
         event = self.decoder(self.request("call-status", {
             **self.base(), "CallStatus": "no-answer",
