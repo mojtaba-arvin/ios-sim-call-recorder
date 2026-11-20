@@ -1,5 +1,7 @@
 # Authenticated tenant-scoped ASGI endpoints for bridge sessions.
 from __future__ import annotations
+
+from bridge_core.address_vault import ParticipantAddressInUseError
 import hashlib, hmac, json
 from typing import Any
 from uuid import uuid4
@@ -75,13 +77,19 @@ class BridgeSessionsASGI:
                     payload = await self.read_json(receive)
                     if set(payload) != {'phone_number'} or not isinstance(payload['phone_number'], str):
                         await self.respond(send, 400, {'error': 'invalid_request'}); return
-                    self.address_vault.store(
-                        tenant_id=tenant, participant_ref=participant_ref,
-                        address=payload['phone_number'],
-                    )
+                    try:
+                        self.address_vault.store(
+                            tenant_id=tenant, participant_ref=participant_ref,
+                            address=payload['phone_number'],
+                        )
+                    except ParticipantAddressInUseError:
+                        await self.respond(send, 409, {'error': 'address_in_use'}); return
                     await self.respond(send, 200, {'status': 'stored'}); return
                 if method == 'DELETE':
-                    self.address_vault.delete(tenant_id=tenant, participant_ref=participant_ref)
+                    try:
+                        self.address_vault.delete(tenant_id=tenant, participant_ref=participant_ref)
+                    except ParticipantAddressInUseError:
+                        await self.respond(send, 409, {'error': 'address_in_use'}); return
                     await self.respond(send, 200, {'status': 'deleted'}); return
                 await self.respond(send, 405, {'error': 'method_not_allowed'}); return
             if method == 'POST' and parts == ['v1','bridge-sessions']:
