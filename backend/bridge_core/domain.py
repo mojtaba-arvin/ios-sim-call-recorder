@@ -46,10 +46,10 @@ class InvalidParticipant(ValueError):
 
 _ALLOWED = {
     SessionState.CREATED: {
-        SessionState.AWAITING_USER_ACTION, SessionState.CANCELLED, SessionState.FAILED,
+        SessionState.AWAITING_USER_ACTION, SessionState.PARTICIPANTS_JOINING, SessionState.CANCELLED, SessionState.FAILED,
     },
     SessionState.AWAITING_USER_ACTION: {
-        SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT,
+        SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT, SessionState.PARTICIPANTS_JOINING,
         SessionState.CANCELLED, SessionState.FAILED,
     },
     SessionState.BRIDGE_LEG_RINGING: {
