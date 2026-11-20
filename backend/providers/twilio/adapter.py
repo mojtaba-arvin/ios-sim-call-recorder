@@ -249,7 +249,7 @@ class TwilioConferenceCommandAdapter:
                     to=address,
                     from_=self.from_number,
                     label=str(command.payload["participant_ref"]),
-                    conference_record="record-from-start" if kind == "conference.create" else "true",
+                    conference_record="record-from-start",
                     **self._conference_callbacks(),
                 )
                 returned_conference = getattr(participant, "conference_sid", None) or conference_sid
