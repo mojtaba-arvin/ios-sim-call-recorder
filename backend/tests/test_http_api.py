@@ -12,13 +12,15 @@ class FakeRepository:
     def __init__(self):
         self.sessions = {}
         self.owners = {}
+        self.commands = []
 
     def ping(self):
         return None
 
-    def create_session(self, session, *, tenant_id):
+    def create_session(self, session, *, tenant_id, commands=()):
         self.sessions[session.session_id] = session
         self.owners[session.session_id] = tenant_id
+        self.commands.extend(commands)
 
     def get_session(self, session_id, *, tenant_id):
         if self.owners.get(session_id) != tenant_id:
@@ -109,6 +111,20 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 404)
         self.assertEqual(payload["error"], "not_found")
+
+    async def test_create_session_atomically_enqueues_one_consent_command_per_participant(self):
+        from providers.twilio.factory import TwilioConsentCommandFactory
+        self.app.initial_commands = TwilioConsentCommandFactory(provider_account_id="twilio-main")
+        status, created = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-a", "opaque-b"]},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["state"], "awaiting_user_action")
+        self.assertEqual(len(self.repo.commands), 2)
+        self.assertEqual({item.command_type for item in self.repo.commands}, {"consent.request"})
+        self.assertTrue(all(item.session_id == created["session_id"] for item in self.repo.commands))
+        self.assertNotIn("+", repr(self.repo.commands))
 
     async def test_invalid_participant_refs_are_rejected(self):
         status, payload = await self.request(
