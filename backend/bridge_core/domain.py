@@ -25,6 +25,7 @@ class EventType(StrEnum):
     BRIDGE_RINGING = "bridge.ringing"
     PARTICIPANT_JOINED = "participant.joined"
     PARTICIPANT_CONSENTED = "participant.consent_granted"
+    PARTICIPANT_DECLINED = "participant.consent_declined"
     RECORDING_STARTED = "recording.started"
     CALL_ENDED = "call.ended"
     RECORDING_READY = "recording.ready"
@@ -223,7 +224,7 @@ class BridgeSession:
         # final consent has advanced the session into PARTICIPANTS_JOINING.
         if participant_ref in self.consented_participants:
             return self
-        if self.state not in {SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
+        if self.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION, SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
             raise InvalidTransition("consent is accepted only during the pre-join consent phase")
         if at is None:
             raise ValueError("consent evidence requires a provider event timestamp")
@@ -246,6 +247,16 @@ class BridgeSession:
         if updated.all_participants_consented:
             return updated.transition(SessionState.PARTICIPANTS_JOINING, at=at)
         return updated
+
+    def participant_declined(self, participant_ref: str, *, at: datetime | None = None) -> BridgeSession:
+        self._require_ref(participant_ref)
+        if participant_ref not in self.expected_participant_refs:
+            raise InvalidParticipant("declining participant is not expected for this session")
+        if participant_ref in self.consented_participants:
+            raise InvalidTransition("a previously consented participant cannot later decline")
+        if self.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION, SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
+            raise InvalidTransition("consent can be declined only before provider participants join")
+        return self.transition(SessionState.FAILED, failure_code="participant_declined_consent", at=at)
 
     def participant_joined(
         self,
