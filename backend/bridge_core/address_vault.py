@@ -1,6 +1,6 @@
 # Tenant-scoped encrypted mapping from opaque participant references to E.164 addresses.
 from __future__ import annotations
-import os, re
+import os, re, json
 from dataclasses import dataclass
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -8,6 +8,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 _E164 = re.compile(r'^\+[1-9][0-9]{7,14}$')
 
 class AddressVaultIntegrityError(RuntimeError):
+    pass
+
+class ParticipantAddressInUseError(ValueError):
     pass
 
 @dataclass(frozen=True, slots=True)
@@ -49,10 +52,23 @@ class PostgresParticipantAddressResolver:
     def __init__(self, *, connect, codec: EncryptedParticipantAddressCodec):
         self._connect,self._codec=connect,codec
 
+    def _ensure_not_in_use(self, cur, *, tenant_id: str, participant_ref: str) -> None:
+        cur.execute(
+            """SELECT 1 FROM bridge_sessions
+               WHERE tenant_id=%s
+                 AND expected_participant_refs @> %s::jsonb
+                 AND state NOT IN ('completed','degraded','failed','cancelled')
+               LIMIT 1 FOR UPDATE""",
+            (tenant_id, json.dumps([participant_ref])),
+        )
+        if cur.fetchone():
+            raise ParticipantAddressInUseError("participant address is bound to an active session")
+
     def store(self, *, tenant_id: str, participant_ref: str, address: str) -> None:
         ciphertext=self._codec.encrypt(tenant_id=tenant_id,participant_ref=participant_ref,address=address)
         with self._connect() as conn:
             with conn.cursor() as cur:
+                self._ensure_not_in_use(cur, tenant_id=tenant_id, participant_ref=participant_ref)
                 cur.execute(
                     "SELECT 1 FROM participant_address_vault WHERE tenant_id=%s AND participant_ref=%s FOR UPDATE",
                     (tenant_id, participant_ref),
@@ -85,6 +101,7 @@ class PostgresParticipantAddressResolver:
     def delete(self, *, tenant_id: str, participant_ref: str) -> None:
         with self._connect() as conn:
             with conn.cursor() as cur:
+                self._ensure_not_in_use(cur, tenant_id=tenant_id, participant_ref=participant_ref)
                 cur.execute(
                     "DELETE FROM participant_address_vault WHERE tenant_id=%s AND participant_ref=%s",
                     (tenant_id, participant_ref),
