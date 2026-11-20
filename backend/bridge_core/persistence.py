@@ -72,6 +72,11 @@ class PostgresBridgeRepository:
             raise ValueError("tenant_id must be a non-empty bounded identifier")
         with self._connect() as conn:
             with conn.cursor() as cur:
+                for participant_ref in sorted(session.expected_participant_refs):
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                        (f"{tenant_id}\\0{participant_ref}",),
+                    )
                 cur.execute(
                     """INSERT INTO bridge_sessions
                     (tenant_id, session_id, expected_participants, expected_participant_refs, state,
