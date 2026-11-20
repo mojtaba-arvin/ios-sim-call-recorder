@@ -1,51 +1,36 @@
 # Recording import boundary
 
-**Status:** core validation contract implemented; iOS app-shell integration is not yet present.
+**Status:** implemented in the iOS app target. The core metadata validator, document importer, security-scoped access, coordinated staging copy, AVFoundation probe/decode, private catalog, playback/export, retention and recovery are integrated. See [the app shell implementation](ios-app-import-shell.md).
 
 ## Product flow
 
-1. The user exports a recording from Apple Notes or an external recorder and explicitly selects this app through the share sheet or Files picker.
-2. The app obtains a temporary document URL from the system document picker.
-3. The app accesses the URL only while its security-scoped access is active (where required).
-4. The app copies the selected file into a private staging directory. It does not read Notes' private database or attempt to automate Phone.app.
-5. A platform media adapter probes the actual container, duration, sample rate, channel count and file size. The extension is only a hint and must not be treated as proof of media type.
-6. RecordingImportValidator checks the probed metadata before the file is accepted into the recording library.
-7. The app moves the validated file atomically into app-managed storage, applies the retention policy, and removes staging data on success or failure.
+1. The user explicitly selects an audio file through the SwiftUI Files document importer.
+2. The app starts security-scoped access where required and coordinates the external read with NSFileCoordinator.
+3. The source size and available disk capacity are checked before copying. Import fails with an actionable low-storage message when the source plus the configured free-space reserve will not fit.
+4. The app copies the file to an opaque UUID staging path in app-private Application Support.
+5. A container signature probe and WAV RIFF/chunk-boundary checks validate the actual file structure. AVAudioFile opens the file and decodes the full payload in bounded chunks.
+6. The core validator checks file size, duration, sample rate, channel count and extension/container agreement.
+7. The validated file is moved into the private recordings directory. Production media and catalog files receive complete file protection; app-managed directories are excluded from device backups.
+8. The catalog stores only opaque ID, container, byte count, duration and import timestamp. Original filenames and call content are not persisted.
+9. On launch and whenever the app returns to the foreground, maintenance validates/recoveries the catalog, applies retention and removes abandoned staging files and known UUID media orphans. Unknown files are preserved.
 
-## Core validation contract
+## Safety and recovery behavior
 
-RecordingImportMetadata contains only the filename, byte count, duration, sample rate, channel count, recognized container and user-selected import source. It intentionally excludes phone numbers, contact names, transcripts, call participant identities and audio bytes.
+- Import is rejected before staging when available capacity is below source size plus the safety reserve.
+- A failed copy/decode/validation removes the staging artifact.
+- A corrupt primary catalog is restored from a validated backup.
+- If both catalog copies are invalid or missing while managed media exists, the service fails closed and preserves the media.
+- A process interruption may leave a partial staging file; the next successful foreground maintenance pass removes abandoned staging contents.
+- Complete file protection prevents access while the device is locked and keeps protected media unavailable after reboot until the first device unlock. This policy is intentionally stronger than background availability.
+- Retention is opt-in (Never, 30, 90 or 365 days) and is applied on library load/foreground refresh and when the setting changes; there is no scheduled background deletion service.
 
-The initial conservative limits are:
+## Validation boundary
 
-- Non-empty file, at most 500 MiB.
-- Positive finite duration, at most 24 hours.
-- Sample rate from 8 kHz through 192 kHz.
-- One or two audio channels.
-- Recognized containers: M4A, MP3, WAV, CAF and AIFF.
-- The probed container must agree with the filename extension.
+The app validates structural integrity and decodability. It does not prove that an imported recording contains both speakers, that channels map to individual participants, or that the file came from an Apple-native cellular recording pathway. Those remain M2/M4 evidence gates.
 
-These are ingestion safety bounds, not claims that every listed format is produced by Apple Notes or supported by every accessory. The platform adapter must fail closed when it cannot inspect the real media container.
+## Remaining checks
 
-## Security and privacy requirements for the app shell
-
-- Do not log file URLs, original filenames, contact names, phone numbers, transcripts, or media payloads.
-- Use opaque generated identifiers for imported assets and diagnostic events.
-- Do not upload recordings automatically. Any remote processing requires a separate explicit user action and consent flow.
-- Keep temporary copies in app-private storage; clean them on cancellation, validation failure, and import failure.
-- Enforce a storage quota and a user-visible retention/deletion policy before shipping.
-- Do not claim that an imported file contains both sides of a call solely because its metadata is valid. Two-way speech verification is a separate quality gate.
-- Keep user-mediated Apple Phone recording distinct from app-owned VoIP and carrier conference recording.
-
-## Current implementation boundary
-
-The Swift package now provides a platform-independent metadata validator and deterministic tests. It does not yet provide a SwiftUI/UIKit document picker, security-scoped URL handling, AVFoundation probing, durable media storage, waveform analysis or speech-direction verification. Those belong in the app-shell/integration layer after the application target and deployment configuration are established.
-
-## Next engineering steps
-
-1. Establish the iOS app target and supported deployment baseline without weakening the reusable core package's testability.
-2. Implement a document-picker adapter with security-scoped access and cancellation-safe staging.
-3. Implement an AVFoundation metadata probe and verify actual file types, not extensions alone.
-4. Add integration tests with generated synthetic audio fixtures; never commit real calls or personal recordings.
-5. Add explicit retention, deletion and optional transcription policies.
-6. Add a separate two-way audio QA workflow with synthetic known-speaker fixtures and later physical-device evidence.
+- Run the VoiceOver and Dynamic Type checklist on physical devices and record exact device/iOS tuples.
+- Exercise lock/reboot data protection on a physical iPhone, including first-unlock behavior.
+- Run low-storage and process-termination scenarios on supported devices.
+- Configure an Apple Developer Team, distribution certificate and provisioning profile before a signed Release archive can be produced.
