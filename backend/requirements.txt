@@ -1,2 +1,5 @@
 psycopg[binary]==3.2.9
 twilio==9.11.2
+uvicorn==0.35.0
+cryptography==45.0.7
+boto3==1.40.58

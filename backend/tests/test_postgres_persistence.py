@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover
 from bridge_core.application import EventApplication, OutboxCommand
 from bridge_core.domain import BridgeSession, SessionState
 from bridge_core.persistence import CommandIdentityConflict, EventIdentityConflict, LeaseLost, PostgresBridgeRepository
+from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 _SKIP = psycopg is None or not DATABASE_URL
@@ -43,6 +44,43 @@ class PostgresPersistenceTests(unittest.TestCase):
         return OutboxCommand("recording.start", key or f"recording-start:{uuid4()}",
                              self.session.session_id, "twilio", "account-test",
                              {"session_id": self.session.session_id})
+
+    def test_encrypted_address_vault_round_trip_is_tenant_scoped(self):
+        resolver = PostgresParticipantAddressResolver(
+            connect=self.connect,
+            codec=EncryptedParticipantAddressCodec(key=b"v" * 32),
+        )
+        resolver.store(tenant_id="tenant-a", participant_ref="participant-1", address="+15555550123")
+        self.assertEqual(
+            resolver.resolve(tenant_id="tenant-a", participant_ref="participant-1"),
+            "+15555550123",
+        )
+        with self.assertRaises(LookupError):
+            resolver.resolve(tenant_id="tenant-b", participant_ref="participant-1")
+        resolver.delete(tenant_id="tenant-a", participant_ref="participant-1")
+        with self.assertRaises(LookupError):
+            resolver.resolve(tenant_id="tenant-a", participant_ref="participant-1")
+
+    def test_tenant_scope_hides_sessions_from_other_tenants(self):
+        self.repo.create_session(BridgeSession(
+            "tenant-private-session", 2,
+            expected_participant_refs=frozenset({"tenant-a-p1", "tenant-a-p2"}),
+            state=SessionState.CREATED,
+        ), tenant_id="tenant-a")
+        self.assertIsNotNone(self.repo.get_session("tenant-private-session", tenant_id="tenant-a"))
+        self.assertIsNone(self.repo.get_session("tenant-private-session", tenant_id="tenant-b"))
+
+    def test_session_cancellation_is_tenant_scoped_and_pre_provider_only(self):
+        self.repo.create_session(BridgeSession(
+            "tenant-cancel-session", 2,
+            expected_participant_refs=frozenset({"cancel-a", "cancel-b"}),
+            state=SessionState.CREATED,
+        ), tenant_id="tenant-a")
+        with self.assertRaises(KeyError):
+            self.repo.cancel_session("tenant-cancel-session", tenant_id="tenant-b")
+        cancelled = self.repo.cancel_session("tenant-cancel-session", tenant_id="tenant-a")
+        self.assertEqual(cancelled.state, SessionState.CANCELLED)
+        self.assertIsNotNone(cancelled.updated_at)
 
     def test_expected_participant_references_round_trip_through_postgres(self):
         loaded = self.repo.get_session(self.session.session_id)

@@ -80,6 +80,38 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertTrue(importedFiles.isEmpty)
     }
 
+    func testLowStorageIsReportedBeforeCopyAndStagingRemainsEmpty() async throws {
+        let sourceURL = temporaryRoot.appendingPathComponent("low-space.wav")
+        try writeValidWAV(to: sourceURL)
+
+        let service = RecordingImportService(
+            storageRootURL: temporaryRoot,
+            minimumFreeStorageBytes: 128 * 1_048_576,
+            availableStorageProvider: { 1_024 }
+        )
+        do {
+            _ = try await service.importRecording(from: sourceURL, source: .filesApp)
+            XCTFail("An import must fail before copying when the safety reserve is unavailable")
+        } catch let error as RecordingImportServiceError {
+            guard case .insufficientStorage(let required, let available) = error else {
+                return XCTFail("Expected insufficientStorage, got \(error)")
+            }
+            XCTAssertGreaterThan(required, available)
+            XCTAssertEqual(available, 1_024)
+        }
+
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let importedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+        XCTAssertTrue(importedFiles.isEmpty)
+    }
+
     func testEmptySourceIsRejectedBeforeStaging() async throws {
         let sourceURL = temporaryRoot.appendingPathComponent("empty.wav")
         try Data().write(to: sourceURL)

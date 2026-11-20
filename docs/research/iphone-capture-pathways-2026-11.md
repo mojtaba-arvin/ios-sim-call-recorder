@@ -1,6 +1,6 @@
 # iPhone call-audio capture pathway research
 
-**Research snapshot:** 2026-11-19  
+**Research snapshot:** 2026-11-20  
 **Scope:** native cellular calls across iPhone generations, iOS releases, regions, SIM/network configurations and external accessories.  
 **Status:** public-source assessment; no physical-device or carrier certification is implied.
 
@@ -108,13 +108,13 @@ Do not infer model support from a marketing family name. For Apple-native record
 - External recorder is reported as requiring separate hardware.
 - Added unit tests for minimum OS, EU, Oman, supported-market user flow, unknown region, ReplayKit boundary and external hardware.
 
-## Next steps
+## Remaining validation steps
 
-1. Add an app-shell document importer for recordings explicitly exported/shared by the user from Notes or an external recorder.
-2. Validate audio containers, duration, sample rate, channel count and non-empty content; run local/remote speech verification where the test protocol provides known prompts.
-3. Build a physical device/accessory matrix covering older Lightning iPhones, USB-C iPhones, iOS 18.1+, SIM/eSIM and Bluetooth/wired accessories.
-4. Keep conference bridge and app-owned VoIP as independent capture strategies; do not conflate them with native Phone recording.
-5. Only promote a pathway to supported after repeated two-way audio tests and legal/consent review.
+1. Execute Apple-native recording availability and user export/import on physical iPhones across selected iOS builds, regions and languages; the app-side importer and structural validation are already implemented.
+2. Execute the physical compatibility matrix for carrier conference merge, Bluetooth HFP, wired/USB accessories and independent acoustic recording. Record failures as well as successes.
+3. For every positive tuple, complete at least three consented calls and independently verify local and remote speech at the beginning, middle and end; 20 consecutive runs remain the production-support threshold.
+4. Keep conference bridge and app-owned VoIP as independent capture strategies; the authenticated API, encrypted participant-address vault and webhook transport are foundations only, not a working provider path.
+5. Only promote a pathway to supported after repeated two-way audio tests and jurisdiction-specific legal/consent review.
 
 ## Primary references
 

@@ -23,10 +23,11 @@ ReplayKit and microphone APIs are not treated as a way to obtain the private dow
 - **iOS companion app:** user-mediated document import, app-private storage, opaque local catalog, local playback/seeking, interruption and output-route handling, system share/export, opt-in retention and catalog recovery.
 - **Import validation:** RIFF/WAV chunk boundaries, physical EOF checks, bounded full-payload decoding and catalog-recovery edge cases are covered by regression tests integrated in main.
 - **Audio validation tooling:** local WAV signal metrics and deterministic regression fixtures.
-- **Conference bridge backend:** provider-neutral session state machine, participant consent gate, Twilio webhook signature verifier, PostgreSQL persistence, transactional outbox, leased dispatcher, provider-resource mappings and reconciliation contracts.
+- **Conference bridge backend:** provider-neutral session state machine, participant consent gate, Twilio webhook signature verifier, PostgreSQL persistence, transactional outbox, leased dispatcher, provider-resource mappings, reconciliation contracts, authenticated tenant-scoped session API component, encrypted participant-address vault, signed webhook transport, graceful worker loop and KMS-backed S3 media-storage adapter.
+- **iOS hardening:** VoiceOver status announcements, scalable SwiftUI text, foreground catalog/staging recovery, low-storage preflight and explicit complete file protection for production media/catalog files; PrivacyInfo.xcprivacy is bundled and declares app-owned UserDefaults and disk-space reasons.
 - **Engineering workflow:** role contracts, reusable research/validation/security skills, task/review templates, workflow guardrails and machine-checked task/evidence/Markdown policies are integrated into main.
 
-The backend is a foundation, **not a deployable recording service**. It does not yet include authenticated HTTP session endpoints, a concrete live provider command adapter, a supervised production worker, media ingestion/object storage, audio verification or provider/product deletion reconciliation.
+The backend is a foundation, **not a deployable recording service**. It now includes an authenticated, tenant-scoped ASGI session API component and PostgreSQL tenant ownership, but it is not wired to a production ASGI server or deployment. The encrypted participant-address vault, signed webhook transport ingress, graceful worker loop and KMS-backed S3 WAV adapter are implemented as components but are not yet wired into a production provider/media flow. A concrete live provider adapter, production event decoder, provider media retrieval, two-sided/channel identity verification, retention/deletion reconciliation and remote deployment remain unimplemented.
 
 ## Evidence policy
 
@@ -62,7 +63,9 @@ Positive physical configurations require at least three repeated runs and indepe
 - [Executable delivery roadmap](docs/engineering/executable-product-roadmap.md) — sequenced milestones, dependencies and release gates.
 - [Physical-device acceptance protocol](docs/engineering/physical-device-test-protocol.md) — exact compatibility tuple and repeatable test matrix.
 - [Recording pathway research](docs/research/recording-pathways.md) — platform, carrier and accessory evidence boundaries.
-- [Twilio recording/consent ordering decision](docs/engineering/adr-0002-twilio-recording-consent-order.md) — why a live provider adapter must change the current post-join consent sequence.
+- [Twilio recording/consent ordering decision](docs/engineering/adr-0002-twilio-recording-consent-order.md) — why a live provider adapter must honor pre-join consent.
+- [Security threat model](docs/security/threat-model.md) — current controls, abuse cases and release-blocking residuals.
+- [Operations runbook](docs/operations/runbook.md) — pre-production incident, recovery and rollback procedures.
 
 ## Project maturity
 

@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/backend.yml"
       - "backend/**"
+      - "compose.staging.yml"
+      - ".dockerignore"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +20,7 @@ jobs:
   bridge-core:
     name: Conference bridge backend tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       TEST_DATABASE_URL: postgresql://bridge_test:bridge_test@localhost:5432/bridge_test
     services:
@@ -50,4 +52,52 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
       - name: Run backend tests
         run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
+      - name: Build backend staging image
+        run: docker build --file backend/Dockerfile --tag call-recorder-backend:test .
+      - name: Exercise isolated staging stack and HTTP lifecycle
+        shell: bash
+        env:
+          POSTGRES_DB: bridge_staging
+          POSTGRES_USER: bridge_staging
+          POSTGRES_PASSWORD: ci-only-password
+          DATABASE_URL: postgresql://bridge_staging:ci-only-password@postgres:5432/bridge_staging
+          CI_API_TOKEN: ci-only-session-api-token-with-at-least-32-characters
+        run: |
+          set -euo pipefail
+          export BRIDGE_API_TOKEN_HASHES="$(python3 - <<'PY'
+          import hashlib, json, os
+          token = os.environ["CI_API_TOKEN"]
+          print(json.dumps({hashlib.sha256(token.encode()).hexdigest(): "tenant-ci"}))
+          PY
+          )"
+          trap 'docker compose --file compose.staging.yml down --volumes' EXIT
+          docker compose --file compose.staging.yml up --detach --build
+          for attempt in $(seq 1 40); do
+            if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()" 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json, os, urllib.request
+          base = "http://127.0.0.1:8000"
+          token = os.environ["CI_API_TOKEN"]
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  base + path, data=data, method=method,
+                  headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=10) as response:
+                  raw = response.read()
+                  return response.status, json.loads(raw) if raw else None
+          status, created = request("POST", "/v1/bridge-sessions", {"participant_refs": ["ci-a", "ci-b"]})
+          assert status == 201 and created["state"] == "created"
+          session_id = created["session_id"]
+          status, loaded = request("GET", "/v1/bridge-sessions/" + session_id)
+          assert status == 200 and loaded["session_id"] == session_id
+          status, cancelled = request("POST", "/v1/bridge-sessions/" + session_id + "/cancel")
+          assert status == 200 and cancelled["state"] == "cancelled"
+          print("staging API/PostgreSQL lifecycle passed")
+          PY
 

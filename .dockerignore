@@ -1,0 +1,16 @@
+.git
+.github
+.agents
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+**/venv
+.env
+.env.*
+*.wav
+*.m4a
+*.mp3
+*.caf
+*.aiff
+*.aif

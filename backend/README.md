@@ -1,7 +1,6 @@
 # Conference Bridge Backend Core
 
-This is a provider-neutral domain and persistence foundation, not a deployable
-recording service and not a real PSTN provider integration.
+This is a provider-neutral domain/persistence foundation with an authenticated tenant-scoped ASGI session API component. It is not yet a deployed recording service or a real PSTN provider integration.
 
 ## Included
 - Typed bridge lifecycle and guarded transitions.
@@ -13,18 +12,20 @@ recording service and not a real PSTN provider integration.
 - PostgreSQL-backed durable sessions, event receipts and outbox leases.
 - Bounded retries, lease-token ownership and dead-letter state.
 - Opaque participant references rather than phone numbers.
+- Framework-neutral authenticated ASGI create/read/cancel endpoints with tenant-scoped PostgreSQL session ownership (migration 0005).
+- AES-GCM encrypted tenant-scoped participant-address vault (migration 0006); addresses are decrypted only in process memory for a trusted caller that has already authorized the tenant.
+- KMS-encrypted S3-compatible WAV object-storage adapter with opaque tenant-derived keys, bounded presigned downloads and validation-before-upload.
 
 ## Persistence and migrations
 
-PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver and Twilio webhook SDK):
+PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver, Twilio webhook SDK, ASGI server, AES-GCM address-vault crypto and S3 SDK):
 
 ```sh
 python -m pip install -r backend/requirements.txt
 ```
 
 Apply SQL migrations in numeric order with the deployment migration runner before starting the
-service: `0001_bridge_persistence.sql`, `0002_provider_resources.sql`, then
-`0003_consent_preflight.sql`, then `0004_consent_evidence.sql`. The repository deliberately
+service: `0001_bridge_persistence.sql` through `0006_participant_address_vault.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -90,7 +91,7 @@ calls or carrier-compatibility claims are made by these tests.
 
 ## Twilio recording and consent ordering
 
-The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and HTTP service are still not implemented.** Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
+The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and production-deployed HTTP service are still not implemented.** The ASGI session component and factory are present, but do not issue provider calls. Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
 
 A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. The current domain state machine now models this preflight, with immutable expected participant refs, consent policy version, method, signed event ID and payload digest persisted per participant, plus outbox commands for conference creation and later participant joins. A concrete adapter must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call.
 
@@ -102,11 +103,14 @@ Never persist raw phone numbers, credentials, signatures, media URLs or audio in
 event/outbox payloads or logs. Use opaque participant/session references. Keep
 provider credentials in a secret manager.
 
-No production HTTP endpoint, authentication, rate limiting, trusted public URL
-reconstruction, provider API client, media ingestion, audio verification,
-object storage, retention worker or deletion integration is implemented. The
-in-memory repository is test-only. No carrier three-way-call compatibility or
-real two-way recording is proven.
+The authenticated ASGI API component, configured-origin signed webhook
+transport, encrypted participant-address resolver and graceful worker loop
+exist, but are not a complete deployed service. Rate limiting, durable request
+idempotency, production event decoding, provider API adapter, media retrieval,
+encrypted object storage, speech/channel verification, retention/deletion
+workers, managed secret rotation and operational monitoring remain
+unimplemented. The in-memory repository is test-only. No carrier three-way-call
+compatibility or real two-way recording is proven.
 
 ## Tests
 
@@ -118,3 +122,63 @@ PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected pa
 
 
 The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
+
+
+## Authenticated session API component
+
+`bridge_core.http_api.BridgeSessionsASGI` implements:
+
+- `POST /v1/bridge-sessions` with a JSON array of opaque `participant_refs`;
+- `GET /v1/bridge-sessions/{session_id}`;
+- `POST /v1/bridge-sessions/{session_id}/cancel`.
+
+Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secret manager. The raw token is never stored. Session reads and cancellation are tenant-scoped. Responses omit participant references and provider identifiers. Cancellation is restricted to `created` and `awaiting_user_action`; active sessions return conflict because no provider-backed close adapter exists yet.
+
+The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
+
+The webhook transport component is not yet mounted in the deployed ASGI service or exposed through TLS ingress. Token rotation, rate limiting, idempotency persistence and production secrets loading also remain open. The signed webhook transport ingress, encrypted address resolver and KMS-backed S3 storage adapter components now exist; production event decoding, audited address provisioning, bucket policy/IAM setup, retention lifecycle and live provider command adapter remain separate work.
+
+
+## Running the ASGI API locally
+
+Install `backend/requirements.txt`, apply ordered migrations with
+`DATABASE_URL=... python backend/migrate.py`, and configure
+`BRIDGE_API_TOKEN_HASHES` as a JSON object mapping SHA-256 token digests to
+tenant IDs. Start the application from the backend directory:
+
+```sh
+cd backend
+uvicorn asgi:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Liveness and readiness are available at `/health/live` and
+`/health/ready`. Readiness checks PostgreSQL and does not disclose connection
+details. The authenticated session routes are described in
+`bridge_core/http_api.py`.
+
+A local isolated stack template is provided in
+`compose.staging.yml`. It requires externally injected `DATABASE_URL`,
+`POSTGRES_PASSWORD` and `BRIDGE_API_TOKEN_HASHES`; do not commit a populated
+environment file. The API binds to loopback by default. Put it behind a
+trusted TLS reverse proxy before any remote access.
+
+The Docker image and compose file are staging scaffolding only. No public
+deployment, TLS certificate, secret manager integration, provider account,
+live provider adapter or production readiness is implied.
+
+
+## Media object storage adapter
+
+`bridge_core.object_storage.S3MediaObjectStore` validates WAV structure and
+size before upload, computes a SHA-256 digest, and uploads with
+`ServerSideEncryption=aws:kms`, a configured KMS key and opaque tenant-derived
+object prefixes. Session and media identifiers must be UUIDs. Download,
+delete and presigned-URL operations derive the object key from the authorized
+tenant/session/media tuple; URL expiry is restricted to 60–300 seconds.
+
+The caller must authorize the tenant before invoking download or URL creation.
+The bucket must have Block Public Access enabled, a restrictive bucket policy,
+least-privilege IAM/KMS grants, versioning/lifecycle rules appropriate to the
+retention policy, access logging and deletion/replication controls. The adapter
+is not wired to a live provider retrieval pipeline and no AWS bucket or KMS key
+is configured by this repository.
