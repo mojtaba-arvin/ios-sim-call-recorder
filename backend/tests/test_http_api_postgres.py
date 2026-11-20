@@ -9,7 +9,7 @@ from bridge_core.persistence import PostgresBridgeRepository
 from bridge_core.domain import BridgeSession, SessionState
 from providers.twilio.factory import TwilioConsentCommandFactory
 from bridge_core.media_access import PostgresMediaDownloadService
-from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver
+from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver, ParticipantAddressInUseError
 
 DATABASE_URL=os.environ.get('TEST_DATABASE_URL')
 SKIP=psycopg is None or not DATABASE_URL
@@ -70,6 +70,13 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
         address_vault.store(tenant_id="tenant-integration", participant_ref="participant-a", address="+14155550101")
         address_vault.store(tenant_id="tenant-integration", participant_ref="participant-b", address="+14155550102")
         self.repo.create_session(session, tenant_id="tenant-integration", commands=commands)
+        with self.assertRaises(ParticipantAddressInUseError):
+            address_vault.store(
+                tenant_id="tenant-integration", participant_ref="participant-a",
+                address="+14155550199",
+            )
+        with self.assertRaises(ParticipantAddressInUseError):
+            address_vault.delete(tenant_id="tenant-integration", participant_ref="participant-b")
         cancelled = self.repo.cancel_session(
             session.session_id, tenant_id="tenant-integration",
         )
@@ -81,6 +88,10 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
             ).fetchall()
         self.assertEqual(sum(1 for kind, status in rows if kind == "consent.request" and status == "dead"), 2)
         self.assertEqual(sum(1 for kind, status in rows if kind == "consent.cancel" and status == "pending"), 2)
+        address_vault.store(
+            tenant_id="tenant-integration", participant_ref="participant-a",
+            address="+14155550199",
+        )
 
     async def test_verified_media_download_is_scoped_and_audited(self):
         session_id = "session-media-audit"
