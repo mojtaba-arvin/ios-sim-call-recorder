@@ -1,6 +1,6 @@
 # iOS accessibility review checklist
 
-**Status:** manual verification required; this checklist is not a completed device test report.
+**Status:** accessibility semantics are implemented in the app (VoiceOver status announcements, accessible status/progress values, action labels and scalable system text styles); physical VoiceOver, Switch Control and Dynamic Type verification remains required. This checklist is not a completed device test report.
 
 ## VoiceOver
 
