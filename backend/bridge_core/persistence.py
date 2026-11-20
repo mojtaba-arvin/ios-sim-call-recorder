@@ -59,6 +59,14 @@ class PostgresBridgeRepository:
     def __init__(self, connect: Callable[[], Any]):
         self._connect = connect
 
+    def ping(self) -> None:
+        """Raise when PostgreSQL is unavailable; expose no connection details."""
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                if cur.fetchone() != (1,):
+                    raise RuntimeError("database readiness check failed")
+
     def create_session(self, session: BridgeSession, *, tenant_id: str = "default") -> None:
         if not tenant_id or not tenant_id.strip() or len(tenant_id) > 128:
             raise ValueError("tenant_id must be a non-empty bounded identifier")
