@@ -24,7 +24,7 @@
 
 ## Migrations and runtime
 
-- Apply migrations in numeric order through 0010_media_access_audit.sql.
+- Apply migrations in numeric order through 0011_rejected_media_metadata.sql.
 - The API uses RDS-managed connection secret fields in AWS; local Compose may use DATABASE_URL.
 - When TWILIO_ENABLED=true, the API mounts /v1/twilio/consent, /v1/twilio/call-status, /v1/twilio/conference and /v1/twilio/recording.
 - Provision each participant's E.164 address through authenticated PUT /v1/participants/{ref}/address before creating a session.
