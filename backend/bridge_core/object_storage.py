@@ -57,7 +57,7 @@ class S3MediaObjectStore:
         self._client.delete_object(Bucket=self._bucket,Key=key)
 
     def presigned_download_url(self, *, tenant_id: str, session_id: str, media_id: str, expires_seconds: int = 60) -> str:
-        if not 1 <= expires_seconds <= 300: raise ValueError('download URL lifetime must be between 1 and 300 seconds')
+        if not 60 <= expires_seconds <= 300: raise ValueError('download URL lifetime must be between 1 and 300 seconds')
         key=self._key(tenant_id=tenant_id,session_id=session_id,media_id=media_id)
         return self._client.generate_presigned_url(
             'get_object',Params={'Bucket':self._bucket,'Key':key},ExpiresIn=expires_seconds,
