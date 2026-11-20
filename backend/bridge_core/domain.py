@@ -26,6 +26,7 @@ class EventType(StrEnum):
     PARTICIPANT_JOINED = "participant.joined"
     PARTICIPANT_CONSENTED = "participant.consent_granted"
     PARTICIPANT_DECLINED = "participant.consent_declined"
+    PROVIDER_STATUS = "provider.status"
     RECORDING_STARTED = "recording.started"
     CALL_ENDED = "call.ended"
     RECORDING_READY = "recording.ready"
