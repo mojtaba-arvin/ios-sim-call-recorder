@@ -2,10 +2,7 @@ name: Audio analyzer checks
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/audio-analyzer.yml"
-      - "scripts/analyze_call_audio.py"
-      - "scripts/tests/test_analyze_call_audio.py"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
