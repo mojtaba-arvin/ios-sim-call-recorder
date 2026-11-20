@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 from .application import EventApplication, OutboxCommand
@@ -113,7 +113,7 @@ class PostgresBridgeRepository:
                     return current
                 if current.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION}:
                     raise InvalidTransition("provider activity may already exist; remote close is required")
-                updated = current.transition(SessionState.CANCELLED)
+                updated = current.transition(SessionState.CANCELLED, at=datetime.now(timezone.utc))
                 cur.execute(
                     "UPDATE bridge_sessions SET state = %s, updated_at = %s WHERE session_id = %s AND tenant_id = %s",
                     (updated.state.value, updated.updated_at, session_id, tenant_id))
