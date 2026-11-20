@@ -129,6 +129,27 @@ class PostgresBridgeRepository:
                 cur.execute(
                     "UPDATE bridge_sessions SET state = %s, updated_at = %s WHERE session_id = %s AND tenant_id = %s",
                     (updated.state.value, updated.updated_at, session_id, tenant_id))
+                if current.state is SessionState.AWAITING_USER_ACTION:
+                    cur.execute(
+                        """UPDATE outbox_commands SET status='dead', last_error_code='session_cancelled',
+                                  lease_owner=NULL, lease_token=NULL, lease_expires_at=NULL
+                           WHERE session_id=%s AND command_type='consent.request' AND status='pending'""",
+                        (session_id,),
+                    )
+                    cur.execute(
+                        """SELECT DISTINCT provider, provider_account_id FROM outbox_commands
+                           WHERE session_id=%s AND command_type='consent.request'""",
+                        (session_id,),
+                    )
+                    for provider, account_id in cur.fetchall():
+                        for participant_ref in sorted(current.expected_participant_refs):
+                            self._insert_command(cur, OutboxCommand(
+                                command_type="consent.cancel",
+                                idempotency_key=f"consent-cancel:{provider}:{account_id}:{session_id}:{participant_ref}",
+                                session_id=session_id, provider=provider,
+                                provider_account_id=account_id,
+                                payload={"participant_ref": participant_ref},
+                            ))
                 return updated
 
     def apply_event_once(
@@ -180,6 +201,13 @@ class PostgresBridgeRepository:
                      json.dumps(sorted(updated.consented_participants)),
                      json.dumps([item.to_dict() for item in updated.consent_evidence]),
                      updated.failure_code, updated.updated_at, session_id))
+                if updated.state in {SessionState.FAILED, SessionState.CANCELLED, SessionState.DEGRADED, SessionState.COMPLETED}:
+                    cur.execute(
+                        """UPDATE outbox_commands SET status='dead', last_error_code='session_closed',
+                                  lease_owner=NULL, lease_token=NULL, lease_expires_at=NULL
+                           WHERE session_id=%s AND command_type='consent.request' AND status='pending'""",
+                        (session_id,),
+                    )
                 for command in application.commands:
                     if command.session_id != session_id:
                         raise ValueError("outbox command session_id must match the event session")
