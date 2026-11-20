@@ -9,6 +9,7 @@ from bridge_core.persistence import PostgresBridgeRepository
 from bridge_core.domain import BridgeSession, SessionState
 from providers.twilio.factory import TwilioConsentCommandFactory
 from bridge_core.media_access import PostgresMediaDownloadService
+from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver
 
 DATABASE_URL=os.environ.get('TEST_DATABASE_URL')
 SKIP=psycopg is None or not DATABASE_URL
@@ -62,6 +63,12 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
             state=SessionState.AWAITING_USER_ACTION,
         )
         commands = TwilioConsentCommandFactory(provider_account_id="twilio-main")(session)
+        address_vault = PostgresParticipantAddressResolver(
+            connect=self.connect,
+            codec=EncryptedParticipantAddressCodec(b"\x11" * 32),
+        )
+        address_vault.store(tenant_id="tenant-integration", participant_ref="participant-a", address="+14155550101")
+        address_vault.store(tenant_id="tenant-integration", participant_ref="participant-b", address="+14155550102")
         self.repo.create_session(session, tenant_id="tenant-integration", commands=commands)
         cancelled = self.repo.cancel_session(
             session.session_id, tenant_id="tenant-integration",
