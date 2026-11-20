@@ -72,10 +72,21 @@ class FakeAdapter:
         return self.execution
 
 
-def leased_command(*, participant_ref=None, command_type="recording.start"):
+_DEFAULT_PARTICIPANT = object()
+
+
+def leased_command(*, participant_ref=_DEFAULT_PARTICIPANT, command_type="recording.start"):
     payload = {"session_id": "session-opaque"}
+    if participant_ref is _DEFAULT_PARTICIPANT:
+        participant_ref = (
+            "participant-opaque-1"
+            if command_type in {"conference.create", "participant.add"}
+            else None
+        )
     if participant_ref is not None:
         payload["participant_ref"] = participant_ref
+    if command_type == "conference.create":
+        payload["recording_mode"] = "from_start"
     return LeasedCommand(
         command_id=uuid4(),
         command_type=command_type,
@@ -236,7 +247,61 @@ class DispatcherTests(unittest.TestCase):
 
         self.assertEqual(results[0].outcome, "deferred")
         self.assertEqual(repo.acked, [])
-        self.assertEqual(repo.failed[0][2], "provider_conference_sid_missing")
+        self.assertEqual(repo.failed[0][2], "provider_conference_or_participant_sid_missing")
+
+
+    def test_conference_create_requires_recording_from_start_and_both_resource_ids(self):
+        command = leased_command(command_type="conference.create")
+        repo = FakeRepository([command])
+        adapter = FakeAdapter(
+            ReconciliationResult(ReconciliationState.NOT_APPLIED),
+            ProviderExecutionResult(
+                conference_sid="CF" + "a" * 32,
+                call_sid="CA" + "b" * 32,
+            ),
+        )
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo,
+            adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+        result = dispatcher.dispatch_once()[0]
+        self.assertEqual(result.outcome, "acknowledged")
+        self.assertEqual(
+            repo.participant_resources[("twilio", "account-opaque", "session-opaque",
+                                        "participant-opaque-1")],
+            "CA" + "b" * 32,
+        )
+
+    def test_conference_create_rejects_unsupported_recording_mode_before_provider_io(self):
+        command = leased_command(command_type="conference.create")
+        command = command.__class__(
+            command_id=command.command_id,
+            command_type=command.command_type,
+            idempotency_key=command.idempotency_key,
+            session_id=command.session_id,
+            provider=command.provider,
+            provider_account_id=command.provider_account_id,
+            payload={"session_id": command.session_id,
+                     "participant_ref": "participant-opaque-1",
+                     "recording_mode": "after_join"},
+            attempts=command.attempts,
+            lease_token=command.lease_token,
+            lease_owner=command.lease_owner,
+            lease_expires_at=command.lease_expires_at,
+        )
+        repo = FakeRepository([command])
+        adapter = FakeAdapter(ReconciliationResult(ReconciliationState.NOT_APPLIED))
+        dispatcher = OutboxCommandDispatcher(
+            repository=repo,
+            adapters={("twilio", "account-opaque"): adapter},
+            worker_id="worker-test",
+        )
+        result = dispatcher.dispatch_once()[0]
+        self.assertEqual(result.outcome, "deferred")
+        self.assertEqual(adapter.reconcile_calls, [])
+        self.assertEqual(repo.failed[0][2], "conference_recording_mode_invalid")
+        self.assertTrue(repo.terminals[0])
 
     def test_existing_resource_is_supplied_to_reconciliation(self):
         command = leased_command()
