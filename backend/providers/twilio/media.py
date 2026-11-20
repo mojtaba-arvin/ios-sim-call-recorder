@@ -123,10 +123,13 @@ class TwilioRecordingMediaIngestor:
         if existing:
             return
         source = self._download(recording_sid)
-        analysis = analyze_dual_channel_wav(source)
-        stored = self.object_store.put_wav(
-            tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
-        )
+        try:
+            analysis = analyze_dual_channel_wav(source)
+            stored = self.object_store.put_wav(
+                tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
+            )
+        finally:
+            source.unlink(missing_ok=True)
         expires = datetime.now(timezone.utc) + timedelta(days=self.retention_days)
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -226,8 +229,8 @@ class TwilioMediaRetentionWorker:
                 with self.connect() as conn:
                     conn.execute("UPDATE media_assets SET twilio_deleted_at=now() WHERE media_id=%s", (media_id,))
             if not object_deleted:
-                self.object_store._client.delete_object(
-                    Bucket=self.object_store._bucket, Key=object_key,
+                self.object_store.delete(
+                    tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
                 )
                 with self.connect() as conn:
                     conn.execute("UPDATE media_assets SET object_deleted_at=now() WHERE media_id=%s", (media_id,))
