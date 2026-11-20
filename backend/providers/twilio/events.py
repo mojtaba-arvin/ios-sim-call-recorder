@@ -157,7 +157,8 @@ class TwilioWebhookEventDecoder:
             event_type=event_type,
             occurred_at=occurred_at,
             participant_ref=participant_ref if event_type in {
-                EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED
+                EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED,
+                EventType.PARTICIPANT_DECLINED,
             } else None,
             payload_digest=payload_digest,
             consent_policy_version=policy_version,
