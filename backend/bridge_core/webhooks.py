@@ -100,7 +100,23 @@ class WebhookProcessor:
             return EventApplication(session)
 
         if kind is EventType.PARTICIPANT_DECLINED:
-            return EventApplication(session.participant_declined(event.participant_ref, at=at))
+            updated = session.participant_declined(event.participant_ref, at=at)
+            cancel_commands = tuple(
+                OutboxCommand(
+                    command_type="consent.cancel",
+                    idempotency_key=(
+                        f"consent-cancel:{event.provider}:{event.provider_account_id}:"
+                        f"{event.session_id}:{participant_ref}"
+                    ),
+                    session_id=event.session_id,
+                    provider=event.provider,
+                    provider_account_id=event.provider_account_id,
+                    payload={"participant_ref": participant_ref},
+                )
+                for participant_ref in sorted(session.expected_participant_refs)
+                if participant_ref != event.participant_ref
+            )
+            return EventApplication(updated, cancel_commands)
 
         if kind is EventType.PARTICIPANT_CONSENTED:
             updated = session.participant_consented(
