@@ -5,10 +5,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
   }
 }
 
@@ -39,8 +35,16 @@ locals {
   api_secrets = concat(
     [
       {
-        name      = "DATABASE_URL"
-        valueFrom = "${aws_secretsmanager_secret.database.arn}:DATABASE_URL::"
+        name      = "DATABASE_HOST"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:host::"
+      },
+      {
+        name      = "DATABASE_USER"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:username::"
+      },
+      {
+        name      = "DATABASE_PASSWORD"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:password::"
       },
       {
         name      = "BRIDGE_API_TOKEN_HASHES"
@@ -57,8 +61,16 @@ locals {
   provider_secrets = concat(
     [
       {
-        name      = "DATABASE_URL"
-        valueFrom = "${aws_secretsmanager_secret.database.arn}:DATABASE_URL::"
+        name      = "DATABASE_HOST"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:host::"
+      },
+      {
+        name      = "DATABASE_USER"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:username::"
+      },
+      {
+        name      = "DATABASE_PASSWORD"
+        valueFrom = "${aws_db_instance.database.master_user_secret[0].secret_arn}:password::"
       }
     ],
     [
@@ -123,11 +135,6 @@ resource "aws_db_subnet_group" "database" {
   name       = "${local.name}-db"
   subnet_ids = var.private_subnet_ids
   tags       = local.common_tags
-}
-
-resource "random_password" "database" {
-  length  = 32
-  special = false
 }
 
 resource "aws_security_group" "load_balancer" {
@@ -202,7 +209,8 @@ resource "aws_db_instance" "database" {
   max_allocated_storage      = 50
   db_name                    = local.db_name
   username                   = var.db_username
-  password                   = random_password.database.result
+  manage_master_user_password = true
+  master_user_secret_kms_key_id = aws_kms_key.media.arn
   port                       = 5432
   db_subnet_group_name       = aws_db_subnet_group.database.name
   vpc_security_group_ids     = [aws_security_group.database.id]
@@ -214,19 +222,6 @@ resource "aws_db_instance" "database" {
   skip_final_snapshot        = true
   auto_minor_version_upgrade = true
   tags                       = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "database" {
-  name                    = "${local.name}/database"
-  recovery_window_in_days = 7
-  tags                    = local.common_tags
-}
-
-resource "aws_secretsmanager_secret_version" "database" {
-  secret_id = aws_secretsmanager_secret.database.id
-  secret_string = jsonencode({
-    DATABASE_URL = "postgresql://${var.db_username}:${random_password.database.result}@${aws_db_instance.database.address}:5432/${local.db_name}?sslmode=require"
-  })
 }
 
 resource "aws_ecr_repository" "backend" {
@@ -349,7 +344,7 @@ resource "aws_iam_role_policy" "task_secrets" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [aws_secretsmanager_secret.database.arn, var.application_secret_arn]
+        Resource = [aws_db_instance.database.master_user_secret[0].secret_arn, var.application_secret_arn]
       },
       {
         Effect   = "Allow"
@@ -416,7 +411,9 @@ locals {
       { name = "MEDIA_BUCKET", value = aws_s3_bucket.media.bucket },
       { name = "MEDIA_KMS_KEY_ID", value = aws_kms_key.media.arn },
       { name = "TWILIO_PUBLIC_ORIGIN", value = var.public_origin },
-      { name = "MEDIA_RETENTION_DAYS", value = "30" }
+      { name = "MEDIA_RETENTION_DAYS", value = "30" },
+      { name = "DATABASE_PORT", value = "5432" },
+      { name = "DATABASE_NAME", value = local.db_name }
     ]
     secrets = local.api_secrets
     logConfiguration = {
@@ -669,7 +666,7 @@ output "github_deploy_role_arn" {
   value = aws_iam_role.github_deploy.arn
 }
 output "database_secret_arn" {
-  value = aws_secretsmanager_secret.database.arn
+  value = aws_db_instance.database.master_user_secret[0].secret_arn
 }
 output "media_bucket" {
   value = aws_s3_bucket.media.bucket
