@@ -24,12 +24,12 @@ class TwilioIngressTests(unittest.IsolatedAsyncioTestCase):
         processor = WebhookProcessor(verifier=Verifier(),repository=self.repo)
         self.app = TwilioWebhookASGI(processor=processor,decode_verified_request=decode,canonical_public_origin='https://hooks.example.test')
 
-    async def request(self, signature='valid', body=b'CallSid=CA123&Status=ringing&Status=answered', query=b'tenant=acct&x=1'):
+    async def request(self, signature='valid', body=b'CallSid=CA123&Status=ringing&Status=answered', query=b'tenant=acct&x=1', path='/twilio/events'):
         incoming=[{'type':'http.request','body':body,'more_body':False}]
         sent=[]
         async def receive(): return incoming.pop(0)
         async def send(message): sent.append(message)
-        scope={'type':'http','method':'POST','path':'/twilio/events','raw_path':b'/twilio/events','query_string':query,'headers':[(b'content-type',b'application/x-www-form-urlencoded'),(b'x-test-signature',signature.encode())]}
+        scope={'type':'http','method':'POST','path':path,'raw_path':path.encode(),'query_string':query,'headers':[(b'content-type',b'application/x-www-form-urlencoded'),(b'x-test-signature',signature.encode())]}
         await self.app(scope,receive,send)
         return next(m['status'] for m in sent if m['type']=='http.response.start')
 
@@ -41,6 +41,11 @@ class TwilioIngressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.public_url,'https://hooks.example.test/twilio/events?tenant=acct&x=1')
         self.assertEqual(request.form_parameters['Status'],('ringing','answered'))
         self.assertEqual(request.raw_body,b'CallSid=CA123&Status=ringing&Status=answered')
+
+    async def test_consent_route_returns_hangup_twiml_to_twilio(self):
+        status = await self.request(path="/twilio/consent")
+        self.assertEqual(status, 200)
+        self.assertEqual(self.seen[-1].public_url, "https://hooks.example.test/twilio/consent?tenant=acct&x=1")
 
     async def test_invalid_signature_never_calls_decoder(self):
         status=await self.request(signature='invalid')
