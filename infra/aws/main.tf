@@ -30,8 +30,6 @@ locals {
   provider_secret_keys = [
     "TWILIO_ACCOUNT_SID",
     "TWILIO_AUTH_TOKEN",
-    "TWILIO_API_KEY",
-    "TWILIO_API_SECRET",
     "TWILIO_PROVIDER_ACCOUNT_ID",
     "TWILIO_FROM_NUMBER",
     "TWILIO_CONSENT_POLICY_VERSION",
@@ -98,13 +96,6 @@ resource "aws_s3_bucket_public_access_block" "media" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_versioning" "media" {
-  bucket = aws_s3_bucket.media.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
 resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
   bucket = aws_s3_bucket.media.id
   rule {
@@ -122,8 +113,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     id     = "expire-noncurrent-versions"
     status = "Enabled"
     filter {}
-    noncurrent_version_expiration {
-      noncurrent_days = 90
+    expiration {
+      days = 90
     }
   }
 }
@@ -653,6 +644,9 @@ resource "aws_iam_role_policy" "github_deploy" {
 output "api_url" {
   value = var.public_origin
 }
+output "alb_dns_name" {
+  value = aws_lb.api.dns_name
+}
 output "ecr_repository_url" {
   value = aws_ecr_repository.backend.repository_url
 }
@@ -661,6 +655,9 @@ output "ecs_cluster_name" {
 }
 output "api_service_name" {
   value = aws_ecs_service.api.name
+}
+output "api_task_family" {
+  value = aws_ecs_task_definition.api.family
 }
 output "worker_service_name" {
   value = aws_ecs_service.worker.name
