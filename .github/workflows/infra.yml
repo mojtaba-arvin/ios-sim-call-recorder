@@ -16,8 +16,6 @@ jobs:
   terraform:
     name: AWS Terraform validation
     runs-on: ubuntu-latest
-    container:
-      image: hashicorp/terraform:1.9.8
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -25,8 +23,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Check Terraform formatting
-        run: terraform fmt -check -recursive infra/aws
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 fmt -check -recursive infra/aws
       - name: Initialize providers without a backend
-        run: terraform -chdir=infra/aws init -backend=false -input=false
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws init -backend=false -input=false
       - name: Validate Terraform configuration
-        run: terraform -chdir=infra/aws validate
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws validate
