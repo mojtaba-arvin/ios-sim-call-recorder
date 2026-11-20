@@ -27,7 +27,7 @@ class BearerTokenAuthenticator:
 
 class BridgeSessionsASGI:
     MAX_BODY_BYTES = 16384
-    MAX_PARTICIPANTS = 10
+    MAX_PARTICIPANTS = 2
     def __init__(self, *, repository, authenticator, initial_commands=None):
         self.repository, self.authenticator = repository, authenticator
         self.initial_commands = initial_commands
@@ -68,7 +68,10 @@ class BridgeSessionsASGI:
                 state = SessionState.AWAITING_USER_ACTION if self.initial_commands else SessionState.CREATED
                 session = BridgeSession(str(uuid4()),len(refs),frozenset(refs),state=state)
                 commands = tuple(self.initial_commands(session)) if self.initial_commands else ()
-                self.repository.create_session(session,tenant_id=tenant,commands=commands)
+                if self.initial_commands:
+                    self.repository.create_session(session,tenant_id=tenant,commands=commands)
+                else:
+                    self.repository.create_session(session,tenant_id=tenant)
                 await self.respond(send,201,self.serialize(session)); return
             if len(parts) == 3 and parts[:2] == ['v1','bridge-sessions'] and method == 'GET':
                 session = self.repository.get_session(parts[2],tenant_id=tenant)
