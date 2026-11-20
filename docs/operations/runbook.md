@@ -12,7 +12,7 @@
 
 ## Startup checklist
 
-1. Confirm PostgreSQL version and apply migrations in numeric order through `0005_tenant_ownership.sql`.
+1. Confirm PostgreSQL version and apply migrations in numeric order through `0006_participant_address_vault.sql`.
 2. Verify database credentials are least-privilege and tenant migration is complete.
 3. Inject hashed API-token configuration and verify tokens are sourced from the approved secret manager.
 4. Configure canonical public HTTPS origin; do not derive it from arbitrary forwarded headers.
