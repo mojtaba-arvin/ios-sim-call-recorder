@@ -399,7 +399,7 @@ locals {
     name      = "api"
     image     = "${aws_ecr_repository.backend.repository_url}:staging"
     essential = true
-    command   = ["uvicorn", "asgi:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    command   = ["sh", "-c", "python migrate.py && uvicorn asgi:create_app --factory --host 0.0.0.0 --port 8000"]
     portMappings = [{
       containerPort = 8000
       hostPort      = 8000
