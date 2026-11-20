@@ -1,6 +1,6 @@
 # Conference Bridge Session Contract
 
-> Status: implementation contract proposal; provider-neutral.
+ > Status: provider-neutral contract. Authenticated tenant-scoped session API components now exist; live provider execution, consent IVR and carrier merge remain unimplemented.
 > Reviewed: 2026-11-19
 > Related work: [P02 proof issue](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/2)
 
