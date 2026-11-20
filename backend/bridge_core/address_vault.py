@@ -54,6 +54,10 @@ class PostgresParticipantAddressResolver:
 
     def _ensure_not_in_use(self, cur, *, tenant_id: str, participant_ref: str) -> None:
         cur.execute(
+            "SELECT pg_advisory_xact_lock(hashtext(%s))",
+            (f"{tenant_id}\\0{participant_ref}",),
+        )
+        cur.execute(
             """SELECT 1 FROM bridge_sessions
                WHERE tenant_id=%s
                  AND expected_participant_refs @> %s::jsonb
