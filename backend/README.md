@@ -13,6 +13,7 @@ This is a provider-neutral domain/persistence foundation with an authenticated t
 - Bounded retries, lease-token ownership and dead-letter state.
 - Opaque participant references rather than phone numbers.
 - Framework-neutral authenticated ASGI create/read/cancel endpoints with tenant-scoped PostgreSQL session ownership (migration 0005).
+- AES-GCM encrypted tenant-scoped participant-address vault (migration 0006); addresses are decrypted only in process memory for an authorized resolver call.
 
 ## Persistence and migrations
 
@@ -23,7 +24,7 @@ python -m pip install -r backend/requirements.txt
 ```
 
 Apply SQL migrations in numeric order with the deployment migration runner before starting the
-service: `0001_bridge_persistence.sql` through `0005_tenant_ownership.sql`. The repository deliberately
+service: `0001_bridge_persistence.sql` through `0006_participant_address_vault.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -131,7 +132,7 @@ Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secr
 
 The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
 
-This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The secure participant-address resolver, webhook HTTP ingress and live provider adapter remain separate work.
+This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The signed webhook transport ingress and encrypted address resolver components now exist; the production Twilio event decoder, audited address-provisioning workflow and live provider command adapter remain separate work.
 
 
 ## Running the ASGI API locally
