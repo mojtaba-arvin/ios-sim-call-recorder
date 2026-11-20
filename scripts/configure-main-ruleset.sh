@@ -46,7 +46,8 @@ gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}" --input - <<'JS
           { "context": "Conference bridge backend tests" },
           { "context": "CallRecorderApp simulator build" },
           { "context": "CallRecorderCore tests" },
-          { "context": "Audio quality analyzer tests" }
+          { "context": "Audio quality analyzer tests" },
+          { "context": "AWS Terraform validation" }
         ]
       }
     }
