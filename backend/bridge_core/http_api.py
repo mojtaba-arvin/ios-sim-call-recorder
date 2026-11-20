@@ -28,9 +28,10 @@ class BearerTokenAuthenticator:
 class BridgeSessionsASGI:
     MAX_BODY_BYTES = 16384
     MAX_PARTICIPANTS = 2
-    def __init__(self, *, repository, authenticator, initial_commands=None):
+    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None):
         self.repository, self.authenticator = repository, authenticator
         self.initial_commands = initial_commands
+        self.address_vault = address_vault
 
     async def __call__(self, scope, receive, send):
         if scope.get('type') != 'http':
@@ -60,6 +61,28 @@ class BridgeSessionsASGI:
         method, path = scope.get('method','GET').upper(), scope.get('path','')
         parts = [p for p in path.split('/') if p]
         try:
+            if len(parts) == 4 and parts[:2] == ['v1', 'participants'] and parts[3] == 'address':
+                participant_ref = parts[2]
+                if (not participant_ref or len(participant_ref) > 128
+                        or participant_ref != participant_ref.strip()
+                        or any(character.isspace() for character in participant_ref)
+                        or '/' in participant_ref):
+                    await self.respond(send, 400, {'error': 'invalid_request'}); return
+                if self.address_vault is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                if method == 'PUT':
+                    payload = await self.read_json(receive)
+                    if set(payload) != {'phone_number'} or not isinstance(payload['phone_number'], str):
+                        await self.respond(send, 400, {'error': 'invalid_request'}); return
+                    self.address_vault.store(
+                        tenant_id=tenant, participant_ref=participant_ref,
+                        address=payload['phone_number'],
+                    )
+                    await self.respond(send, 200, {'status': 'stored'}); return
+                if method == 'DELETE':
+                    self.address_vault.delete(tenant_id=tenant, participant_ref=participant_ref)
+                    await self.respond(send, 200, {'status': 'deleted'}); return
+                await self.respond(send, 405, {'error': 'method_not_allowed'}); return
             if method == 'POST' and parts == ['v1','bridge-sessions']:
                 payload = await self.read_json(receive)
                 refs = payload.get('participant_refs')
