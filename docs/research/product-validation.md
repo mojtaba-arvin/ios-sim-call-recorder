@@ -3,9 +3,9 @@
 **Snapshot:** 2026-11-20  
 **Status:** desk research complete for the current repository evidence; customer demand, willingness to pay, and physical capture feasibility are **not validated**.  
 **Decision owner:** product owner  
-**Purpose:** determine whether this should be a native-SIM recording product, a companion/archive product, an accessory-led product, or a separate app-owned VoIP product before spending on a production backend or hardware.
+**Purpose:** determine whether this should be a native-SIM recording product, a companion/archive product, an accessory-led product, or a separate app-owned VoIP product before spending on production cloud infrastructure, hardware testing or go-to-market.
 
-> This is a decision document, not a claim of product-market fit. No customer interviews, paid pilots, carrier commitments, physical-device call tests, legal opinions, or production economics were available for this review. Unknowns remain unknown.
+> This is a decision document, not a claim of product-market fit. No customer interviews, paid pilots, carrier commitments, physical-device call tests or legal opinions were available for this review. A published-rate scenario model exists, but actual usage-based COGS and willingness to pay remain unknown. Unknowns remain unknown.
 
 ## 1. Executive decision
 
@@ -240,13 +240,13 @@ Next actions, in order:
 | Platform/API desk research | Completed for current source snapshot; re-check before release |
 | Technical pathway inventory | Completed as a research baseline |
 | Companion/import software foundation | Implemented in main; not a capture solution |
-| Provider foundation and consent sequencing | Domain/outbox, tenant-scoped API component, encrypted address vault, signed webhook transport, worker loop and KMS-backed S3 adapter implemented; no production decoder/adapter, deployed service or live call |
+| App-owned Twilio provider flow | Consent IVR, REST command adapter, signed callback decoder, resource reconciliation, dual-channel media retrieval/verification, KMS S3 storage and retention code implemented; no live account call or cloud deployment verified |
 | Physical carrier/device capture | Not tested / not proven |
 | Accessory signal path | Not tested / not certified |
 | Customer problem validation | Not done |
 | Prototype usability validation | Not done |
 | Willingness to pay / paid pilot | Not done |
-| Market selection and unit economics | Not done |
+| Market selection and actual unit economics | Vendor-rate scenario model prepared; target market, observed COGS and willingness to pay not validated |
 | Jurisdiction-specific legal approval | Not done |
 
 **Overall status: Product validation is not complete.** The desk-research phase is complete enough to make a bounded technical/product decision; customer demand, commercial viability and real-world capture remain hard gates. This status must not be changed to "validated" until the corresponding evidence exists.
