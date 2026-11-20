@@ -15,7 +15,6 @@ gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}" --input - <<'JS
 {
   "name": "protect main",
   "target": "branch",
-  "source": "mojtaba-arvin/ios-sim-call-recorder",
   "enforcement": "active",
   "conditions": {
     "ref_name": {
