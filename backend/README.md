@@ -136,7 +136,7 @@ Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secr
 
 The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
 
-This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The signed webhook transport ingress, encrypted address resolver and KMS-backed S3 storage adapter components now exist; production event decoding, audited address provisioning, bucket policy/IAM setup, retention lifecycle and live provider command adapter remain separate work.
+The webhook transport component is not yet mounted in the deployed ASGI service or exposed through TLS ingress. Token rotation, rate limiting, idempotency persistence and production secrets loading also remain open. The signed webhook transport ingress, encrypted address resolver and KMS-backed S3 storage adapter components now exist; production event decoding, audited address provisioning, bucket policy/IAM setup, retention lifecycle and live provider command adapter remain separate work.
 
 
 ## Running the ASGI API locally
