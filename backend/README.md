@@ -41,7 +41,7 @@ Migrations currently run through 0009. The application does not run DDL at start
 5. Conference callbacks move the session into recording/finalization. A completed Recording callback triggers media retrieval and two-channel validation.
 6. The session becomes COMPLETED only after both channels contain activity and encrypted object storage succeeds; otherwise it becomes DEGRADED. Retention deletes the Twilio recording and S3 object as separate retryable steps.
 
-DELETE /v1/participants/{participant_ref}/address removes the tenant-scoped encrypted address and records a metadata-only audit event. API session cancellation while consent calls may exist dead-letters pending consent requests and queues provider call cancellation.
+DELETE /v1/participants/{participant_ref}/address removes the tenant-scoped encrypted address and records a metadata-only audit event. GET /v1/bridge-sessions/{session_id}/media returns a 120-second presigned URL only for a verified, undeleted media asset and records the grant in media_access_audit. API session cancellation while consent calls may exist dead-letters pending consent requests and queues provider call cancellation.
 
 ## Runtime configuration
 
