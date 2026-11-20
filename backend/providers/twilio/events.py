@@ -128,6 +128,8 @@ class TwilioWebhookEventDecoder:
                 event_type = EventType.PARTICIPANT_JOINED
             elif callback_event == "conference-end":
                 event_type = EventType.CALL_ENDED
+            elif callback_event == "participant-leave":
+                event_type = EventType.PROVIDER_STATUS
             else:
                 raise TwilioEventDecodeError("unsupported Twilio Conference callback")
         elif route == "recording":
