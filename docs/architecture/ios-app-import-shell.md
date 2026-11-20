@@ -1,6 +1,6 @@
 # iOS app shell and user-mediated recording import
 
-**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. Simulator CI is configured to build the app and execute the app-hosted XCTest suite; its result must be evaluated against the exact PR head commit. Physical-device and call-audio verification remain QA gates.
+**Status:** SwiftUI app target, user-mediated import, local catalog, deletion, local playback, playback seeking/progress, audio interruption and output-route handling, system share/export, opt-in retention and catalog recovery implemented. Simulator CI currently builds the app; app-hosted XCTest execution is being added in this change and must pass on the exact PR head commit. Physical-device and call-audio verification remain QA gates.
 
 ## Build
 
@@ -18,11 +18,11 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 2. The adapter starts security-scoped access where required and always stops it after the copy/probe flow. NSFileCoordinator coordinates the external document read.
 3. The source size is checked against the core 500 MiB limit before copying, preventing oversized files from consuming app staging storage.
 4. A lightweight container signature probe checks RIFF/WAVE, AIFF/AIFC, CAF, MP3 and ISO-BMFF/MP4-family headers. The filename extension is checked independently by the core validator.
-5. The selected file is copied into an app-private staging directory under an opaque UUID filename.
+5. The selected file is copied into an app-private staging directory under an opaque UUID filename, after a free-space preflight verifies that the source plus a 64 MiB safety reserve will fit.
 6. AVAudioFile must successfully open the staged file. Duration, sample rate and channel count are read from decoded media, not guessed from its filename. WAV files additionally have their RIFF and chunk-declared lengths checked against the physical file size because AVAudioFile can synthesize silence for missing PCM data in a truncated WAV. After metadata limits pass, the decoded frame range is read in bounded 65,536-frame chunks; a decoder error, zero-progress read or inconsistent frame position is rejected without loading the full recording into memory.
 7. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
 8. A validated file is moved into app-private recording storage under a new opaque UUID filename.
-9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups.
+9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups. Final media and catalog files are explicitly assigned complete protection after move/atomic writes, so their protection does not depend only on parent-directory inheritance.
 10. The library lists catalog entries and lets the user delete an imported recording; missing media files are pruned from the catalog when the library loads. A failed import removes its staged copy.
 
 ## Playback and export
@@ -53,7 +53,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 - The catalog accepts only unique UUID identifiers, known lowercase audio-container extensions, positive bounded byte counts, finite bounded durations and finite import timestamps. Extensions are never used to construct paths until allowlisted.
 - On the first catalog save, the service seeds `recordings.json.backup` with the initial valid catalog. Before each later replacement, it atomically stores the previous last-known-good contents as the backup. If the primary catalog cannot be decoded or validated, the backup is validated and restored.
 - If both catalog copies are invalid, the library fails closed and leaves audio files untouched; it does not silently create an empty catalog that could orphan user recordings. If both catalog files are missing but managed media already exists, it also fails closed rather than treating the installation as new and deleting those files as orphans.
-- On library maintenance, abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
+- On library load and every transition back to the foreground, maintenance runs catalog recovery, retention and orphan reconciliation; abandoned staging contents are removed. UUID-named audio files not referenced by the validated catalog are removed from the managed recordings directory. Unknown filenames and extensions are left untouched.
 - The Swift core package tests cover retention boundaries. The app-target XCTest suite exercises catalog recovery, fail-closed behavior, retention deletion and filesystem maintenance on an isolated temporary storage root. Simulator tests do not replace physical-device validation.
 
 
