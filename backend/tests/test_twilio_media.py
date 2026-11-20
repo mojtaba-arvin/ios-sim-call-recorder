@@ -6,6 +6,9 @@ import struct
 import tempfile
 import unittest
 import wave
+from unittest.mock import patch
+
+from providers.twilio.media import MediaRejected, TwilioRecordingMediaIngestor
 
 from providers.twilio.media import analyze_dual_channel_wav
 
@@ -22,6 +25,56 @@ def write_wav(path, channels=2, active=True):
             right = int(7000 * math.sin(2 * math.pi * 220 * index / rate)) if active else 0
             frames.extend((left, right) if channels == 2 else (left,))
         output.writeframes(struct.pack("<" + "h" * len(frames), *frames))
+
+
+class DownloadRequestTests(unittest.TestCase):
+    class Response:
+        status = 200
+        def __init__(self, chunks):
+            self.chunks = list(chunks)
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self, size):
+            return self.chunks.pop(0) if self.chunks else b""
+
+    def make_ingestor(self, max_bytes=1024):
+        return TwilioRecordingMediaIngestor(
+            account_sid="AC" + "a" * 32,
+            api_username="api-user",
+            api_password="api-secret",
+            provider_account_id="provider-account",
+            connect=lambda: None,
+            resource_resolver=None,
+            object_store=object(),
+            max_bytes=max_bytes,
+        )
+
+    def test_download_requests_dual_channel_media(self):
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp:
+            path = temp.name
+        os.unlink(path)
+        response = self.Response([b"RIFF" + b"x" * 40])
+        captured = {}
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            return response
+        with patch("urllib.request.urlopen", fake_urlopen):
+            downloaded = self.make_ingestor()._download("RE" + "b" * 32)
+        try:
+            self.assertIn("RequestedChannels=2", captured["url"])
+            self.assertTrue(os.path.exists(downloaded))
+        finally:
+            downloaded.unlink(missing_ok=True)
+
+    def test_oversized_download_is_a_durable_rejection_signal(self):
+        response = self.Response([b"x" * 1025])
+        with patch("urllib.request.urlopen", lambda request, timeout: response):
+            with self.assertRaises(MediaRejected) as caught:
+                self.make_ingestor(max_bytes=1024)._download("RE" + "b" * 32)
+        self.assertEqual(caught.exception.code, "media_size_exceeded")
+        self.assertEqual(caught.exception.byte_count, 1025)
 
 
 class DualChannelAnalysisTests(unittest.TestCase):
