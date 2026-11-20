@@ -1,6 +1,6 @@
 # Executable Product Roadmap
 
-**Snapshot:** 2026-11-19  
+**Snapshot:** 2026-11-20  
 **Purpose:** turn the repository's research and implementation into a sequenced, evidence-gated delivery plan. This is a living execution document, not a claim that hardware, carrier or production work has passed.
 
 ## Product boundary and release definition
@@ -18,7 +18,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 
 - Swift recording core and cancellation/resource-lifecycle behavior.
 - SwiftUI companion shell with user-mediated file import, app-private storage, local catalog, playback, seeking, system share/export, opt-in retention and catalog recovery.
-- WAV RIFF/chunk boundary checks and bounded AVFoundation decode validation are proposed in the current import-hardening PR; merge only after its fresh mainline CI passes.
+- WAV RIFF/chunk boundary checks and bounded AVFoundation decode validation are merged in PR #40; software import validation is complete for the covered formats and fixtures.
 - Audio quality analyzer and deterministic WAV fixtures.
 - Provider-neutral bridge state machine, consent gate, signed-webhook verification boundary, PostgreSQL persistence, transactional outbox, lease-based dispatcher, reconciliation contract and immutable provider-resource mappings.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
@@ -36,11 +36,11 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 
 ### M0 — Stabilize the integration baseline
 
-- [ ] Merge the import payload hardening only after fresh Swift, iOS Simulator and backend checks pass on its mainline PR head.
+- [x] Merge the import payload hardening; PR #40 is on main and its simulator/core checks passed.
 - [x] Resolve the stale stacked import PR; PR #32 was closed after the clean mainline implementation in PR #40.
-- [ ] Consolidate the governance/agent-tooling PRs without reverting current CI path filters, permissions, action pins or cache improvements.
-- [ ] Verify default-branch checks and ruleset behavior; document any settings that the repository integration cannot change.
-- [ ] Publish one dependency map and close obsolete/orphan branches only after confirming their changes are represented.
+- [x] Consolidate governance/agent-tooling in PR #42 without reverting CI path filters, permissions, action pins or cache improvements.
+- [ ] Verify default-branch required-check behavior and strengthen the `protect main` ruleset; current ruleset only enforces deletion/non-fast-forward, while legacy branch protection is disabled.
+- [ ] Publish one dependency map and prune superseded branches; five obsolete branches are identified, but branch deletion is not available through the connected GitHub operations.
 
 **Exit gate:** clean mainline; all required checks green; no duplicate stacked PRs; one source of truth for project scope, evidence and release gates.
 
@@ -130,14 +130,14 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Finish CI and merge the mainline agent-tooling consolidation PR #42; then close stale PRs #9 and #28 because their useful assets are represented in #42.
-2. Verify repository ruleset and required-check behavior; keep current workflow optimizations intact.
+1. Complete the fresh iOS Simulator run for PR #45; review and merge only when all applicable exact-head checks are green and no blocking review finding remains.
+2. Complete mainline ruleset enforcement and remove the five superseded branches.
 3. Start M3 with authenticated HTTP/session endpoints and a secure opaque-participant address resolver before provider side effects.
-4. In parallel, prepare M2 physical-device test protocol and a consented test matrix; keep it blocked until devices/SIMs/accessories are available.
+4. Keep M2 physical-device validation as an explicit external dependency; do not mark capture support complete until real device/SIM/accessory evidence is attached.
 
 
 ## Verified repository controls (2026-11-19)
 
 The active ruleset `protect main` targets the default branch and contains only `deletion` and `non_fast_forward` rules. It does not require pull requests, reviews or CI status checks. The GitHub integration could read the ruleset but received HTTP 403 for the legacy branch-protection endpoint, so no claim is made about additional legacy settings. No protection settings were changed. If stronger enforcement is desired, add a pull-request requirement and one always-present aggregate CI gate after its path-filtered job semantics are verified; do not require a workflow that is intentionally skipped for unrelated changes.
 
-The active PR queue is empty. Superseded PRs #1, #9, #28 and #32 are closed after their useful changes were integrated. The old orphan branch `feat/ios-recording-retention-catalog-recovery` remains unpruned because this GitHub integration does not expose branch deletion; its functionality is represented by the merged v2 retention/catalog implementation.
+PR #45 (`fix/backend-consent-preflight`) was reviewed and squash-merged as `7bdfb89e53da159d7be8e0b45634202eda2d03c7` after Backend/PostgreSQL, Swift Core, repository policy, audio-analyzer and re-run iOS Simulator checks all passed on its exact head. It establishes durable pre-join consent and recording-from-start command semantics; it is not a live Twilio adapter or physical carrier proof. Superseded PRs #1, #9, #28 and #32 are closed after their useful changes were integrated. Issues #8 and #22 are now closed as duplicate/completed; #5 is narrowed to app-owned VoIP only; #20 is narrowed to physical-device evidence. The old branches `chore/agent-git-engineering-governance`, `chore/agent-rd-skills-and-templates`, `docs/recording-pathways-research`, `feat/ios-recording-retention-catalog-recovery` and `fix/ios-import-full-decode-validation` are superseded by merged work and should be deleted. The GitHub connector available for this run does not expose a delete-ref operation.
