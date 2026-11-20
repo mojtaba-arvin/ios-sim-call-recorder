@@ -49,6 +49,15 @@ class FakeAddressVault:
         self.deleted.append((tenant_id, participant_ref))
 
 
+class FakeMediaService:
+    def __init__(self, result=None):
+        self.result = result
+        self.calls = []
+    def create_download(self, *, tenant_id, session_id):
+        self.calls.append((tenant_id, session_id))
+        return self.result
+
+
 class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.token = "a" * 48
@@ -122,6 +131,35 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 404)
         self.assertEqual(payload["error"], "not_found")
+
+    async def test_verified_media_download_is_tenant_scoped_and_short_lived(self):
+        result = {
+            "media_id": "media-opaque",
+            "sha256": "a" * 64,
+            "byte_count": 1024,
+            "duration_seconds": 10.0,
+            "channel_count": 2,
+            "download_url": "https://media.example.test/signed",
+            "expires_in_seconds": 120,
+        }
+        self.app.media_service = FakeMediaService(result)
+        status, body = await self.request(
+            "GET", "/v1/bridge-sessions/session-opaque/media", token=self.token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["expires_in_seconds"], 120)
+        self.assertEqual(
+            self.app.media_service.calls,
+            [("tenant-a", "session-opaque")],
+        )
+
+    async def test_unverified_media_is_not_disclosed(self):
+        self.app.media_service = FakeMediaService(None)
+        status, body = await self.request(
+            "GET", "/v1/bridge-sessions/session-opaque/media", token=self.token,
+        )
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "not_found"})
 
     async def test_address_vault_provisioning_is_tenant_scoped_and_never_echoes_number(self):
         self.app.address_vault = FakeAddressVault()
