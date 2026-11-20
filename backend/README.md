@@ -17,7 +17,7 @@ This is a provider-neutral domain/persistence foundation with an authenticated t
 
 ## Persistence and migrations
 
-PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver and Twilio webhook SDK):
+PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver, Twilio webhook SDK, ASGI server and AES-GCM address-vault crypto):
 
 ```sh
 python -m pip install -r backend/requirements.txt
@@ -90,7 +90,7 @@ calls or carrier-compatibility claims are made by these tests.
 
 ## Twilio recording and consent ordering
 
-The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and HTTP service are still not implemented.** Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
+The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and production-deployed HTTP service are still not implemented.** The ASGI session component and factory are present, but do not issue provider calls. Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
 
 A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. The current domain state machine now models this preflight, with immutable expected participant refs, consent policy version, method, signed event ID and payload digest persisted per participant, plus outbox commands for conference creation and later participant joins. A concrete adapter must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call.
 
@@ -102,11 +102,14 @@ Never persist raw phone numbers, credentials, signatures, media URLs or audio in
 event/outbox payloads or logs. Use opaque participant/session references. Keep
 provider credentials in a secret manager.
 
-No production HTTP endpoint, authentication, rate limiting, trusted public URL
-reconstruction, provider API client, media ingestion, audio verification,
-object storage, retention worker or deletion integration is implemented. The
-in-memory repository is test-only. No carrier three-way-call compatibility or
-real two-way recording is proven.
+The authenticated ASGI API component, configured-origin signed webhook
+transport, encrypted participant-address resolver and graceful worker loop
+exist, but are not a complete deployed service. Rate limiting, durable request
+idempotency, production event decoding, provider API adapter, media retrieval,
+encrypted object storage, speech/channel verification, retention/deletion
+workers, managed secret rotation and operational monitoring remain
+unimplemented. The in-memory repository is test-only. No carrier three-way-call
+compatibility or real two-way recording is proven.
 
 ## Tests
 
