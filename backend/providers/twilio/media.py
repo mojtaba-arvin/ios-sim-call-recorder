@@ -25,6 +25,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bridge_core.object_storage import S3MediaObjectStore
 from bridge_core.media_validation import validate_wav
+from bridge_core.domain import SessionState
+from bridge_core.persistence import PostgresBridgeRepository
 from providers.twilio.events import TwilioEventDecodeError
 
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
@@ -122,6 +124,7 @@ class TwilioRecordingMediaIngestor:
         media_id = str(uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}"))
         existing = self._existing(recording_sid)
         if existing:
+            self._finalize_session(session_id, verified=(existing == "verified"))
             return
         source = self._download(recording_sid)
         try:
@@ -140,6 +143,7 @@ class TwilioRecordingMediaIngestor:
                     activity=[], channel_map=[], state="rejected",
                     validation_error="dual_channel_verification_failed",
                 )
+                self._finalize_session(session_id, verified=False)
                 return
             stored = self.object_store.put_wav(
                 tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
@@ -153,6 +157,7 @@ class TwilioRecordingMediaIngestor:
                 channel_map={"channel_1": participants[0], "channel_2": participants[1]},
                 state="verified", validation_error=None,
             )
+            self._finalize_session(session_id, verified=True)
         finally:
             source.unlink(missing_ok=True)
 
@@ -204,16 +209,45 @@ class TwilioRecordingMediaIngestor:
             path.unlink(missing_ok=True)
             raise
 
-    def _existing(self, recording_sid: str) -> bool:
+    def _existing(self, recording_sid: str) -> str | None:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT 1 FROM media_assets
+                    """SELECT verification_state FROM media_assets
                        WHERE provider='twilio' AND provider_account_id=%s
                        AND provider_recording_sid=%s""",
                     (self.provider_account_id, recording_sid),
                 )
-                return cur.fetchone() is not None
+                row = cur.fetchone()
+                return row[0] if row else None
+
+    def _finalize_session(self, session_id: str, *, verified: bool) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT session_id, expected_participants, expected_participant_refs, state,
+                              joined_participants, consented_participants, consent_evidence,
+                              failure_code, updated_at
+                       FROM bridge_sessions WHERE session_id=%s FOR UPDATE""",
+                    (session_id,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise LookupError("media session does not exist")
+                session = PostgresBridgeRepository._session_from_row(row)
+                if session.state in {SessionState.COMPLETED, SessionState.DEGRADED}:
+                    return
+                if session.state is not SessionState.VERIFYING:
+                    raise ValueError("recording media arrived outside verification state")
+                target = SessionState.COMPLETED if verified else SessionState.DEGRADED
+                failure = None if verified else "media_channel_verification_failed"
+                updated = session.transition(
+                    target, failure_code=failure, at=datetime.now(timezone.utc),
+                )
+                cur.execute(
+                    "UPDATE bridge_sessions SET state=%s, failure_code=%s, updated_at=%s WHERE session_id=%s",
+                    (updated.state.value, updated.failure_code, updated.updated_at, session_id),
+                )
 
     @staticmethod
     def _fields(parameters):
