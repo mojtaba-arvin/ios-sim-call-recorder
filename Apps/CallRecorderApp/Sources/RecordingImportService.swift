@@ -102,7 +102,9 @@ actor RecordingImportService {
 
         var stagedFileExists = false
         defer {
-            if stagedFileExists {
+            // copyItem can fail after creating a partial destination when the
+            // volume fills mid-copy. Check the path as well as the success flag.
+            if stagedFileExists || fileManager.fileExists(atPath: stagedURL.path) {
                 try? fileManager.removeItem(at: stagedURL)
             }
         }
