@@ -25,24 +25,24 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - Audio quality analyzer and deterministic WAV fixtures.
 - Provider-neutral bridge state machine, consent gate, signed-webhook verification boundary, PostgreSQL persistence, transactional outbox, lease-based dispatcher, reconciliation contract and immutable provider-resource mappings.
 - Authenticated tenant-scoped ASGI session create/read/cancel component, PostgreSQL tenant ownership, liveness/readiness endpoints and ordered migration runner.
-- Signed Twilio webhook ASGI transport adapter plus an account-bound Twilio form-event decoder (consent, Conference and Recording normalization; PR #51), graceful outbox worker loop, encrypted tenant-scoped participant-address vault and local staging container/Compose scaffold. The decoder still requires production route mounting, an immutable provider-resource resolver and a deployed consent/TwiML flow.
+- Live Twilio REST command adapter for consent calls, Conference participant creation/addition and close; explicit DTMF Gather consent; signed account-bound call-status/Conference/Recording webhooks; separate immutable mappings for consent calls and conference legs; tenant-scoped encrypted address provisioning with audit events; supervised outbox and retention worker entry points. PR #52 adds the code path, but live account acceptance is not claimed. This is an app-owned outbound two-party conference, not proof of native SIM-call merge or Phone.app audio capture.
 - Bounded server-side WAV structural validation with digest, format, channel-count, sample-rate, duration and chunk-boundary checks.
 - KMS-encrypted S3-compatible WAV object-storage adapter with tenant-derived opaque keys, validation-before-upload and bounded presigned download URLs.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
 
 ### Not implemented / not proven
 
-- Production ASGI deployment with TLS ingress, rate limiting, durable API idempotency and automated credential rotation; the current ASGI app component and local staging scaffold are not a public service.
-- A concrete Twilio/Telnyx command adapter, production account preflight and verified live account configuration. Twilio callback normalization exists in PR #51, but the routes are not yet mounted in the production ASGI app.
-- Production worker supervision/lease renewal and provider-backed remote cancellation; the current worker is a graceful polling loop only.
-- Provider media retrieval, encrypted object storage, two-sided/channel identity verification and provider/product deletion reconciliation; current backend media validation is WAV-only structural validation.
+- Production ASGI composition root and signed webhook ingress are implemented. AWS ECS/RDS/S3/KMS/ALB Terraform and a manual OIDC deployment workflow are prepared, but no AWS account, DNS, ACM certificate, secret or cloud environment has been provisioned. Rate limiting and automated secret rotation remain open.
+- Live Twilio adapter and consent/webhook/media routes are implemented in PR #52; live Twilio account preflight, billing, real outbound-call acceptance, conference callback ordering and account-level dual-channel recording setting remain unverified.
+- A standalone supervised outbox worker, cancellation of outstanding consent calls and provider-backed Conference close adapter are implemented; long-running lease renewal and provider-side cancellation reconciliation for every edge case remain open.
+- Twilio Conference recording retrieval with RequestedChannels=2, bounded WAV validation, two-channel activity verification, deterministic channel ownership metadata for exactly two expected participants, KMS-backed S3 upload, session verification finalization and retryable Twilio/S3 retention deletion. Channel 1 is the first conference participant; channel 2 is all remaining audio. With exactly two participants this separates the two legs, but it is not biometric speaker identification.
 - Physical iPhone/carrier/accessory evidence for two-way intelligible capture.
 - Legal review and App Store approval for each launch market.
 - Production deployment or end-to-end paid provider call.
 
 ## Product validation gate (before production-scale investment)
 
-The detailed evidence, customer-discovery protocol, segment hypotheses, competitor/substitute analysis, commercial gates and go/no-go criteria live in [Product validation](../research/product-validation.md).
+The detailed evidence, customer-discovery protocol, segment hypotheses, competitor/substitute analysis and go/no-go criteria live in [Product validation](../research/product-validation.md). The executable substitutes are the [remote physical-device test kit](../validation/remote-device-validation-kit.md), [customer discovery and paid-pilot kit](../validation/customer-discovery-kit.md), [Twilio unit-economics baseline](../research/unit-economics.md) and [counsel brief](../legal/counsel-brief.md).
 
 - [x] Complete current-snapshot platform and pathway desk research; keep every unsupported claim classified as a hypothesis.
 - [ ] Select one launch jurisdiction and one initial customer segment; do not infer either from repository or account metadata.
@@ -60,7 +60,7 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Merge the import payload hardening; PR #40 is on main and its simulator/core checks passed.
 - [x] Resolve the stale stacked import PR; PR #32 was closed after the clean mainline implementation in PR #40.
 - [x] Consolidate governance/agent-tooling in PR #42 without reverting CI path filters, permissions, action pins or cache improvements.
-- [ ] Verify default-branch required-check behavior and strengthen the `protect main` ruleset; current ruleset only enforces deletion/non-fast-forward, while legacy branch protection is disabled.
+- [x] Make backend, iOS Simulator, Swift, audio analyzer and repository-policy workflows run on every PR so they can be required without path-filtered pending checks; [ ] apply the required-check/PR rules to the existing `protect main` ruleset using `scripts/configure-main-ruleset.sh` (the connected GitHub interface exposes ruleset reads only).
 - [ ] Publish one dependency map and prune superseded branches; five obsolete branches are identified, but branch deletion is not available through the connected GitHub operations.
 
 **Exit gate:** clean mainline; all required checks green; no duplicate stacked PRs; one source of truth for project scope, evidence and release gates.
@@ -77,6 +77,35 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Bundle PrivacyInfo.xcprivacy with the UserDefaults and DiskSpace required-reason declarations; [ ] complete transitive SDK/privacy-label review.
 - [ ] Configure Apple Developer Team, distribution signing identity/provisioning and reproducible signed Release archive; credentials are not available in this repository workflow.
 
+### M3 — Backend and provider execution
+
+- [x] Authenticated tenant-scoped ASGI session API and ordered PostgreSQL migrations.
+- [x] Transactional initial consent-request outbox commands and durable affirmative/decline evidence.
+- [x] Twilio REST adapter for consent calls, conference participant creation/addition, recording-from-start, dual-channel requests and resource reconciliation.
+- [x] Signed webhook routes for consent, call status, Conference and Recording callbacks; account-scoped resolver maps consent call SIDs separately from Conference participant SIDs.
+- [x] Encrypted address vault provisioning API and metadata-only audit trail.
+- [x] Standalone worker entry point; outstanding consent calls are cancelled on decline/cancel and no new consent calls are dialed for terminal sessions.
+- [ ] Run a live Twilio account preflight and a controlled, consented test call. No live PSTN call has been made from this session.
+
+### M4 — Media retrieval and retention
+
+- [x] Download completed Twilio Conference recordings with RequestedChannels=2 and verify stereo PCM16 plus audible activity in both channels.
+- [x] Restrict the current bridge to exactly two expected participants; persist channel 1/2 ownership mapping, digest, duration and verification outcome.
+- [x] Store verified media with KMS encryption and run two-phase Twilio/S3 retention deletion.
+- [ ] Verify a live Twilio dual-channel recording, provider-side deletion and S3 deletion in an authorized account.
+
+### M5 — Legal and product trust
+
+- [x] Engineering consent/PII boundaries, address provisioning audit, counsel-ready legal brief and explicit DTMF consent flow.
+- [ ] Select launch jurisdiction, obtain counsel approval of the exact disclosure and data flow, complete App Store review and signed distribution.
+
+### M6 — Production foundations
+
+- [x] AWS Terraform for ALB HTTPS, ECS Fargate, private RDS, KMS/S3, Secrets Manager integration, CloudWatch logs/alarm and OIDC deploy role.
+- [x] Manual staging deployment workflow runs migrations before service rollout and checks readiness.
+- [ ] Bootstrap AWS VPC/subnets, ACM certificate, DNS and Secrets Manager JSON secret; apply Terraform and validate actual cloud deployment. No AWS resources have been created.
+- [ ] Add rate limits, secret rotation, outbox/dead-letter dashboards, provider error alerts and rollback drills.
+
 **Exit gate:** app builds from a clean checkout; import/play/export/delete/retention survive relaunch and interruption; accessibility and privacy review evidence attached. This mode remains a companion/import app, not a native Phone-call recorder.
 
 ### M2 — Prove a real capture pathway
@@ -84,7 +113,7 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 Run the tracks in parallel; do not select a pathway from documentation alone.
 
 - [ ] **Apple native recording:** test availability by OS, physical region and language; test user export/import and artifact integrity. Do not assume Notes private APIs.
-- [ ] **Carrier conference merge:** on consenting test SIMs, verify add-call/merge, hold, call waiting, interruption and hang-up behavior for inbound and outbound calls.
+- [ ] **Carrier conference merge:** on consenting test SIMs, verify add-call/merge, hold, call waiting, interruption and hang-up behavior for inbound and outbound calls. PR #52's Twilio outbound conference is a separate app-owned call flow and does not establish that the user's existing SIM call can be merged or captured.
 - [ ] **External HFP/wired accessory:** identify a specific accessory and signal path; prove both uplink and downlink are present in the saved artifact. Pairing or microphone access alone is not proof.
 - [ ] **Acoustic fallback:** measure speakerphone plus independent recorder in controlled noise/distance conditions.
 - [ ] For each positive tuple, repeat at least three calls and independently verify local and remote speech; record exact model, iOS build, region, carrier/plan, SIM, network, route, accessory firmware, consent and signal metrics.
