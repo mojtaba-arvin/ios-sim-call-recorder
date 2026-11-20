@@ -18,7 +18,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 
 - Swift recording core and cancellation/resource-lifecycle behavior.
 - VoiceOver status announcements, accessibility labels/identifiers and Dynamic Type-compatible system text styles; physical accessibility review remains open.
-- Low-storage import preflight with a 64 MiB reserve, foreground catalog/staging recovery and explicit complete file protection for production media/catalog files.
+- Low-storage import preflight with a 64 MiB reserve, finite UIKit background-execution lease for user-initiated imports, foreground catalog/staging recovery and explicit complete file protection for production media/catalog files.
 - Bundled PrivacyInfo.xcprivacy declaring app-owned UserDefaults (CA92.1) and disk-space access (E174.1); signing and full App Store review remain open.
 - SwiftUI companion shell with user-mediated file import, app-private storage, local catalog, playback, seeking, system share/export, opt-in retention and catalog recovery.
 - WAV RIFF/chunk boundary checks and bounded AVFoundation decode validation are merged in PR #40; software import validation is complete for the covered formats and fixtures.
@@ -72,7 +72,7 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Opt-in retention, backup catalog recovery and fail-closed storage behavior.
 - [x] Complete import adversarial cases on the current mainline with PR #40; keep format-specific claims bounded by decoder evidence.
 - [x] Add VoiceOver status announcements, accessible status/progress semantics and Dynamic Type-compatible system typography; [ ] complete physical VoiceOver/Switch Control/Dynamic Type review on device.
-- [x] Add low-storage preflight and foreground recovery of interrupted imports/catalog/staging; [ ] execute physical low-storage/process-kill scenarios.
+- [x] Add low-storage preflight, finite UIKit background-execution lease and foreground recovery of interrupted imports/catalog/staging; [ ] execute physical low-storage/process-kill scenarios and verify lease-expiration behavior.
 - [x] Apply complete file protection to production media and catalog files and exclude app storage from backups; [ ] verify lock/reboot/first-unlock behavior on a physical device.
 - [x] Bundle PrivacyInfo.xcprivacy with the UserDefaults and DiskSpace required-reason declarations; [ ] complete transitive SDK/privacy-label review.
 - [ ] Configure Apple Developer Team, distribution signing identity/provisioning and reproducible signed Release archive; credentials are not available in this repository workflow.
