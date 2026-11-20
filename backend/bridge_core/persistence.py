@@ -299,6 +299,44 @@ class PostgresBridgeRepository:
                     raise ProviderResourceConflict(
                         "participant is already mapped to a different provider call")
 
+    def get_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str) -> str | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT call_sid FROM provider_consent_call_resources
+                       WHERE provider=%s AND provider_account_id=%s
+                       AND session_id=%s AND participant_ref=%s""",
+                    (provider, provider_account_id, session_id, participant_ref),
+                )
+                row = cur.fetchone()
+        return row[0] if row else None
+
+    def put_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str, call_sid: str) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO provider_consent_call_resources
+                       (provider, provider_account_id, session_id, participant_ref, call_sid)
+                       VALUES (%s,%s,%s,%s,%s)
+                       ON CONFLICT (provider, provider_account_id, session_id, participant_ref)
+                       DO NOTHING RETURNING call_sid""",
+                    (provider, provider_account_id, session_id, participant_ref, call_sid),
+                )
+                inserted = cur.fetchone()
+                if inserted is not None:
+                    return
+                cur.execute(
+                    """SELECT call_sid FROM provider_consent_call_resources
+                       WHERE provider=%s AND provider_account_id=%s
+                       AND session_id=%s AND participant_ref=%s""",
+                    (provider, provider_account_id, session_id, participant_ref),
+                )
+                existing = cur.fetchone()
+                if existing is None or existing[0] != call_sid:
+                    raise ProviderResourceConflict("consent call mapping is immutable")
+
     def claim_outbox(self, *, worker_id: str, limit: int = 10,
                      lease_seconds: int = 30) -> tuple[LeasedCommand, ...]:
         if not worker_id.strip():
