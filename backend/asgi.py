@@ -65,6 +65,7 @@ def _twilio_runtime(connect):
         address_resolver=lambda session_id, ref: vault.resolve(
             tenant_id=resolver.tenant_for_session(session_id), participant_ref=ref,
         ),
+        session_guard=resolver.ensure_consent_open,
     )
     decoder = TwilioWebhookEventDecoder(
         account_sid=account_sid, provider_account_id=provider_account_id,
