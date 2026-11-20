@@ -203,7 +203,6 @@ resource "aws_security_group" "database" {
 resource "aws_db_instance" "database" {
   identifier                 = "${local.name}-postgres"
   engine                     = "postgres"
-  engine_version             = "16"
   instance_class             = "db.t4g.micro"
   allocated_storage          = 20
   max_allocated_storage      = 50
@@ -430,7 +429,11 @@ locals {
     image     = "${aws_ecr_repository.backend.repository_url}:staging"
     essential = true
     command   = ["python", "worker_main.py"]
-    environment = [{ name = "TWILIO_PUBLIC_ORIGIN", value = var.public_origin }]
+    environment = [
+      { name = "TWILIO_PUBLIC_ORIGIN", value = var.public_origin },
+      { name = "DATABASE_PORT", value = "5432" },
+      { name = "DATABASE_NAME", value = local.db_name }
+    ]
     secrets     = local.provider_secrets
     logConfiguration = {
       logDriver = "awslogs"
@@ -448,7 +451,9 @@ locals {
     command   = ["python", "retention_main.py"]
     environment = [
       { name = "MEDIA_BUCKET", value = aws_s3_bucket.media.bucket },
-      { name = "MEDIA_KMS_KEY_ID", value = aws_kms_key.media.arn }
+      { name = "MEDIA_KMS_KEY_ID", value = aws_kms_key.media.arn },
+      { name = "DATABASE_PORT", value = "5432" },
+      { name = "DATABASE_NAME", value = local.db_name }
     ]
     secrets = local.provider_secrets
     logConfiguration = {
