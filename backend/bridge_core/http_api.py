@@ -28,10 +28,11 @@ class BearerTokenAuthenticator:
 class BridgeSessionsASGI:
     MAX_BODY_BYTES = 16384
     MAX_PARTICIPANTS = 2
-    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None):
+    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None, media_service=None):
         self.repository, self.authenticator = repository, authenticator
         self.initial_commands = initial_commands
         self.address_vault = address_vault
+        self.media_service = media_service
 
     async def __call__(self, scope, receive, send):
         if scope.get('type') != 'http':
@@ -96,6 +97,13 @@ class BridgeSessionsASGI:
                 else:
                     self.repository.create_session(session,tenant_id=tenant)
                 await self.respond(send,201,self.serialize(session)); return
+            if len(parts) == 4 and parts[:2] == ['v1','bridge-sessions'] and parts[3] == 'media' and method == 'GET':
+                if self.media_service is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                result = self.media_service.create_download(tenant_id=tenant, session_id=parts[2])
+                if result is None:
+                    await self.respond(send, 404, {'error': 'not_found'}); return
+                await self.respond(send, 200, result); return
             if len(parts) == 3 and parts[:2] == ['v1','bridge-sessions'] and method == 'GET':
                 session = self.repository.get_session(parts[2],tenant_id=tenant)
                 if session is None: await self.respond(send,404,{'error':'not_found'})
