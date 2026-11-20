@@ -68,6 +68,13 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         self.assertEqual(event.event_type, EventType.PARTICIPANT_JOINED)
         self.assertEqual(event.participant_ref, "participant-internal-1")
 
+    def test_conference_participant_leave_is_acknowledged_as_status(self):
+        event = self.decoder(self.request("conference", {
+            **self.base(), "ConferenceSid": CONFERENCE,
+            "StatusCallbackEvent": "participant-leave",
+        }))
+        self.assertEqual(event.event_type, EventType.PROVIDER_STATUS)
+
     def test_conference_end_maps_to_call_ended(self):
         event = self.decoder(self.request("conference", {
             **self.base(), "ConferenceSid": CONFERENCE,
