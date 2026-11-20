@@ -9,6 +9,7 @@ enum RecordingImportServiceError: LocalizedError {
     case sourceChangedDuringImport
     case validation(RecordingImportValidationError)
     case storageUnavailable
+    case insufficientStorage(requiredBytes: Int64, availableBytes: Int64)
     case recordingNotFound
     case recordingFileMissing
     case catalogCorrupted
@@ -46,6 +47,8 @@ enum RecordingImportServiceError: LocalizedError {
             }
         case .storageUnavailable:
             return "Private recording storage is unavailable."
+        case .insufficientStorage(let requiredBytes, let availableBytes):
+            return "Not enough free storage to safely import this recording. Required: \(requiredBytes / 1_048_576) MiB; available: \(availableBytes / 1_048_576) MiB. Free up space and try again."
         case .recordingNotFound:
             return "This recording is no longer in your library."
         case .recordingFileMissing:
@@ -68,9 +71,17 @@ struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
 actor RecordingImportService {
     private let fileManager = FileManager.default
     private let storageRootURL: URL?
+    private let availableStorageProvider: (() throws -> Int64)?
+    private let minimumFreeStorageBytes: Int64
 
-    init(storageRootURL: URL? = nil) {
+    init(
+        storageRootURL: URL? = nil,
+        minimumFreeStorageBytes: Int64 = 64 * 1_048_576,
+        availableStorageProvider: (() throws -> Int64)? = nil
+    ) {
         self.storageRootURL = storageRootURL
+        self.minimumFreeStorageBytes = max(0, minimumFreeStorageBytes)
+        self.availableStorageProvider = availableStorageProvider
     }
 
     func importRecording(
@@ -121,6 +132,7 @@ actor RecordingImportService {
                     )
                 }
                 sourceByteCount = byteCount
+                try ensureAvailableStorage(for: byteCount)
                 try fileManager.copyItem(at: coordinatedURL, to: stagedURL)
                 stagedFileExists = true
             } catch {
@@ -192,6 +204,7 @@ actor RecordingImportService {
         let finalURL = try recordingURL(for: entry)
 
         try fileManager.moveItem(at: stagedURL, to: finalURL)
+        try applyCompleteFileProtection(to: finalURL)
         stagedFileExists = false
 
         do {
@@ -279,6 +292,52 @@ actor RecordingImportService {
         guard decodedFrameCount == expectedFrameCount else {
             throw RecordingImportServiceError.unreadableAudio
         }
+    }
+
+    /// Fail before copying when the source plus a safety reserve cannot fit.
+    /// The provider is injectable so low-storage behavior is deterministic in tests.
+    private func ensureAvailableStorage(for sourceBytes: Int64) throws {
+        let available: Int64
+        if let availableStorageProvider {
+            available = try availableStorageProvider()
+        } else {
+            let path: String
+            if let storageRootURL {
+                path = storageRootURL.path
+            } else if let applicationSupport = fileManager.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first {
+                path = applicationSupport.path
+            } else {
+                throw RecordingImportServiceError.storageUnavailable
+            }
+            let attributes = try fileManager.attributesOfFileSystem(forPath: path)
+            guard let value = attributes[.systemFreeSize] as? NSNumber else {
+                throw RecordingImportServiceError.storageUnavailable
+            }
+            available = value.int64Value
+        }
+
+        let (required, overflow) = sourceBytes.addingReportingOverflow(minimumFreeStorageBytes)
+        guard !overflow, available >= required else {
+            throw RecordingImportServiceError.insufficientStorage(
+                requiredBytes: overflow ? Int64.max : required,
+                availableBytes: max(0, available)
+            )
+        }
+    }
+
+    private func applyCompleteFileProtection(to url: URL) throws {
+        guard storageRootURL == nil else { return }
+        try fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func protectCatalogFile(_ url: URL) throws {
+        try applyCompleteFileProtection(to: url)
     }
 
     private func performMaintenance(retentionPolicy: RecordingRetentionPolicy) throws {
@@ -415,6 +474,7 @@ actor RecordingImportService {
             if fileManager.fileExists(atPath: backup.path) {
                 let recovered = try decodeAndValidateCatalog(at: backup)
                 try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+                try protectCatalogFile(primary)
                 return recovered
             }
 
@@ -441,6 +501,7 @@ actor RecordingImportService {
             }
             let recovered = try decodeAndValidateCatalog(at: backup)
             try JSONEncoder().encode(recovered).write(to: primary, options: .atomic)
+            try protectCatalogFile(primary)
             return recovered
         }
     }
@@ -456,11 +517,14 @@ actor RecordingImportService {
             let current = try decodeAndValidateCatalog(at: primary)
             let backupData = try JSONEncoder().encode(current)
             try backupData.write(to: backup, options: .atomic)
+            try protectCatalogFile(backup)
         } else {
             // Seed recovery from the first committed catalog, not only later updates.
             try data.write(to: backup, options: .atomic)
+            try protectCatalogFile(backup)
         }
         try data.write(to: primary, options: .atomic)
+        try protectCatalogFile(primary)
     }
 
     private func recordingURL(for entry: ImportedRecording) throws -> URL {
