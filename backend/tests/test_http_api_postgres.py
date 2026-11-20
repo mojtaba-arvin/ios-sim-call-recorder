@@ -6,6 +6,8 @@ except ImportError:
     psycopg=None
 from bridge_core.http_api import BearerTokenAuthenticator, BridgeSessionsASGI
 from bridge_core.persistence import PostgresBridgeRepository
+from bridge_core.domain import BridgeSession, SessionState
+from providers.twilio.factory import TwilioConsentCommandFactory
 
 DATABASE_URL=os.environ.get('TEST_DATABASE_URL')
 SKIP=psycopg is None or not DATABASE_URL
@@ -50,5 +52,26 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status,200)
         self.assertEqual(cancelled['state'],'cancelled')
         self.assertEqual(self.repo.get_session(session_id,tenant_id='tenant-integration').state.value,'cancelled')
+
+    async def test_cancel_during_consent_closes_pending_outbox_and_queues_call_cancellation(self):
+        session = BridgeSession(
+            "session-consent-cancel",
+            2,
+            frozenset({"participant-a", "participant-b"}),
+            state=SessionState.AWAITING_USER_ACTION,
+        )
+        commands = TwilioConsentCommandFactory(provider_account_id="twilio-main")(session)
+        self.repo.create_session(session, tenant_id="tenant-integration", commands=commands)
+        cancelled = self.repo.cancel_session(
+            session.session_id, tenant_id="tenant-integration",
+        )
+        self.assertEqual(cancelled.state, SessionState.CANCELLED)
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT command_type, status FROM outbox_commands WHERE session_id=%s",
+                (session.session_id,),
+            ).fetchall()
+        self.assertEqual(sum(1 for kind, status in rows if kind == "consent.request" and status == "dead"), 2)
+        self.assertEqual(sum(1 for kind, status in rows if kind == "consent.cancel" and status == "pending"), 2)
 
 if __name__=='__main__': unittest.main()
