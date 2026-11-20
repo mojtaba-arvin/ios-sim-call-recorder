@@ -174,6 +174,8 @@ class TwilioConferenceCommandAdapter:
             raise
         except Exception as exc:
             status = getattr(exc, "status", None)
+            if status == 404 and (call_sid or conference_sid):
+                return ReconciliationResult(ReconciliationState.UNKNOWN)
             if status == 404 and command.attempts == 1:
                 return ReconciliationResult(ReconciliationState.NOT_APPLIED)
             if status == 404:
