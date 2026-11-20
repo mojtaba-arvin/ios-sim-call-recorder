@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from bridge_core.config import database_url_from_env
 
 import boto3
 import psycopg
@@ -88,10 +89,8 @@ def _twilio_runtime(connect):
 
 
 def create_app():
-    database_url = os.environ.get("DATABASE_URL", "").strip()
+    database_url = database_url_from_env()
     token_json = os.environ.get("BRIDGE_API_TOKEN_HASHES", "")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL must be injected by the deployment secret manager")
     if not token_json:
         raise RuntimeError("BRIDGE_API_TOKEN_HASHES must be injected by the deployment secret manager")
     try:
