@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in the deployment environment}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in the deployment environment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?inject POSTGRES_PASSWORD from a secret manager}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - bridge-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "migrate.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?inject DATABASE_URL from a secret manager}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "asgi:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?inject DATABASE_URL from a secret manager}
+      BRIDGE_API_TOKEN_HASHES: ${BRIDGE_API_TOKEN_HASHES:?inject token hash map from a secret manager}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  bridge-postgres:
