@@ -30,7 +30,7 @@ cd backend
 python migrate.py
 ```
 
-Migrations currently run through 0009. The application does not run DDL at startup.
+Migrations currently run through 0011_rejected_media_metadata.sql. The application does not run DDL at startup.
 
 ## API flow
 
