@@ -134,7 +134,10 @@ class TwilioConferenceCommandAdapter:
                             conference_sid=conference_sid,
                             call_sid=participant.call_sid,
                         )
-                    return ReconciliationResult(ReconciliationState.UNKNOWN)
+                    return ReconciliationResult(
+                        ReconciliationState.NOT_APPLIED if command.attempts == 1 else ReconciliationState.UNKNOWN,
+                        conference_sid=conference_sid,
+                    )
 
                 name = self.conference_name(command.session_id)
                 conferences = self.client.conferences.list(
@@ -197,6 +200,9 @@ class TwilioConferenceCommandAdapter:
                     from_=self.from_number,
                     twiml=twiml,
                     timeout=30,
+                    status_callback=self.public_origin + "/v1/twilio/call-status",
+                    status_callback_method="POST",
+                    status_callback_event=["completed"],
                 )
                 return ProviderExecutionResult(call_sid=call.sid)
 
