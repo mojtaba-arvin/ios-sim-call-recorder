@@ -69,6 +69,14 @@ class PostgresTwilioResourceResolver:
                         raise ProviderResourceConflict("Twilio conference mapping is immutable")
         return session_id, participant_ref
 
+    def ensure_consent_open(self, session_id: str) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT state FROM bridge_sessions WHERE session_id=%s", (session_id,))
+                row = cur.fetchone()
+        if row is None or row[0] not in {"created", "awaiting_user_action", "bridge_leg_ringing", "awaiting_consent"}:
+            raise LookupError("session no longer accepts consent calls")
+
     def expected_participants(self, session_id: str) -> tuple[str, ...]:
         import json
         with self._connect() as conn:
