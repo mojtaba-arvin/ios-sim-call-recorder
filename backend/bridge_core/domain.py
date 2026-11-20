@@ -61,10 +61,11 @@ _ALLOWED = {
         SessionState.PARTICIPANTS_JOINING, SessionState.CANCELLED, SessionState.FAILED,
     },
     SessionState.PARTICIPANTS_JOINING: {
-        SessionState.RECORDING, SessionState.CANCELLED, SessionState.FAILED,
+        SessionState.RECORDING, SessionState.FINALIZING, SessionState.VERIFYING,
+        SessionState.CANCELLED, SessionState.FAILED,
     },
     SessionState.RECORDING: {
-        SessionState.FINALIZING, SessionState.CANCELLED, SessionState.FAILED,
+        SessionState.FINALIZING, SessionState.VERIFYING, SessionState.CANCELLED, SessionState.FAILED,
     },
     SessionState.FINALIZING: {
         SessionState.VERIFYING, SessionState.DEGRADED, SessionState.FAILED,
