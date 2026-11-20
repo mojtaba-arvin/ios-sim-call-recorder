@@ -77,6 +77,15 @@ class PostgresBridgeRepository:
                         "SELECT pg_advisory_xact_lock(hashtext(%s))",
                         (f"{tenant_id}\\0{participant_ref}",),
                     )
+                if commands:
+                    cur.execute(
+                        """SELECT participant_ref FROM participant_address_vault
+                           WHERE tenant_id=%s AND participant_ref = ANY(%s)""",
+                        (tenant_id, sorted(session.expected_participant_refs)),
+                    )
+                    provisioned = {row[0] for row in cur.fetchall()}
+                    if provisioned != set(session.expected_participant_refs):
+                        raise ValueError("every expected participant must have a provisioned address")
                 cur.execute(
                     """INSERT INTO bridge_sessions
                     (tenant_id, session_id, expected_participants, expected_participant_refs, state,
