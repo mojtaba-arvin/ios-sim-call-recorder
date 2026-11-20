@@ -109,7 +109,7 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 - [ ] Fetch completed media server-side using authenticated provider APIs; never trust arbitrary callback URLs.
 - [x] Add bounded server-side WAV structural validation (RIFF/chunk lengths, PCM/IEEE-float format, frame alignment, duration, sample rate, channels, size and SHA-256); [ ] integrate media retrieval and full decoder validation for provider output formats.
-- [ ] Store encrypted media in tenant-scoped object storage with opaque keys and short-lived authorized downloads.
+- [x] Implement KMS-encrypted S3-compatible WAV object-storage adapter with tenant-derived opaque keys, SHA-256 metadata and 60–300 second presigned downloads; [ ] configure real bucket Block Public Access, least-privilege IAM/KMS, versioning/lifecycle and tenant-authorized retrieval.
 - [ ] Verify channel semantics and analyze each channel independently (RMS/peak, silence, clipping, gaps, duration and sample rate).
 - [ ] Require human or independently validated speech evidence for both directions; channel count or provider metadata alone is insufficient.
 - [ ] Persist verification summary and provenance, not raw audio or transcript in logs.
@@ -120,8 +120,8 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 ### M5 — Security, privacy and market readiness
 
 - [x] Add a threat model covering tenant isolation, token theft, participant address exposure, webhook forgery/replay, consent bypass, SSRF, media leakage, outbox replay and local file protection; [ ] validate controls through independent security testing and close residual deployment risks.
-- [ ] Review consent/disclosure wording and affirmative-consent capture for each launch jurisdiction.
-- [ ] Complete data-protection impact assessment, lawful basis, data residency, retention defaults, user export/deletion and incident response.
+- [x] Complete an engineering privacy/consent data-flow review and record fail-closed consent invariants; [ ] obtain jurisdiction-specific counsel approval of wording and actual capture topology.
+- [ ] Complete data-protection impact assessment, lawful basis, data residency, retention defaults, user export/deletion and incident response with the selected market's counsel and privacy owner.
 - [x] Add the app privacy manifest for currently used required-reason APIs; [ ] complete App Store privacy-label, permission, background-mode and recording-disclosure review against the final SDK/deployment configuration.
 - [ ] Verify emergency-call exclusion and safe failure behavior; never silently record or bypass system disclosure.
 - [ ] Run dependency, secret, static-analysis and backup/restore checks.
