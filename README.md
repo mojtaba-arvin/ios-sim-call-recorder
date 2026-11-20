@@ -63,7 +63,9 @@ Positive physical configurations require at least three repeated runs and indepe
 - [Executable delivery roadmap](docs/engineering/executable-product-roadmap.md) — sequenced milestones, dependencies and release gates.
 - [Physical-device acceptance protocol](docs/engineering/physical-device-test-protocol.md) — exact compatibility tuple and repeatable test matrix.
 - [Recording pathway research](docs/research/recording-pathways.md) — platform, carrier and accessory evidence boundaries.
-- [Twilio recording/consent ordering decision](docs/engineering/adr-0002-twilio-recording-consent-order.md) — why a live provider adapter must change the current post-join consent sequence.
+- [Twilio recording/consent ordering decision](docs/engineering/adr-0002-twilio-recording-consent-order.md) — why a live provider adapter must honor pre-join consent.
+- [Security threat model](docs/security/threat-model.md) — current controls, abuse cases and release-blocking residuals.
+- [Operations runbook](docs/operations/runbook.md) — pre-production incident, recovery and rollback procedures.
 
 ## Project maturity
 
