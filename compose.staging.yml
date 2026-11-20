@@ -34,6 +34,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?inject DATABASE_URL from a secret manager}
       BRIDGE_API_TOKEN_HASHES: ${BRIDGE_API_TOKEN_HASHES:?inject token hash map from a secret manager}
+      TWILIO_ENABLED: ${TWILIO_ENABLED:-false}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -46,5 +47,46 @@ services:
       retries: 5
     restart: unless-stopped
 
+  worker:
+    profiles: ["provider"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "worker_main.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?inject DATABASE_URL from a secret manager}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:?inject Twilio Account SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:?inject Twilio Auth Token}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      TWILIO_PROVIDER_ACCOUNT_ID: ${TWILIO_PROVIDER_ACCOUNT_ID:?set opaque provider account id}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:?set Twilio caller ID}
+      TWILIO_PUBLIC_ORIGIN: ${TWILIO_PUBLIC_ORIGIN:?set public HTTPS origin}
+      TWILIO_CONSENT_DISCLOSURE: ${TWILIO_CONSENT_DISCLOSURE:?inject legally reviewed disclosure}
+      PARTICIPANT_ADDRESS_KEY_HEX: ${PARTICIPANT_ADDRESS_KEY_HEX:?inject 32-byte vault key}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-1}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  retention:
+    profiles: ["provider"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "retention_main.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?inject DATABASE_URL from a secret manager}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:?inject Twilio Account SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:?inject Twilio Auth Token}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:?set private media bucket}
+      MEDIA_KMS_KEY_ID: ${MEDIA_KMS_KEY_ID:?set KMS key}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 volumes:
   bridge-postgres:
