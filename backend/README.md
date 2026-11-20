@@ -1,7 +1,6 @@
 # Conference Bridge Backend Core
 
-This is a provider-neutral domain and persistence foundation, not a deployable
-recording service and not a real PSTN provider integration.
+This is a provider-neutral domain/persistence foundation with an authenticated tenant-scoped ASGI session API component. It is not yet a deployed recording service or a real PSTN provider integration.
 
 ## Included
 - Typed bridge lifecycle and guarded transitions.
@@ -13,6 +12,7 @@ recording service and not a real PSTN provider integration.
 - PostgreSQL-backed durable sessions, event receipts and outbox leases.
 - Bounded retries, lease-token ownership and dead-letter state.
 - Opaque participant references rather than phone numbers.
+- Framework-neutral authenticated ASGI create/read/cancel endpoints with tenant-scoped PostgreSQL session ownership (migration 0005).
 
 ## Persistence and migrations
 
@@ -23,8 +23,7 @@ python -m pip install -r backend/requirements.txt
 ```
 
 Apply SQL migrations in numeric order with the deployment migration runner before starting the
-service: `0001_bridge_persistence.sql`, `0002_provider_resources.sql`, then
-`0003_consent_preflight.sql`, then `0004_consent_evidence.sql`. The repository deliberately
+service: `0001_bridge_persistence.sql` through `0005_tenant_ownership.sql`. The repository deliberately
 does not run DDL automatically at application startup.
 
 Construct the repository with a connection factory:
@@ -118,3 +117,18 @@ PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected pa
 
 
 The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
+
+
+## Authenticated session API component
+
+`bridge_core.http_api.BridgeSessionsASGI` implements:
+
+- `POST /v1/bridge-sessions` with a JSON array of opaque `participant_refs`;
+- `GET /v1/bridge-sessions/{session_id}`;
+- `POST /v1/bridge-sessions/{session_id}/cancel`.
+
+Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secret manager. The raw token is never stored. Session reads and cancellation are tenant-scoped. Responses omit participant references and provider identifiers. Cancellation is restricted to `created` and `awaiting_user_action`; active sessions return conflict because no provider-backed close adapter exists yet.
+
+The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
+
+This component is not yet wired to a server, TLS ingress, token rotation, rate limiting, idempotency persistence or production secrets loader. The secure participant-address resolver, webhook HTTP ingress and live provider adapter remain separate work.
