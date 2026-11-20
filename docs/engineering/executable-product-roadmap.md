@@ -27,6 +27,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - Authenticated tenant-scoped ASGI session create/read/cancel component, PostgreSQL tenant ownership, liveness/readiness endpoints and ordered migration runner.
 - Signed Twilio webhook ASGI transport adapter (injected event decoder), graceful outbox worker loop, encrypted tenant-scoped participant-address vault and local staging container/Compose scaffold.
 - Bounded server-side WAV structural validation with digest, format, channel-count, sample-rate, duration and chunk-boundary checks.
+- KMS-encrypted S3-compatible WAV object-storage adapter with tenant-derived opaque keys, validation-before-upload and bounded presigned download URLs.
 - CI workflows for Swift, iOS Simulator, audio analysis, backend/PostgreSQL and repository policy.
 
 ### Not implemented / not proven
@@ -131,9 +132,9 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 ### M6 — Staging, production and controlled rollout
 
 - [x] Add a local containerized staging scaffold with PostgreSQL, explicit migration job, API health checks and externally injected configuration; [ ] deploy a remote isolated provider subaccount/test-number staging environment with budget alerts.
-- [x] Add ASGI lifecycle/tenant-isolation tests, PostgreSQL tenant/cancellation tests and WAV validation tests; [ ] run full provider-to-media end-to-end staging scenarios with consenting participants and verify both audio directions/cleanup.
+- [x] Add ASGI lifecycle/tenant-isolation tests, PostgreSQL tenant/cancellation tests, API-to-PostgreSQL lifecycle integration test, webhook ingress, address-vault and media-storage tests; [ ] run full provider-to-media end-to-end staging scenarios with consenting participants and verify both audio directions/cleanup.
 - [ ] Exercise worker crash/restart, webhook replay, provider timeout, database failover, object-store outage and deletion retry.
-- [x] Publish a pre-production incident/recovery/rollback runbook; [ ] implement dashboards, alerts, SLOs and support diagnostics from real staging telemetry.
+- [x] Publish a pre-production incident/recovery/rollback runbook and implement basic API liveness/readiness plus redacted worker-cycle logs; [ ] implement dashboards, alerts, SLOs and support diagnostics from real staging telemetry.
 - [ ] Release to a small allowlisted compatibility cohort only after all gates pass.
 - [ ] Expand support tuple-by-tuple using measured evidence; never infer support for untested carriers/regions/devices.
 
