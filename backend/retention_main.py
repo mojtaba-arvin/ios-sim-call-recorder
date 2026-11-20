@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from bridge_core.config import database_url_from_env
 import time
 import psycopg
 import boto3
@@ -12,7 +13,10 @@ from providers.twilio.media import TwilioMediaRetentionWorker
 
 
 def main():
-    dsn=os.environ.get("DATABASE_URL","").strip()
+    try:
+        dsn=database_url_from_env()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
     account=os.environ.get("TWILIO_ACCOUNT_SID","").strip()
     username=os.environ.get("TWILIO_API_KEY","").strip() or account
     password=os.environ.get("TWILIO_API_SECRET","").strip() or os.environ.get("TWILIO_AUTH_TOKEN","").strip()
