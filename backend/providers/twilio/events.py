@@ -132,7 +132,9 @@ class TwilioWebhookEventDecoder:
                 raise TwilioEventDecodeError("unsupported Twilio Conference callback")
         elif route == "recording":
             status = fields.get("RecordingStatus", "")
-            if status == "completed":
+            if status == "in-progress":
+                event_type = EventType.RECORDING_STARTED
+            elif status == "completed":
                 event_type = EventType.RECORDING_READY
             elif status in {"failed", "absent"}:
                 event_type = EventType.RECORDING_FAILED
