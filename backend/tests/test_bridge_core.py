@@ -255,6 +255,13 @@ class BridgeCoreTests(unittest.TestCase):
             SessionState.CANCELLED,
         )
 
+    def test_participant_decline_fails_session_without_provider_commands(self):
+        self.send(self.event("declined", EventType.PARTICIPANT_DECLINED, "a"))
+        session = self.repo.get_session("session-opaque-1")
+        self.assertEqual(session.state, SessionState.FAILED)
+        self.assertEqual(session.failure_code, "participant_declined_consent")
+        self.assertEqual(self.repo.outbox, [])
+
     def test_call_end_before_recording_fails_closed(self):
         self.send(self.event("ended", EventType.CALL_ENDED))
         session = self.repo.get_session("session-opaque-1")
