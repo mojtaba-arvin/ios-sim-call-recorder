@@ -67,7 +67,7 @@ class PostgresBridgeRepository:
                 if cur.fetchone() != (1,):
                     raise RuntimeError("database readiness check failed")
 
-    def create_session(self, session: BridgeSession, *, tenant_id: str = "default") -> None:
+    def create_session(self, session: BridgeSession, *, tenant_id: str = "default", commands: tuple[OutboxCommand, ...] = ()) -> None:
         if not tenant_id or not tenant_id.strip() or len(tenant_id) > 128:
             raise ValueError("tenant_id must be a non-empty bounded identifier")
         with self._connect() as conn:
@@ -84,6 +84,10 @@ class PostgresBridgeRepository:
                      json.dumps([item.to_dict() for item in session.consent_evidence]),
                      session.failure_code, session.updated_at),
                 )
+                for command in commands:
+                    if command.session_id != session.session_id:
+                        raise ValueError("initial outbox command must belong to the created session")
+                    self._insert_command(cur, command)
 
     def get_session(self, session_id: str, *, tenant_id: str | None = None) -> BridgeSession | None:
         with self._connect() as conn:
