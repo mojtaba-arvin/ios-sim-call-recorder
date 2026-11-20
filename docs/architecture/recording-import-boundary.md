@@ -6,7 +6,7 @@
 
 1. The user explicitly selects an audio file through the SwiftUI Files document importer.
 2. The app starts security-scoped access where required and coordinates the external read with NSFileCoordinator.
-3. The source size and available disk capacity are checked before copying. Import fails with an actionable low-storage message when the source plus the configured free-space reserve will not fit.
+3. The app obtains a finite iOS background-execution lease for the user-initiated import. The source size and available disk capacity are checked before copying; import fails with an actionable low-storage message when the source plus the configured free-space reserve will not fit.
 4. The app copies the file to an opaque UUID staging path in app-private Application Support.
 5. A container signature probe and WAV RIFF/chunk-boundary checks validate the actual file structure. AVAudioFile opens the file and decodes the full payload in bounded chunks.
 6. The core validator checks file size, duration, sample rate, channel count and extension/container agreement.
@@ -20,7 +20,7 @@
 - A failed copy/decode/validation removes the staging artifact.
 - A corrupt primary catalog is restored from a validated backup.
 - If both catalog copies are invalid or missing while managed media exists, the service fails closed and preserves the media.
-- A process interruption may leave a partial staging file; the next successful foreground maintenance pass removes abandoned staging contents.
+- A process interruption or expired iOS background-execution lease may leave a partial staging file; the next successful foreground maintenance pass removes abandoned staging contents. The lease is finite and does not promise that iOS will keep the process alive indefinitely.
 - Complete file protection prevents access while the device is locked and keeps protected media unavailable after reboot until the first device unlock. This policy is intentionally stronger than background availability.
 - Retention is opt-in (Never, 30, 90 or 365 days) and is applied on library load/foreground refresh and when the setting changes; there is no scheduled background deletion service.
 
