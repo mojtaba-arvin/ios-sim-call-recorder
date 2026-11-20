@@ -32,6 +32,19 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 - Legal review and App Store approval for each launch market.
 - Production deployment or end-to-end paid provider call.
 
+## Product validation gate (before production-scale investment)
+
+The detailed evidence, customer-discovery protocol, segment hypotheses, competitor/substitute analysis, commercial gates and go/no-go criteria live in [Product validation](../research/product-validation.md).
+
+- [x] Complete current-snapshot platform and pathway desk research; keep every unsupported claim classified as a hypothesis.
+- [ ] Select one launch jurisdiction and one initial customer segment; do not infer either from repository or account metadata.
+- [ ] Complete problem interviews and prototype tests for that segment.
+- [ ] Obtain paid-pilot / procurement evidence and conservative unit economics.
+- [ ] Complete jurisdiction-specific legal/privacy review of the actual call flow.
+- [ ] Pass a lawful physical capture pathway gate before claiming native SIM-call recording.
+
+**Exit gate:** problem, solution, commercial, legal/trust and physical-feasibility gates are independently evidenced. A desk-research report or green CI is not product-market validation.
+
 ## Delivery sequence
 
 ### M0 — Stabilize the integration baseline
