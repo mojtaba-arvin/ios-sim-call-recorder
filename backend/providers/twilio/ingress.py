@@ -7,12 +7,13 @@ from bridge_core.webhooks import InvalidWebhookSignature, UnknownSession
 
 class TwilioWebhookASGI:
     MAX_BODY_BYTES = 256 * 1024
-    def __init__(self, *, processor, decode_verified_request, canonical_public_origin):
+    def __init__(self, *, processor, decode_verified_request, canonical_public_origin, after_process=None):
         parts = urlsplit(canonical_public_origin)
         if parts.scheme != 'https' or not parts.netloc or parts.username or parts.password or parts.path not in ('','/') or parts.query or parts.fragment:
             raise ValueError('canonical public origin must be an HTTPS origin without path/query')
         self.processor = processor
         self.decode = decode_verified_request
+        self.after_process = after_process
         self.origin = f'https://{parts.netloc}'
 
     async def __call__(self, scope: dict[str, Any], receive, send):
@@ -49,7 +50,9 @@ class TwilioWebhookASGI:
         except ValueError:
             await self.respond(send,400); return
         try:
-            self.processor.process(request=request, decode=self.decode)
+            accepted = self.processor.process(request=request, decode=self.decode)
+            if self.after_process is not None:
+                self.after_process(request, accepted)
         except InvalidWebhookSignature:
             await self.respond(send,403); return
         except UnknownSession:
@@ -58,9 +61,15 @@ class TwilioWebhookASGI:
             await self.respond(send,400); return
         except Exception:
             await self.respond(send,500); return
+        if urlsplit(public_url).path.rstrip('/').endswith('/consent'):
+            body = b'<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+            await self.respond(send,200,body=body,content_type=b'application/xml; charset=utf-8')
+            return
         await self.respond(send,204)
 
     @staticmethod
-    async def respond(send, status):
-        await send({'type':'http.response.start','status':status,'headers':[(b'cache-control',b'no-store'),(b'content-length',b'0')]})
-        await send({'type':'http.response.body','body':b''})
+    async def respond(send, status, *, body=b'', content_type=None):
+        headers=[(b'cache-control',b'no-store'),(b'content-length',str(len(body)).encode('ascii'))]
+        if content_type: headers.append((b'content-type',content_type))
+        await send({'type':'http.response.start','status':status,'headers':headers})
+        await send({'type':'http.response.body','body':body})

@@ -56,9 +56,12 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         self.assertNotIn(CALL, repr(event))
         self.assertEqual(len(event.payload_digest), 64)
 
-    def test_non_affirmative_consent_is_rejected(self):
-        with self.assertRaises(TwilioEventDecodeError):
-            self.decoder(self.request("consent", {**self.base(), "Digits": "2"}))
+    def test_non_affirmative_consent_is_normalized_as_decline(self):
+        event = self.decoder(
+            self.request("consent", {**self.base(), "Digits": "2"})
+        )
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.participant_ref, "participant-internal-1")
 
     def test_conference_join_maps_to_participant_joined(self):
         event = self.decoder(self.request("conference", {
@@ -67,6 +70,13 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         }))
         self.assertEqual(event.event_type, EventType.PARTICIPANT_JOINED)
         self.assertEqual(event.participant_ref, "participant-internal-1")
+
+    def test_conference_participant_leave_is_acknowledged_as_status(self):
+        event = self.decoder(self.request("conference", {
+            **self.base(), "ConferenceSid": CONFERENCE,
+            "StatusCallbackEvent": "participant-leave",
+        }))
+        self.assertEqual(event.event_type, EventType.PROVIDER_STATUS)
 
     def test_conference_end_maps_to_call_ended(self):
         event = self.decoder(self.request("conference", {
@@ -85,6 +95,39 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         self.assertEqual(event.event_type, EventType.RECORDING_READY)
         self.assertNotIn("private-recording", repr(event))
 
+    def test_non_affirmative_gather_digit_is_a_durable_decline_event(self):
+        event = self.decoder(self.request("consent", {**self.base(), "Digits": "9"}))
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.participant_ref, "participant-internal-1")
+
+    def test_empty_gather_result_is_a_decline_not_an_implicit_consent(self):
+        event = self.decoder(self.request("consent", self.base()))
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+
+    def test_absent_recording_callback_fails_closed(self):
+        event = self.decoder(self.request("recording", {
+            **self.base(), "ConferenceSid": CONFERENCE, "RecordingStatus": "absent",
+        }))
+        self.assertEqual(event.event_type, EventType.RECORDING_FAILED)
+
+    def test_recording_start_is_normalized_before_completed_callback(self):
+        event = self.decoder(self.request("recording", {
+            **self.base(), "ConferenceSid": CONFERENCE, "RecordingStatus": "in-progress",
+        }))
+        self.assertEqual(event.event_type, EventType.RECORDING_STARTED)
+
+    def test_completed_call_status_is_not_mistaken_for_consent(self):
+        event = self.decoder(self.request("call-status", {
+            **self.base(), "CallStatus": "completed",
+        }))
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+
+    def test_no_answer_call_status_fails_the_session_participant_closed(self):
+        event = self.decoder(self.request("call-status", {
+            **self.base(), "CallStatus": "no-answer",
+        }))
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.participant_ref, "participant-internal-1")
     def test_wrong_account_is_rejected_before_resource_resolution(self):
         fields = {**self.base(), "AccountSid": "AC" + "d" * 32, "Digits": "1"}
         with self.assertRaises(TwilioEventDecodeError):

@@ -1,0 +1,12 @@
+region                 = "eu-central-1"
+project                = "ios-sim-call-recorder"
+environment            = "staging"
+vpc_id                 = "vpc-REPLACE"
+public_subnet_ids      = ["subnet-PUBLIC-A", "subnet-PUBLIC-B"]
+private_subnet_ids     = ["subnet-PRIVATE-A", "subnet-PRIVATE-B"]
+certificate_arn        = "arn:aws:acm:eu-central-1:ACCOUNT:certificate/REPLACE"
+public_origin          = "https://api-staging.example.com"
+application_secret_arn = "arn:aws:secretsmanager:eu-central-1:ACCOUNT:secret:ios-sim-call-recorder/staging-REPLACE"
+github_oidc_provider_arn = "arn:aws:iam::ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
+github_repository      = "mojtaba-arvin/ios-sim-call-recorder"
+enable_live_twilio     = false

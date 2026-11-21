@@ -1,184 +1,77 @@
-# Conference Bridge Backend Core
+# Conference Bridge Backend
 
-This is a provider-neutral domain/persistence foundation with an authenticated tenant-scoped ASGI session API component. It is not yet a deployed recording service or a real PSTN provider integration.
+This backend contains a provider-neutral session/outbox core, authenticated tenant-scoped ASGI API, live Twilio REST adapter and signed Twilio webhook/media pipeline. It has not been exercised against a live Twilio account and is not evidence of native SIM-call merge. The implemented Twilio path is an app-owned outbound two-party Conference: both participants receive provider calls after pre-join consent.
 
 ## Included
-- Typed bridge lifecycle and guarded transitions.
-- Pre-join consent from every expected participant, bound to immutable opaque participant references and durable policy/event evidence.
-- Provider-native signature verification using the exact request URL, method,
-  content type, headers, original bytes and (where required) parsed form fields.
-- Provider event deduplication scoped by provider and provider account.
-- Atomic session transition and transactional outbox command insertion.
-- PostgreSQL-backed durable sessions, event receipts and outbox leases.
-- Bounded retries, lease-token ownership and dead-letter state.
-- Opaque participant references rather than phone numbers.
-- Framework-neutral authenticated ASGI create/read/cancel endpoints with tenant-scoped PostgreSQL session ownership (migration 0005).
-- AES-GCM encrypted tenant-scoped participant-address vault (migration 0006); addresses are decrypted only in process memory for a trusted caller that has already authorized the tenant.
-- KMS-encrypted S3-compatible WAV object-storage adapter with opaque tenant-derived keys, bounded presigned downloads and validation-before-upload.
 
-## Persistence and migrations
+- Guarded bridge lifecycle and durable pre-join consent evidence.
+- Tenant-scoped authenticated session create/read/cancel API.
+- Transactional initial consent-request outbox commands.
+- Twilio REST commands for outbound consent calls, Conference participant creation/addition, recording-from-start and Conference closure.
+- DTMF Gather disclosure: only digit 1 is affirmative; empty input, other digits, busy, no-answer, failed and unconsented completed calls fail closed.
+- Signed call-status, consent, Conference and Recording webhooks, with account-scoped resource ownership resolution.
+- Separate immutable provider mappings for consent IVR call SIDs and Conference participant call SIDs.
+- Encrypted tenant-scoped E.164 address vault with authenticated provisioning/deletion API and metadata-only audit trail.
+- Supervised outbox worker and retryable media-retention worker.
+- Twilio Conference recording retrieval with RequestedChannels=2, bounded WAV validation, stereo PCM16 activity checks, explicit channel ownership for two participants, KMS-backed S3 upload and coordinated Twilio/S3 deletion.
 
-PostgreSQL 16 is the CI integration-test target. Install the pinned backend dependencies (PostgreSQL driver, Twilio webhook SDK, ASGI server, AES-GCM address-vault crypto and S3 SDK):
+## Install and migrate
+
+Install pinned dependencies:
 
 ```sh
 python -m pip install -r backend/requirements.txt
 ```
 
-Apply SQL migrations in numeric order with the deployment migration runner before starting the
-service: `0001_bridge_persistence.sql` through `0006_participant_address_vault.sql`. The repository deliberately
-does not run DDL automatically at application startup.
-
-Construct the repository with a connection factory:
-
-```python
-import os
-import psycopg
-from bridge_core.persistence import PostgresBridgeRepository
-
-repository = PostgresBridgeRepository(
-    lambda: psycopg.connect(os.environ["DATABASE_URL"])
-)
-```
-
-Each repository operation owns a short transaction. Event receipt insertion,
-session row locking/update and outbox command insertion commit or roll back as
-one unit. Event identity is unique by
-`(provider, provider_account_id, event_id)`; reusing an event ID for a different
-session is rejected.
-
-## Outbox worker contract
-
-Workers call `claim_outbox` to lease commands. Claims use PostgreSQL
-`FOR UPDATE SKIP LOCKED`, an expiring lease and a fresh opaque lease token.
-Only the current token can acknowledge or fail a command. Expired leases can be
-reclaimed; attempts are bounded and terminal provider failures can be moved directly
-to `dead` without a retry delay.
-
-A worker must commit the lease before calling a provider, pass the stable
-`idempotency_key` when supported, reconcile uncertain outcomes before retrying
-non-idempotent side effects, and acknowledge only after observing acceptance.
-Persist only stable error codes, never exception text or raw provider payloads.
-
-This is at-least-once command delivery, not exactly-once remote execution. A
-worker can crash after a provider side effect and before acknowledgement commits.
-Provider-side idempotency/reconciliation is mandatory before enabling live calls.
-
-## Provider command dispatcher foundation
-
-`bridge_core.dispatcher.OutboxCommandDispatcher` leases commands and invokes a configured
-provider/account adapter only after the lease transaction has committed. Every delivery
-attempt first calls the adapter's `reconcile` method with the persisted Conference SID
-and, when the command carries an opaque `participant_ref`, its mapped Call SID. The
-adapter must return `UNKNOWN` rather than execute when provider state cannot be established.
-Only `NOT_APPLIED` permits execution; `APPLIED` is acknowledged without replaying the
-side effect. Provider I/O must never run inside a repository transaction.
-
-Before reconciliation, `conference.create` and `participant.add` commands must contain a non-empty opaque `participant_ref` (at most 128 characters and no whitespace). `conference.create` must use `recording_mode=from_start`; unsupported modes are dead-lettered before provider I/O. Both commands require persisted Conference and Call SIDs before acknowledgement.
-
-The `0002_provider_resources.sql` migration stores provider/account/session-scoped
-Conference SIDs and opaque participant-reference-to-Call-SID mappings. The first `conference.create` command maps the recording-enabled first participant; later `participant.add` commands map each additional pre-consented participant. These identifiers
-are immutable for a given mapping; conflicts fail closed. Do not store phone numbers,
-provider credentials, media URLs, audio, or signatures in these tables or outbox payloads.
-
-The parallel provider/platform evidence and open questions are recorded in
-[`docs/research/provider-evaluation-2026-11.md`](../docs/research/provider-evaluation-2026-11.md).
-
-This is a dispatcher contract and persistence foundation, not a live Twilio adapter.
-Twilio participant creation does not have a documented general idempotency guarantee in
-the reviewed API reference. A concrete adapter must use a stable provider correlation
-strategy and query provider state before retrying ambiguous operations. No real provider
-calls or carrier-compatibility claims are made by these tests.
-
-## Twilio recording and consent ordering
-
-The domain reducer now enforces pre-join consent and emits a recording-enabled `conference.create` command only after every expected participant has consented. It no longer emits a post-join `recording.start` command for the Twilio flow. **A concrete provider adapter and production-deployed HTTP service are still not implemented.** The ASGI session component and factory are present, but do not issue provider calls. Twilio exposes conference recording-from-start configuration when a participant joins/creates the conference; the reviewed API documents pause/resume for an existing Conference recording, but not a general start operation after join or a stop operation for Conference recordings. See [ADR-0002](../docs/engineering/adr-0002-twilio-recording-consent-order.md).
-
-A concrete Twilio adapter must therefore collect and persist affirmative consent for every expected participant before the first recording-enabled participant is joined. The current domain state machine now models this preflight, with immutable expected participant refs, consent policy version, method, signed event ID and payload digest persisted per participant, plus outbox commands for conference creation and later participant joins. A concrete adapter must create/join the conference with recording enabled from the start, and use pause/resume or conference closure rather than an unsupported recording-stop call.
-
-The manual carrier-merge path is separately blocked: a merged cellular call may arrive as one mixed PSTN participant, so the remote party cannot be assumed to be separately addressable or consent-verified. No provider adapter, live recording or carrier support is claimed.
-
-## Security and deliberate production gaps
-
-Never persist raw phone numbers, credentials, signatures, media URLs or audio in
-event/outbox payloads or logs. Use opaque participant/session references. Keep
-provider credentials in a secret manager.
-
-The authenticated ASGI API component, configured-origin signed webhook
-transport, encrypted participant-address resolver and graceful worker loop
-exist, but are not a complete deployed service. Rate limiting, durable request
-idempotency, production event decoding, provider API adapter, media retrieval,
-encrypted object storage, speech/channel verification, retention/deletion
-workers, managed secret rotation and operational monitoring remain
-unimplemented. The in-memory repository is test-only. No carrier three-way-call
-compatibility or real two-way recording is proven.
-
-## Tests
-
-```sh
-PYTHONPATH=backend python -m unittest discover -s backend/tests -v
-```
-
-PostgreSQL integration tests require `TEST_DATABASE_URL`. They cover expected participant-reference and consent-evidence persistence, rollback, duplicate/concurrent delivery, account-scoped event identity, atomic outbox insertion, concurrent claims, lease expiry, stale lease rejection and retries. Unit tests cover consent-before-join, recording-from-start command creation and idempotent participant-add scheduling.
-
-
-The outbox payload validator rejects phone-number fields and common telephony aliases (`from`, `to`, `caller`, `callee`, `destination`, E.164 and nested equivalents) so alternate key names cannot bypass the PII boundary.
-
-
-## Authenticated session API component
-
-`bridge_core.http_api.BridgeSessionsASGI` implements:
-
-- `POST /v1/bridge-sessions` with a JSON array of opaque `participant_refs`;
-- `GET /v1/bridge-sessions/{session_id}`;
-- `POST /v1/bridge-sessions/{session_id}/cancel`.
-
-Bearer tokens are configured as SHA-256 digest to tenant-ID mappings from a secret manager. The raw token is never stored. Session reads and cancellation are tenant-scoped. Responses omit participant references and provider identifiers. Cancellation is restricted to `created` and `awaiting_user_action`; active sessions return conflict because no provider-backed close adapter exists yet.
-
-The component has ASGI-level tests with a tenant-isolating fake repository. PostgreSQL tenant scoping and cancellation have integration tests that run when `TEST_DATABASE_URL` is configured.
-
-The webhook transport component is not yet mounted in the deployed ASGI service or exposed through TLS ingress. Token rotation, rate limiting, idempotency persistence and production secrets loading also remain open. The signed webhook transport ingress, encrypted address resolver and KMS-backed S3 storage adapter components now exist; production event decoding, audited address provisioning, bucket policy/IAM setup, retention lifecycle and live provider command adapter remain separate work.
-
-
-## Running the ASGI API locally
-
-Install `backend/requirements.txt`, apply ordered migrations with
-`DATABASE_URL=... python backend/migrate.py`, and configure
-`BRIDGE_API_TOKEN_HASHES` as a JSON object mapping SHA-256 token digests to
-tenant IDs. Start the application from the backend directory:
+Apply migrations in numeric order before starting services:
 
 ```sh
 cd backend
-uvicorn asgi:create_app --factory --host 127.0.0.1 --port 8000
+python migrate.py
 ```
 
-Liveness and readiness are available at `/health/live` and
-`/health/ready`. Readiness checks PostgreSQL and does not disclose connection
-details. The authenticated session routes are described in
-`bridge_core/http_api.py`.
+Migrations currently run through 0011_rejected_media_metadata.sql. The application does not run DDL at startup.
 
-A local isolated stack template is provided in
-`compose.staging.yml`. It requires externally injected `DATABASE_URL`,
-`POSTGRES_PASSWORD` and `BRIDGE_API_TOKEN_HASHES`; do not commit a populated
-environment file. The API binds to loopback by default. Put it behind a
-trusted TLS reverse proxy before any remote access.
+## API flow
 
-The Docker image and compose file are staging scaffolding only. No public
-deployment, TLS certificate, secret manager integration, provider account,
-live provider adapter or production readiness is implied.
+1. Provision each participant address through authenticated PUT /v1/participants/{participant_ref}/address with a JSON phone_number field. The response never echoes the address.
+2. Create a session with exactly two opaque participant_refs. When TWILIO_ENABLED=true, session creation and the two consent.request outbox commands commit atomically.
+3. Both participants receive a separate consent call. Only after every affirmative Gather event does the reducer enqueue conference.create.
+4. The first participant joins a recording-enabled Conference. Its join callback causes the second participant.add command.
+5. Conference callbacks move the session into recording/finalization. A completed Recording callback triggers media retrieval and two-channel validation.
+6. The session becomes COMPLETED only after both channels contain activity and encrypted object storage succeeds; otherwise it becomes DEGRADED. Retention deletes the Twilio recording and S3 object as separate retryable steps.
 
+DELETE /v1/participants/{participant_ref}/address removes the tenant-scoped encrypted address and records a metadata-only audit event. GET /v1/bridge-sessions/{session_id}/media returns a 120-second presigned URL only for a verified, undeleted media asset and records the grant in media_access_audit. API session cancellation while consent calls may exist dead-letters pending consent requests and queues provider call cancellation.
 
-## Media object storage adapter
+## Runtime configuration
 
-`bridge_core.object_storage.S3MediaObjectStore` validates WAV structure and
-size before upload, computes a SHA-256 digest, and uploads with
-`ServerSideEncryption=aws:kms`, a configured KMS key and opaque tenant-derived
-object prefixes. Session and media identifiers must be UUIDs. Download,
-delete and presigned-URL operations derive the object key from the authorized
-tenant/session/media tuple; URL expiry is restricted to 60–300 seconds.
+The ASGI factory is asgi:create_app. With TWILIO_ENABLED=false it exposes only the session API. Enabling Twilio requires all of the following to be injected from a secret manager:
 
-The caller must authorize the tenant before invoking download or URL creation.
-The bucket must have Block Public Access enabled, a restrictive bucket policy,
-least-privilege IAM/KMS grants, versioning/lifecycle rules appropriate to the
-retention policy, access logging and deletion/replication controls. The adapter
-is not wired to a live provider retrieval pipeline and no AWS bucket or KMS key
-is configured by this repository.
+- TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.
+- TWILIO_PROVIDER_ACCOUNT_ID and TWILIO_FROM_NUMBER.
+- TWILIO_PUBLIC_ORIGIN (canonical public HTTPS origin).
+- TWILIO_CONSENT_POLICY_VERSION and TWILIO_CONSENT_DISCLOSURE (exact counsel-approved text).
+- PARTICIPANT_ADDRESS_KEY_HEX (32 random bytes encoded as 64 hex characters).
+- MEDIA_BUCKET and MEDIA_KMS_KEY_ID.
+- BRIDGE_API_TOKEN_HASHES and DATABASE_URL (or split DATABASE_HOST/PORT/NAME/USER/PASSWORD settings).
+
+The standalone worker entry point is python worker_main.py. The retention service entry point is python retention_main.py. Compose exposes these only through its opt-in provider profile. Never use a personal production Twilio account for development.
+
+## Outbox and idempotency
+
+The dispatcher commits a lease before provider I/O and reconciles every delivery before retrying. Consent calls and conference legs have distinct resource tables because their Call SIDs are different. Twilio Calls.create does not provide a general idempotency guarantee; if the provider side effect may have happened but no mapping was committed, the adapter returns UNKNOWN and does not dial again. This favors avoiding duplicate calls over automatic recovery.
+
+A worker can crash after a provider side effect and before acknowledgement. Provider reconciliation remains mandatory; this is at-least-once command delivery, not exactly-once remote execution.
+
+## Media channel semantics
+
+Twilio dual-channel Conference recording places the first participant in channel 1 and all remaining participants in channel 2. The product therefore restricts this path to exactly two expected participants. The validator requires stereo PCM16 WAV and measurable activity in both channels. This verifies two active tracks and a provider-defined mapping; it is not voice biometrics and cannot prove that a specific human spoke.
+
+The media endpoint explicitly requests RequestedChannels=2. Account-level dual-channel availability must be confirmed in the live Twilio account. A mono or silent-channel result is rejected and the session is DEGRADED rather than presented as a valid two-sided recording.
+
+## Explicit boundaries
+
+- No live Twilio account, PSTN call, recording, deletion or billable provider action was performed by CI.
+- This app-owned outbound Conference is not native Phone.app audio capture and does not prove a user's existing SIM call can be merged.
+- No AWS account or remote staging resources have been provisioned. Terraform and a manual OIDC deploy workflow are under infra/aws.
+- No jurisdiction-specific legal approval, paid pilot, physical-device evidence, App Store approval or signed Release build is claimed.

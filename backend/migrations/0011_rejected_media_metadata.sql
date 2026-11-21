@@ -1,0 +1,15 @@
+ALTER TABLE media_assets ALTER COLUMN sha256 DROP NOT NULL;
+ALTER TABLE media_assets ALTER COLUMN byte_count DROP NOT NULL;
+ALTER TABLE media_assets ALTER COLUMN duration_seconds DROP NOT NULL;
+ALTER TABLE media_assets ALTER COLUMN sample_rate_hz DROP NOT NULL;
+ALTER TABLE media_assets ALTER COLUMN channel_count DROP NOT NULL;
+ALTER TABLE media_assets DROP CONSTRAINT IF EXISTS media_assets_sha256_check;
+ALTER TABLE media_assets DROP CONSTRAINT IF EXISTS media_assets_byte_count_check;
+ALTER TABLE media_assets DROP CONSTRAINT IF EXISTS media_assets_duration_seconds_check;
+ALTER TABLE media_assets DROP CONSTRAINT IF EXISTS media_assets_sample_rate_hz_check;
+ALTER TABLE media_assets DROP CONSTRAINT IF EXISTS media_assets_channel_count_check;
+ALTER TABLE media_assets ADD CONSTRAINT media_assets_sha256_check CHECK (sha256 IS NULL OR sha256 ~ '^[0-9a-f]{64}$');
+ALTER TABLE media_assets ADD CONSTRAINT media_assets_byte_count_check CHECK (byte_count IS NULL OR byte_count >= 0);
+ALTER TABLE media_assets ADD CONSTRAINT media_assets_duration_seconds_check CHECK (duration_seconds IS NULL OR duration_seconds > 0);
+ALTER TABLE media_assets ADD CONSTRAINT media_assets_sample_rate_hz_check CHECK (sample_rate_hz IS NULL OR sample_rate_hz >= 8000);
+ALTER TABLE media_assets ADD CONSTRAINT media_assets_channel_count_check CHECK (channel_count IS NULL OR channel_count BETWEEN 1 AND 2);

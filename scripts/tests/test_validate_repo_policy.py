@@ -13,7 +13,7 @@ VALID_ACTION_SHA = "a" * 40
 
 
 class RepositoryPolicyValidatorTests(unittest.TestCase):
-    def run_validator(self, workflow: str) -> subprocess.CompletedProcess[str]:
+    def run_validator(self, workflow: str, filename: str = "test.yml") -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             scripts_directory = root / "scripts"
@@ -25,7 +25,7 @@ class RepositoryPolicyValidatorTests(unittest.TestCase):
                 REPOSITORY_ROOT / "scripts" / "validate_repo_policy.py",
                 scripts_directory / "validate_repo_policy.py",
             )
-            (workflows_directory / "test.yml").write_text(workflow, encoding="utf-8")
+            (workflows_directory / filename).write_text(workflow, encoding="utf-8")
 
             return subprocess.run(
                 [sys.executable, str(scripts_directory / "validate_repo_policy.py")],
@@ -77,6 +77,29 @@ jobs:
         result = self.run_validator(workflow)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("write permission (actions)", result.stderr)
+
+    def test_accepts_narrow_oidc_and_non_cancellable_deploy_exception(self) -> None:
+        workflow = self.valid_workflow().replace(
+            "  contents: read",
+            "  contents: read\n  id-token: write",
+        ).replace("cancel-in-progress: true", "cancel-in-progress: false")
+        result = self.run_validator(workflow, filename="deploy-staging.yml")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_oidc_write_exception_does_not_apply_to_other_workflows(self) -> None:
+        workflow = self.valid_workflow().replace(
+            "  contents: read",
+            "  contents: read\n  id-token: write",
+        )
+        result = self.run_validator(workflow)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("write permission (id-token)", result.stderr)
+
+    def test_non_cancellable_exception_requires_explicit_false(self) -> None:
+        workflow = self.valid_workflow().replace("cancel-in-progress: true", "cancel-in-progress: false")
+        result = self.run_validator(workflow)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cancel-in-progress must be true", result.stderr)
 
     def test_rejects_unpinned_actions(self) -> None:
         workflow = self.valid_workflow().replace(

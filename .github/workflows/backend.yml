@@ -2,6 +2,7 @@ name: Backend core checks
 
 on:
   pull_request:
+    branches: [main]
     paths:
       - ".github/workflows/backend.yml"
       - "backend/**"
@@ -62,6 +63,18 @@ jobs:
           POSTGRES_PASSWORD: ci-only-password
           DATABASE_URL: postgresql://bridge_staging:ci-only-password@postgres:5432/bridge_staging
           CI_API_TOKEN: ci-only-session-api-token-with-at-least-32-characters
+          # Compose interpolates inactive provider-profile services too. These
+          # non-secret placeholders satisfy config parsing; the provider profile
+          # is deliberately not started in this CI lifecycle test.
+          TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+          TWILIO_AUTH_TOKEN: ci-only-twilio-auth-token
+          TWILIO_PROVIDER_ACCOUNT_ID: ci-only-provider
+          TWILIO_FROM_NUMBER: "+15550000000"
+          TWILIO_PUBLIC_ORIGIN: https://example.invalid
+          TWILIO_CONSENT_DISCLOSURE: CI-only non-production disclosure
+          PARTICIPANT_ADDRESS_KEY_HEX: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          MEDIA_BUCKET: ci-only-media-bucket
+          MEDIA_KMS_KEY_ID: ci-only-kms-key
         run: |
           set -euo pipefail
           export BRIDGE_API_TOKEN_HASHES="$(python3 - <<'PY'

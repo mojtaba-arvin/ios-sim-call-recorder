@@ -12,13 +12,15 @@ class FakeRepository:
     def __init__(self):
         self.sessions = {}
         self.owners = {}
+        self.commands = []
 
     def ping(self):
         return None
 
-    def create_session(self, session, *, tenant_id):
+    def create_session(self, session, *, tenant_id, commands=()):
         self.sessions[session.session_id] = session
         self.owners[session.session_id] = tenant_id
+        self.commands.extend(commands)
 
     def get_session(self, session_id, *, tenant_id):
         if self.owners.get(session_id) != tenant_id:
@@ -34,6 +36,26 @@ class FakeRepository:
         updated = session.transition(SessionState.CANCELLED)
         self.sessions[session_id] = updated
         return updated
+
+
+class FakeAddressVault:
+    def __init__(self):
+        self.entries = {}
+        self.deleted = []
+    def store(self, *, tenant_id, participant_ref, address):
+        self.entries[(tenant_id, participant_ref)] = address
+    def delete(self, *, tenant_id, participant_ref):
+        self.entries.pop((tenant_id, participant_ref), None)
+        self.deleted.append((tenant_id, participant_ref))
+
+
+class FakeMediaService:
+    def __init__(self, result=None):
+        self.result = result
+        self.calls = []
+    def create_download(self, *, tenant_id, session_id):
+        self.calls.append((tenant_id, session_id))
+        return self.result
 
 
 class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
@@ -109,6 +131,69 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 404)
         self.assertEqual(payload["error"], "not_found")
+
+    async def test_verified_media_download_is_tenant_scoped_and_short_lived(self):
+        result = {
+            "media_id": "media-opaque",
+            "sha256": "a" * 64,
+            "byte_count": 1024,
+            "duration_seconds": 10.0,
+            "channel_count": 2,
+            "download_url": "https://media.example.test/signed",
+            "expires_in_seconds": 120,
+        }
+        self.app.media_service = FakeMediaService(result)
+        status, body = await self.request(
+            "GET", "/v1/bridge-sessions/session-opaque/media", token=self.token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["expires_in_seconds"], 120)
+        self.assertEqual(
+            self.app.media_service.calls,
+            [("tenant-a", "session-opaque")],
+        )
+
+    async def test_unverified_media_is_not_disclosed(self):
+        self.app.media_service = FakeMediaService(None)
+        status, body = await self.request(
+            "GET", "/v1/bridge-sessions/session-opaque/media", token=self.token,
+        )
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "not_found"})
+
+    async def test_address_vault_provisioning_is_tenant_scoped_and_never_echoes_number(self):
+        self.app.address_vault = FakeAddressVault()
+        status, body = await self.request(
+            "PUT", "/v1/participants/participant-opaque/address", token=self.token,
+            body={"phone_number": "+14155550123"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"status": "stored"})
+        self.assertEqual(
+            self.app.address_vault.entries[("tenant-a", "participant-opaque")],
+            "+14155550123",
+        )
+        self.assertNotIn("+14155550123", json.dumps(body))
+        status, body = await self.request(
+            "DELETE", "/v1/participants/participant-opaque/address", token=self.token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"status": "deleted"})
+        self.assertEqual(self.app.address_vault.deleted, [("tenant-a", "participant-opaque")])
+
+    async def test_create_session_atomically_enqueues_one_consent_command_per_participant(self):
+        from providers.twilio.factory import TwilioConsentCommandFactory
+        self.app.initial_commands = TwilioConsentCommandFactory(provider_account_id="twilio-main")
+        status, created = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-a", "opaque-b"]},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["state"], "awaiting_user_action")
+        self.assertEqual(len(self.repo.commands), 2)
+        self.assertEqual({item.command_type for item in self.repo.commands}, {"consent.request"})
+        self.assertTrue(all(item.session_id == created["session_id"] for item in self.repo.commands))
+        self.assertNotIn("+", repr(self.repo.commands))
 
     async def test_invalid_participant_refs_are_rejected(self):
         status, payload = await self.request(

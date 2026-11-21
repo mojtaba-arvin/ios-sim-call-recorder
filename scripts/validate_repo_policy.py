@@ -11,6 +11,19 @@ WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
 SHA = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 ERRORS: list[str] = []
 
+# Narrow, documented exceptions: the staging deploy workflow needs the OIDC
+# token to assume its short-lived AWS role. It must not be cancelled mid-migration
+# or mid-rollout by a second manual deployment.
+WRITE_PERMISSION_EXCEPTIONS = {
+    ".github/workflows/deploy-staging.yml": {
+        "id-token": "AWS deployment uses GitHub OIDC; no long-lived AWS credentials are stored."
+    }
+}
+NON_CANCELLABLE_WORKFLOWS = {
+    ".github/workflows/deploy-staging.yml":
+        "Do not interrupt ordered database migrations or an ECS rollout."
+}
+
 if not WORKFLOWS:
     ERRORS.append(".github/workflows: no .yml workflows found")
 
@@ -61,10 +74,12 @@ for path in WORKFLOWS:
                 if permission:
                     permission_count += 1
                     if permission.group(2) == "write":
-                        ERRORS.append(
-                            f"{rel}:{child_index + 1}: write permission "
-                            f"({permission.group(1)}) requires an explicit security exception"
-                        )
+                        exception = WRITE_PERMISSION_EXCEPTIONS.get(str(rel), {}).get(permission.group(1))
+                        if not exception:
+                            ERRORS.append(
+                                f"{rel}:{child_index + 1}: write permission "
+                                f"({permission.group(1)}) requires an explicit security exception"
+                            )
                 else:
                     ERRORS.append(
                         f"{rel}:{child_index + 1}: unsupported permissions entry; "
@@ -85,7 +100,10 @@ for path in WORKFLOWS:
         ERRORS.append(f"{rel}: workflow-level concurrency group is required")
 
     if not re.search(r"(?m)^\s*cancel-in-progress:\s*true\s*$", text):
-        ERRORS.append(f"{rel}: cancel-in-progress must be explicitly configured")
+        explicit_false = re.search(r"(?m)^\s*cancel-in-progress:\s*false\s*$", text)
+        exception = NON_CANCELLABLE_WORKFLOWS.get(str(rel))
+        if not (explicit_false and exception):
+            ERRORS.append(f"{rel}: cancel-in-progress must be true unless a named non-cancellable workflow exception applies")
 
     uses = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", text)
     for action in uses:

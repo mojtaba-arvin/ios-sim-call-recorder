@@ -67,11 +67,25 @@ class PostgresBridgeRepository:
                 if cur.fetchone() != (1,):
                     raise RuntimeError("database readiness check failed")
 
-    def create_session(self, session: BridgeSession, *, tenant_id: str = "default") -> None:
+    def create_session(self, session: BridgeSession, *, tenant_id: str = "default", commands: tuple[OutboxCommand, ...] = ()) -> None:
         if not tenant_id or not tenant_id.strip() or len(tenant_id) > 128:
             raise ValueError("tenant_id must be a non-empty bounded identifier")
         with self._connect() as conn:
             with conn.cursor() as cur:
+                for participant_ref in sorted(session.expected_participant_refs):
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                        (f"{tenant_id}\\0{participant_ref}",),
+                    )
+                if commands:
+                    cur.execute(
+                        """SELECT participant_ref FROM participant_address_vault
+                           WHERE tenant_id=%s AND participant_ref = ANY(%s)""",
+                        (tenant_id, sorted(session.expected_participant_refs)),
+                    )
+                    provisioned = {row[0] for row in cur.fetchall()}
+                    if provisioned != set(session.expected_participant_refs):
+                        raise ValueError("every expected participant must have a provisioned address")
                 cur.execute(
                     """INSERT INTO bridge_sessions
                     (tenant_id, session_id, expected_participants, expected_participant_refs, state,
@@ -84,6 +98,10 @@ class PostgresBridgeRepository:
                      json.dumps([item.to_dict() for item in session.consent_evidence]),
                      session.failure_code, session.updated_at),
                 )
+                for command in commands:
+                    if command.session_id != session.session_id:
+                        raise ValueError("initial outbox command must belong to the created session")
+                    self._insert_command(cur, command)
 
     def get_session(self, session_id: str, *, tenant_id: str | None = None) -> BridgeSession | None:
         with self._connect() as conn:
@@ -125,6 +143,27 @@ class PostgresBridgeRepository:
                 cur.execute(
                     "UPDATE bridge_sessions SET state = %s, updated_at = %s WHERE session_id = %s AND tenant_id = %s",
                     (updated.state.value, updated.updated_at, session_id, tenant_id))
+                if current.state is SessionState.AWAITING_USER_ACTION:
+                    cur.execute(
+                        """UPDATE outbox_commands SET status='dead', last_error_code='session_cancelled',
+                                  lease_owner=NULL, lease_token=NULL, lease_expires_at=NULL
+                           WHERE session_id=%s AND command_type='consent.request' AND status='pending'""",
+                        (session_id,),
+                    )
+                    cur.execute(
+                        """SELECT DISTINCT provider, provider_account_id FROM outbox_commands
+                           WHERE session_id=%s AND command_type='consent.request'""",
+                        (session_id,),
+                    )
+                    for provider, account_id in cur.fetchall():
+                        for participant_ref in sorted(current.expected_participant_refs):
+                            self._insert_command(cur, OutboxCommand(
+                                command_type="consent.cancel",
+                                idempotency_key=f"consent-cancel:{provider}:{account_id}:{session_id}:{participant_ref}",
+                                session_id=session_id, provider=provider,
+                                provider_account_id=account_id,
+                                payload={"participant_ref": participant_ref},
+                            ))
                 return updated
 
     def apply_event_once(
@@ -176,6 +215,13 @@ class PostgresBridgeRepository:
                      json.dumps(sorted(updated.consented_participants)),
                      json.dumps([item.to_dict() for item in updated.consent_evidence]),
                      updated.failure_code, updated.updated_at, session_id))
+                if updated.state in {SessionState.FAILED, SessionState.CANCELLED, SessionState.DEGRADED, SessionState.COMPLETED}:
+                    cur.execute(
+                        """UPDATE outbox_commands SET status='dead', last_error_code='session_closed',
+                                  lease_owner=NULL, lease_token=NULL, lease_expires_at=NULL
+                           WHERE session_id=%s AND command_type='consent.request' AND status='pending'""",
+                        (session_id,),
+                    )
                 for command in application.commands:
                     if command.session_id != session_id:
                         raise ValueError("outbox command session_id must match the event session")
@@ -294,6 +340,44 @@ class PostgresBridgeRepository:
                 if existing is None or existing[0] != call_sid:
                     raise ProviderResourceConflict(
                         "participant is already mapped to a different provider call")
+
+    def get_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str) -> str | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT call_sid FROM provider_consent_call_resources
+                       WHERE provider=%s AND provider_account_id=%s
+                       AND session_id=%s AND participant_ref=%s""",
+                    (provider, provider_account_id, session_id, participant_ref),
+                )
+                row = cur.fetchone()
+        return row[0] if row else None
+
+    def put_provider_consent_call_resource(self, provider: str, provider_account_id: str,
+                                           session_id: str, participant_ref: str, call_sid: str) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO provider_consent_call_resources
+                       (provider, provider_account_id, session_id, participant_ref, call_sid)
+                       VALUES (%s,%s,%s,%s,%s)
+                       ON CONFLICT (provider, provider_account_id, session_id, participant_ref)
+                       DO NOTHING RETURNING call_sid""",
+                    (provider, provider_account_id, session_id, participant_ref, call_sid),
+                )
+                inserted = cur.fetchone()
+                if inserted is not None:
+                    return
+                cur.execute(
+                    """SELECT call_sid FROM provider_consent_call_resources
+                       WHERE provider=%s AND provider_account_id=%s
+                       AND session_id=%s AND participant_ref=%s""",
+                    (provider, provider_account_id, session_id, participant_ref),
+                )
+                existing = cur.fetchone()
+                if existing is None or existing[0] != call_sid:
+                    raise ProviderResourceConflict("consent call mapping is immutable")
 
     def claim_outbox(self, *, worker_id: str, limit: int = 10,
                      lease_seconds: int = 30) -> tuple[LeasedCommand, ...]:
