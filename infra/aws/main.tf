@@ -341,13 +341,13 @@ resource "aws_iam_role_policy" "task_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
         Resource = [aws_db_instance.database.master_user_secret[0].secret_arn, var.application_secret_arn]
       },
       {
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt"]
+        Effect = "Allow"
+        Action = ["kms:Decrypt"]
         Resource = [aws_kms_key.media.arn]
       }
     ]
@@ -373,21 +373,21 @@ resource "aws_iam_role_policy" "task_media" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = ["${aws_s3_bucket.media.arn}/tenants/*"]
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
         Resource = [aws_s3_bucket.media.arn]
         Condition = {
           StringLike = { "s3:prefix" = ["tenants/*"] }
         }
       },
       {
-        Effect   = "Allow"
-        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Effect = "Allow"
+        Action = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
         Resource = [aws_kms_key.media.arn]
       }
     ]
@@ -505,10 +505,10 @@ resource "aws_ecs_task_definition" "retention" {
 
 resource "aws_ecs_service" "api" {
   name                   = "${local.name}-api"
-  cluster                = aws_ecs_cluster.main.id
+  cluster         = aws_ecs_cluster.main.id
   task_definition        = aws_ecs_task_definition.api.arn
   desired_count          = 1
-  launch_type            = "FARGATE"
+  launch_type     = "FARGATE"
   enable_execute_command = false
 
   deployment_circuit_breaker {
@@ -530,11 +530,11 @@ resource "aws_ecs_service" "api" {
 }
 
 resource "aws_ecs_service" "worker" {
-  name                   = "${local.name}-worker"
-  cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.worker.arn
-  desired_count          = var.enable_live_twilio ? var.worker_desired_count : 0
-  launch_type            = "FARGATE"
+  name            = "${local.name}-worker"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.worker.arn
+  desired_count   = var.enable_live_twilio ? var.worker_desired_count : 0
+  launch_type     = "FARGATE"
 
   deployment_circuit_breaker {
     enable   = true
@@ -549,11 +549,11 @@ resource "aws_ecs_service" "worker" {
 }
 
 resource "aws_ecs_service" "retention" {
-  name                   = "${local.name}-retention"
-  cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.retention.arn
-  desired_count          = var.enable_live_twilio ? var.retention_desired_count : 0
-  launch_type            = "FARGATE"
+  name            = "${local.name}-retention"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.retention.arn
+  desired_count   = var.enable_live_twilio ? var.retention_desired_count : 0
+  launch_type     = "FARGATE"
 
   deployment_circuit_breaker {
     enable   = true
@@ -616,8 +616,8 @@ resource "aws_iam_role_policy" "github_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ecr:GetAuthorizationToken",
           "ecr:BatchCheckLayerAvailability",
           "ecr:CompleteLayerUpload",
@@ -630,13 +630,13 @@ resource "aws_iam_role_policy" "github_deploy" {
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:RunTask", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
+        Effect = "Allow"
+        Action = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:RunTask", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
         Resource = [aws_iam_role.task_execution.arn, aws_iam_role.task.arn]
       }
     ]
