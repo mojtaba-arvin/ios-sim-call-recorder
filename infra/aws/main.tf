@@ -208,7 +208,7 @@ resource "aws_db_instance" "database" {
   max_allocated_storage      = 50
   db_name                    = local.db_name
   username                   = var.db_username
-  manage_master_user_password    = true
+  manage_master_user_password  = true
   master_user_secret_kms_key_id = aws_kms_key.media.arn
   port                       = 5432
   db_subnet_group_name       = aws_db_subnet_group.database.name
