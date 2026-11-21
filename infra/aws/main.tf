@@ -201,26 +201,26 @@ resource "aws_security_group" "database" {
 }
 
 resource "aws_db_instance" "database" {
-  identifier                 = "${local.name}-postgres"
-  engine                     = "postgres"
-  instance_class             = "db.t4g.micro"
-  allocated_storage          = 20
-  max_allocated_storage      = 50
-  db_name                    = local.db_name
-  username                   = var.db_username
-  manage_master_user_password  = true
+  identifier                    = "${local.name}-postgres"
+  engine                        = "postgres"
+  instance_class                = "db.t4g.micro"
+  allocated_storage             = 20
+  max_allocated_storage         = 50
+  db_name                       = local.db_name
+  username                      = var.db_username
+  manage_master_user_password   = true
   master_user_secret_kms_key_id = aws_kms_key.media.arn
-  port                       = 5432
-  db_subnet_group_name       = aws_db_subnet_group.database.name
-  vpc_security_group_ids     = [aws_security_group.database.id]
-  publicly_accessible        = false
-  storage_encrypted          = true
-  kms_key_id                 = aws_kms_key.media.arn
-  backup_retention_period    = 1
-  deletion_protection        = false
-  skip_final_snapshot        = true
-  auto_minor_version_upgrade = true
-  tags                       = local.common_tags
+  port                          = 5432
+  db_subnet_group_name          = aws_db_subnet_group.database.name
+  vpc_security_group_ids        = [aws_security_group.database.id]
+  publicly_accessible           = false
+  storage_encrypted             = true
+  kms_key_id                    = aws_kms_key.media.arn
+  backup_retention_period       = 1
+  deletion_protection           = false
+  skip_final_snapshot           = true
+  auto_minor_version_upgrade    = true
+  tags                          = local.common_tags
 }
 
 resource "aws_ecr_repository" "backend" {
@@ -434,7 +434,7 @@ locals {
       { name = "DATABASE_PORT", value = "5432" },
       { name = "DATABASE_NAME", value = local.db_name }
     ]
-    secrets     = local.provider_secrets
+    secrets = local.provider_secrets
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -504,11 +504,11 @@ resource "aws_ecs_task_definition" "retention" {
 }
 
 resource "aws_ecs_service" "api" {
-  name            = "${local.name}-api"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = "${local.name}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
   enable_execute_command = false
 
   deployment_circuit_breaker {
@@ -530,11 +530,11 @@ resource "aws_ecs_service" "api" {
 }
 
 resource "aws_ecs_service" "worker" {
-  name            = "${local.name}-worker"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.worker.arn
-  desired_count   = var.enable_live_twilio ? var.worker_desired_count : 0
-  launch_type     = "FARGATE"
+  name                   = "${local.name}-worker"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.worker.arn
+  desired_count          = var.enable_live_twilio ? var.worker_desired_count : 0
+  launch_type            = "FARGATE"
 
   deployment_circuit_breaker {
     enable   = true
@@ -549,11 +549,11 @@ resource "aws_ecs_service" "worker" {
 }
 
 resource "aws_ecs_service" "retention" {
-  name            = "${local.name}-retention"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.retention.arn
-  desired_count   = var.enable_live_twilio ? var.retention_desired_count : 0
-  launch_type     = "FARGATE"
+  name                   = "${local.name}-retention"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.retention.arn
+  desired_count          = var.enable_live_twilio ? var.retention_desired_count : 0
+  launch_type            = "FARGATE"
 
   deployment_circuit_breaker {
     enable   = true
@@ -616,8 +616,8 @@ resource "aws_iam_role_policy" "github_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
+        Effect   = "Allow"
+        Action   = [
           "ecr:GetAuthorizationToken",
           "ecr:BatchCheckLayerAvailability",
           "ecr:CompleteLayerUpload",
@@ -630,13 +630,13 @@ resource "aws_iam_role_policy" "github_deploy" {
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:RunTask", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:RunTask", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = ["iam:PassRole"]
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
         Resource = [aws_iam_role.task_execution.arn, aws_iam_role.task.arn]
       }
     ]
