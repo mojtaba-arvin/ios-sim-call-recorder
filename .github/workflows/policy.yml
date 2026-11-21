@@ -3,6 +3,16 @@ name: Repository policy checks
 on:
   pull_request:
     branches: [main]
+    paths:
+      - ".agents/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - ".github/workflows/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/**"
+      - "CONTRIBUTING.md"
+      - "scripts/**"
   workflow_dispatch:
 
 permissions:
