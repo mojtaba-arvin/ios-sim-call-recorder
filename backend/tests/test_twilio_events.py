@@ -56,9 +56,12 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         self.assertNotIn(CALL, repr(event))
         self.assertEqual(len(event.payload_digest), 64)
 
-    def test_non_affirmative_consent_is_rejected(self):
-        with self.assertRaises(TwilioEventDecodeError):
-            self.decoder(self.request("consent", {**self.base(), "Digits": "2"}))
+    def test_non_affirmative_consent_is_normalized_as_decline(self):
+        event = self.decoder(
+            self.request("consent", {**self.base(), "Digits": "2"})
+        )
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.participant_ref, "participant-internal-1")
 
     def test_conference_join_maps_to_participant_joined(self):
         event = self.decoder(self.request("conference", {
