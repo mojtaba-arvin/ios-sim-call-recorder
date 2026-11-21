@@ -105,8 +105,15 @@ class BridgeCoreTests(unittest.TestCase):
             self.repo.get_session("session-opaque-1").state,
             SessionState.BRIDGE_LEG_RINGING,
         )
-        with self.assertRaises(ConsentRequired):
-            self.send(self.event("recording-before-consent", EventType.RECORDING_STARTED))
+        # Provider callbacks can arrive out of order. A recording-started
+        # callback before unanimous consent is acknowledged but must not
+        # advance the session or create provider work.
+        self.send(self.event("recording-before-consent", EventType.RECORDING_STARTED))
+        self.assertEqual(
+            self.repo.get_session("session-opaque-1").state,
+            SessionState.BRIDGE_LEG_RINGING,
+        )
+        self.assertEqual(self.repo.get_outbox_commands(), ())
         self.send(self.event("consent-b", EventType.PARTICIPANT_CONSENTED, "b"))
         session = self.repo.get_session("session-opaque-1")
         self.assertEqual(session.state, SessionState.PARTICIPANTS_JOINING)
@@ -255,12 +262,15 @@ class BridgeCoreTests(unittest.TestCase):
             SessionState.CANCELLED,
         )
 
-    def test_participant_decline_fails_session_without_provider_commands(self):
+    def test_participant_decline_fails_session_and_cancels_other_consent_attempt(self):
         self.send(self.event("declined", EventType.PARTICIPANT_DECLINED, "a"))
         session = self.repo.get_session("session-opaque-1")
         self.assertEqual(session.state, SessionState.FAILED)
         self.assertEqual(session.failure_code, "participant_declined_consent")
-        self.assertEqual(self.repo.get_outbox_commands(), ())
+        commands = self.repo.get_outbox_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].command_type, "consent.cancel")
+        self.assertEqual(commands[0].payload, {"participant_ref": "b"})
 
     def test_call_completion_after_consent_does_not_revoke_consent(self):
         self.preconsent()
@@ -304,8 +314,13 @@ class BridgeCoreTests(unittest.TestCase):
             self.repo.get_session("session-opaque-1").state,
             SessionState.VERIFYING,
         )
-        with self.assertRaises(InvalidTransition):
-            self.send(self.event("late", EventType.RECORDING_STARTED))
+        # A delayed provider callback is acknowledged but cannot resurrect a
+        # session that has already advanced to verification.
+        self.send(self.event("late", EventType.RECORDING_STARTED))
+        self.assertEqual(
+            self.repo.get_session("session-opaque-1").state,
+            SessionState.VERIFYING,
+        )
 
     def test_naive_event_timestamp_is_rejected(self):
         with self.assertRaises(ValueError):
