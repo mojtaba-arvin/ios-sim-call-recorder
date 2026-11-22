@@ -98,6 +98,10 @@ def run(args) -> dict:
     base_url = _required_env("BRIDGE_BASE_URL").rstrip("/")
     if not base_url.startswith("https://"):
         raise HarnessError("BRIDGE_BASE_URL must use HTTPS")
+    from urllib.parse import urlsplit
+    hostname = (urlsplit(base_url).hostname or "").lower()
+    if "staging" not in hostname or "prod" in hostname:
+        raise HarnessError("BRIDGE_BASE_URL hostname must explicitly identify a non-production staging host")
     token = _required_env("BRIDGE_API_TOKEN")
     phone_a = _required_env("TWILIO_TEST_PARTICIPANT_A")
     phone_b = _required_env("TWILIO_TEST_PARTICIPANT_B")
