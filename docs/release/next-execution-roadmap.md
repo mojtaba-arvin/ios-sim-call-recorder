@@ -36,14 +36,15 @@ Workflow: `.github/workflows/release-preflight.yml`
 |---|---|---|
 | `backend-postgres` | PostgreSQL 16/17 matrix, Python 3.13, backend unittest suite | Per-version test log artifact |
 | `swift-core` | Swift 6.2 package tests | Swift test log artifact |
-| `ios-sim-build` | XcodeGen, privacy manifest lint, simulator build | Build log and app artifact |
-| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; depends only on simulator build | XCTest log and .xcresult artifact |
+| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; each job generates the project and builds/tests independently | Per-device log; `.xcresult` retained on failure |
 | `audio-analyzer` | WAV analyzer unittest suite | Analyzer log artifact |
 | `terraform-validate` | Terraform fmt, backendless init, validate | Job log |
 | `repository-policy` | Policy tests, workflow/agent/docs validators | Job log |
 
 Execution controls:
 - `pull_request` to `main`, `push` to `release/**`, and `workflow_dispatch`.
+- Standalone Infrastructure, iOS, Swift, Audio and Policy workflows remain available through manual dispatch; they do not duplicate the canonical PR gate.
+- Backend staging integration runs only for backend/Compose changes and covers the unique Docker Compose HTTP lifecycle.
 - Concurrency group per PR/ref with `cancel-in-progress: true`.
 - Bounded job timeouts and fail-fast matrices.
 - All Release Preflight jobs run independently in parallel; no serial iOS build gate. The device matrix provides two parallel build-and-test jobs.
