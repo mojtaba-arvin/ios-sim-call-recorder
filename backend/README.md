@@ -43,6 +43,18 @@ Migrations currently run through 0012_session_idempotency.sql. The application d
 
 DELETE /v1/participants/{participant_ref}/address removes the tenant-scoped encrypted address and records a metadata-only audit event. GET /v1/bridge-sessions/{session_id}/media returns a 120-second presigned URL only for a verified, undeleted media asset and records the grant in media_access_audit. API session cancellation while consent calls may exist dead-letters pending consent requests and queues provider call cancellation.
 
+## API rate limits
+
+Authenticated tenant API requests use durable PostgreSQL token buckets shared by all
+application instances. Read routes have a burst capacity of 120 requests and refill
+at 2 tokens/second; write routes have a burst capacity of 30 requests and refill at
+0.5 tokens/second. The buckets are keyed by authenticated tenant and route class,
+not by caller-supplied identifiers or forwarded IP headers. Excess requests receive
+HTTP 429 with a Retry-After header. If PostgreSQL cannot make an authoritative
+rate-limit decision, the API fails closed with HTTP 503. Health endpoints remain
+available for orchestration. Twilio webhook ingress is a separate provider trust
+boundary and is not governed by these tenant API buckets.
+
 ## Runtime configuration
 
 The ASGI factory is asgi:create_app. With TWILIO_ENABLED=false it exposes only the session API. Enabling Twilio requires all of the following to be injected from a secret manager:
