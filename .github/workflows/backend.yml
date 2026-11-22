@@ -1,4 +1,4 @@
-name: Backend core checks
+name: Backend staging integration
 
 on:
   pull_request:
@@ -14,47 +14,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: backend-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: backend-integration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  bridge-core:
-    name: Conference bridge backend tests
+  staging-lifecycle:
+    name: Staging image and HTTP lifecycle
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      TEST_DATABASE_URL: postgresql://bridge_test:bridge_test@localhost:5432/bridge_test
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: bridge_test
-          POSTGRES_PASSWORD: bridge_test
-          POSTGRES_DB: bridge_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bridge_test -d bridge_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up supported Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - name: Install pinned provider SDK
-        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
-      - name: Run backend tests
-        run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
-      - name: Build backend staging image
-        run: docker build --file backend/Dockerfile --tag call-recorder-backend:test .
       - name: Exercise isolated staging stack and HTTP lifecycle
         shell: bash
         env:
@@ -85,12 +57,19 @@ jobs:
           )"
           trap 'docker compose --file compose.staging.yml down --volumes' EXIT
           docker compose --file compose.staging.yml up --detach --build
+          ready=false
           for attempt in $(seq 1 40); do
             if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()" 2>/dev/null; then
+              ready=true
               break
             fi
             sleep 2
           done
+          if [ "$ready" != true ]; then
+            docker compose --file compose.staging.yml ps
+            docker compose --file compose.staging.yml logs --no-color
+            exit 1
+          fi
           python3 - <<'PY'
           import json, os, urllib.request
           base = "http://127.0.0.1:8000"
@@ -113,4 +92,3 @@ jobs:
           assert status == 200 and cancelled["state"] == "cancelled"
           print("staging API/PostgreSQL lifecycle passed")
           PY
-

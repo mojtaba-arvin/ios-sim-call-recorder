@@ -2,7 +2,7 @@
 
 **Status date:** 2026-11-22  
 **Release status:** BLOCKED — software foundation and repository CI exist; external acceptance and governance are incomplete.  
-**Source of truth:** `main` after PR #52. PR #53 is closed and **not merged**; none of its content is assumed to exist on `main`.
+**Source of truth:** `main` after PR #54 (which includes the PR #52 baseline). PR #53 is closed and **not merged**; none of its content is assumed to exist on `main`.
 
 ## 1. Verified baseline
 
@@ -14,7 +14,7 @@
 
 ## 2. Workstream map and PR batches
 
-Workstreams are ordered by release risk. Independent CI jobs execute concurrently; only XCTest depends on the simulator build.
+Workstreams are ordered by release risk. Release Preflight jobs execute concurrently; the two XCTest device jobs each build and test independently, with no serial simulator-build dependency. Backend staging lifecycle remains a separate path-filtered integration check.
 
 | Batch | Workstream | PR scope | Dependency / exit condition |
 |---|---|---|---|
@@ -36,18 +36,19 @@ Workflow: `.github/workflows/release-preflight.yml`
 |---|---|---|
 | `backend-postgres` | PostgreSQL 16/17 matrix, Python 3.13, backend unittest suite | Per-version test log artifact |
 | `swift-core` | Swift 6.2 package tests | Swift test log artifact |
-| `ios-sim-build` | XcodeGen, privacy manifest lint, simulator build | Build log and app artifact |
-| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; depends only on simulator build | XCTest log and .xcresult artifact |
+| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; each job generates the project and builds/tests independently | Per-device log; `.xcresult` retained on failure |
 | `audio-analyzer` | WAV analyzer unittest suite | Analyzer log artifact |
 | `terraform-validate` | Terraform fmt, backendless init, validate | Job log |
 | `repository-policy` | Policy tests, workflow/agent/docs validators | Job log |
 
 Execution controls:
-- `pull_request` to `main` and `workflow_dispatch`.
+- `pull_request` to `main`, `push` to `release/**`, and `workflow_dispatch`.
+- Standalone Infrastructure, iOS, Swift, Audio and Policy workflows remain available through manual dispatch; they do not duplicate the canonical PR gate.
+- Backend staging integration runs only for backend/Compose changes and covers the unique Docker Compose HTTP lifecycle.
 - Concurrency group per PR/ref with `cancel-in-progress: true`.
 - Bounded job timeouts and fail-fast matrices.
-- Independent jobs run in parallel; XCTest alone depends on `ios-sim-build`.
-- Python dependency cache through `setup-python`; test/build outputs uploaded as artifacts with 14-day retention.
+- All Release Preflight jobs run independently in parallel; no serial iOS build gate. The device matrix provides two parallel build-and-test jobs.
+- Python dependency cache through `setup-python`; compact test logs upload on completion, while large XCTest result bundles upload only on failure (14-day retention).
 - No live Twilio or AWS credentials are used by pull-request jobs. Live provider/deployment operations remain separately gated and opt-in.
 
 ## 4. Governance — required administrative state
@@ -56,7 +57,7 @@ The currently observed active Ruleset `protect main` (ID `27591151`) targets the
 
 Required end state:
 1. Require a pull request before merging to `main`.
-2. Require status checks: `backend-postgres`, `swift-core`, `ios-sim-build`, both `xctest` matrix checks (or the stable job check identity if GitHub presents one), `audio-analyzer`, `terraform-validate`, and `repository-policy`.
+2. Require the eight stable Release Preflight checks: `backend-postgres (PostgreSQL 16)`, `backend-postgres (PostgreSQL 17)`, `swift-core`, `xctest (iPhone 16)`, `xctest (iPhone 16 Pro)`, `audio-analyzer`, `terraform-validate`, and `repository-policy`. Do not require the path-filtered `Backend staging integration` check globally; it is intentionally absent for unrelated PRs.
 3. Require linear history.
 4. Restrict force pushes.
 5. Keep branch deletion restricted.
@@ -80,7 +81,7 @@ Do not invent four additional branch names. Re-run the branch inventory before d
 | Blocker | Action | Owner role | Acceptance criteria | CI / evidence |
 |---|---|---|---|---|
 | Governance incomplete | Apply the six governance requirements above | Repository admin | Ruleset read-back confirms PR, required checks, linear history, force-push restriction and deletion restriction | Ruleset JSON/screenshot + PR checks |
-| CI lacks one release gate | Merge and run release preflight | CI owner | All seven required jobs green on the same commit; artifacts retained | Actions run URL + artifact IDs |
+| CI lacks one release gate | Merge and run release preflight | CI owner | All eight matrix-expanded Release Preflight checks green on the same commit; compact logs retained and failure bundles available | Actions run URL + artifact IDs |
 | Twilio unverified | Add opt-in real-account harness; run consent accept/decline/no-answer, Conference lifecycle, recording-from-start, callback signature/account scope, retrieval, dual-channel validation and retention deletion | Backend/provider owner | Every scenario has expected terminal state; no cross-account callback acceptance; evidence includes sanitized call/Conference/Recording SIDs and timestamps | Manual workflow run, sanitized logs, test matrix; no secrets or phone numbers |
 | Native SIM route unverified | Execute physical protocol on declared iPhone/iOS/carrier/SIM combinations; distinguish native SIM merge from app-owned Twilio Conference | iOS/device QA owner | Repeated runs per combination; record call topology, merge availability, import path, audio integrity, channel attribution, interruptions and failure modes | Signed device matrix, screen/video evidence where lawful, imported test files and analyzer report |
 | AWS staging unverified | Provision staging with Terraform, OIDC, encrypted storage, migrations, API/worker/retention services, readiness and rollback | Cloud/platform owner | Deploy exact commit SHA; migration exit 0; ECS services stable; readiness passes; KMS/S3 access and retention deletion verified | Terraform plan/apply output, deployment run, ECS task/service output, health response, rollback record |
