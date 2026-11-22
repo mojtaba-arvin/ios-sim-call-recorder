@@ -703,8 +703,8 @@ resource "aws_wafv2_web_acl" "api" {
 
     statement {
       rate_based_statement {
-        limit              = var.waf_rate_limit_per_ip
-        aggregate_key_type = "IP"
+        limit                 = var.waf_rate_limit_per_ip
+        aggregate_key_type    = "IP"
         evaluation_window_sec = 300
       }
     }
