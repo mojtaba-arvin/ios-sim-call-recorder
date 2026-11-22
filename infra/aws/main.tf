@@ -679,3 +679,101 @@ output "media_bucket" {
 output "media_kms_key_arn" {
   value = aws_kms_key.media.arn
 }
+
+
+# Regional edge protection for the public API. This is an origin-side
+# defense-in-depth layer; application authentication and provider signature
+# verification remain authoritative.
+resource "aws_wafv2_web_acl" "api" {
+  name        = "${local.name}-api"
+  description = "Managed request protections and per-IP rate limiting for the API ALB."
+  scope       = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "rate-limit-by-source-ip"
+    priority = 0
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = var.waf_rate_limit_per_ip
+        aggregate_key_type = "IP"
+        evaluation_window_sec = 300
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name}-rate-limit"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  rule {
+    name     = "aws-managed-common-rule-set"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name}-common-rules"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  rule {
+    name     = "aws-managed-known-bad-inputs"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name}-known-bad-inputs"
+      sampled_requests_enabled   = false
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.name}-api-web-acl"
+    sampled_requests_enabled   = false
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_wafv2_web_acl_association" "api" {
+  resource_arn = aws_lb.api.arn
+  web_acl_arn  = aws_wafv2_web_acl.api.arn
+}
+
+output "api_web_acl_arn" {
+  value = aws_wafv2_web_acl.api.arn
+}
