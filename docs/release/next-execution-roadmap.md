@@ -80,7 +80,7 @@ The current live branch inventory contains exactly four refs: `main`, `chore/cro
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
-| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; compare against current `main` reports no changed files; no open PR | DELETE | No remaining file delta or active PR dependency |\n| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; diverged from `main` (12 ahead / 1 behind); superseded by PR #58 | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |\n| `feat/twilio-live-acceptance-harness-mainline-20261122` | Active PR #58; 8 commits ahead, 0 behind; final-head CI green | KEEP UNTIL MERGE | Merge PR #58, then delete the merged head branch |
+| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; compare against current `main` reports no changed files; no open PR | DELETE | No remaining file delta or active PR dependency |\n| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; diverged from `main` (12 ahead / 1 behind); superseded by PR #58 | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |\n| `feat/twilio-live-acceptance-harness-mainline-20261122` | Active PR #58; 11 commits ahead, 0 behind; latest-head CI running | KEEP UNTIL MERGE | Merge PR #58, then delete the merged head branch |
 
 Do not invent four additional branch names. Re-run the branch inventory before deletion and compare every candidate against open PRs, tags, deployments and unique commits. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
