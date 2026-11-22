@@ -30,7 +30,7 @@ cd backend
 python migrate.py
 ```
 
-Migrations currently run through 0012_session_idempotency.sql. The application does not run DDL at startup. Migration 0012 adds tenant-scoped session idempotency records; expired keys are reusable after 24 hours and opportunistically cleaned in bounded batches during session creation.
+Migrations currently run through 0013_tenant_api_rate_limits.sql. The application does not run DDL at startup. Migration 0012 adds tenant-scoped session idempotency records; expired keys are reusable after 24 hours and opportunistically cleaned in bounded batches during session creation. Migration 0013 adds shared PostgreSQL token buckets for authenticated tenant API traffic.
 
 ## API flow
 
