@@ -61,9 +61,14 @@ class WebhookProcessor:
         *,
         request: SignedWebhookRequest,
         decode: Callable[[SignedWebhookRequest], NormalizedProviderEvent],
+        before_decode: Callable[[SignedWebhookRequest], None] | None = None,
     ) -> bool:
         if not self._verifier.verify(request):
             raise InvalidWebhookSignature("provider webhook signature verification failed")
+        # Admission controls run only after provider authentication and before
+        # business decoding or persistence. They receive the exact signed request.
+        if before_decode is not None:
+            before_decode(request)
         # Pass the exact verified request object so form validators and event
         # decoders consume the same parsed parameters, avoiding parser drift.
         event = decode(request)
