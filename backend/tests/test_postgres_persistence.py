@@ -1,5 +1,8 @@
 from __future__ import annotations
 import os
+import struct
+import tempfile
+import wave
 import threading
 import time
 import unittest
@@ -285,6 +288,103 @@ class PostgresPersistenceTests(unittest.TestCase):
         )
         self.assertEqual(status, "dead")
         self.assertEqual(self.repo.claim_outbox(worker_id="worker-retry", limit=10), ())
+
+
+    def test_s3_success_then_database_failure_is_scheduled_for_recovery(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+        from bridge_core.object_storage import StoredMediaObject
+
+        class Store:
+            def __init__(self):
+                self.deleted = []
+                self.uploaded = False
+                self.fail_delete = False
+
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+            def delete(self, **kwargs):
+                self.deleted.append(kwargs)
+                if self.fail_delete:
+                    raise RuntimeError("simulated object cleanup failure")
+
+            def put_wav(self, **kwargs):
+                self.uploaded = True
+                return StoredMediaObject(
+                    object_key="test/object.wav", byte_count=32044,
+                    sha256="a" * 64, duration_seconds=1.0,
+                    sample_rate_hz=8000, channel_count=2,
+                )
+
+        class Resolver:
+            @staticmethod
+            def expected_participants(_session_id):
+                return ("participant-a", "participant-b")
+
+        store = Store()
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "c" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=Resolver(), object_store=store,
+        )
+        recording_sid = "RE" + "c" * 32
+        token = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp:
+            source_path = temp.name
+        try:
+            with wave.open(source_path, "wb") as output:
+                output.setnchannels(2)
+                output.setsampwidth(2)
+                output.setframerate(8000)
+                frames = bytearray()
+                for _ in range(8000):
+                    frames.extend(struct.pack("<hh", 6000, 7000))
+                output.writeframes(bytes(frames))
+            ingestor._download = lambda _sid: Path(source_path)
+
+            def fail_database_commit(**_kwargs):
+                raise RuntimeError("simulated database commit failure")
+
+            ingestor._commit_asset = fail_database_commit
+            with self.assertRaisesRegex(RuntimeError, "simulated database commit failure"):
+                ingestor._process_claim(
+                    recording_sid=recording_sid, session_id=self.session.session_id,
+                    tenant_id="tenant-test", claim_token=token,
+                )
+        finally:
+            Path(source_path).unlink(missing_ok=True)
+        self.assertTrue(store.uploaded)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, last_error
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("retry", True, "RuntimeError"))
+
+        store.fail_delete = True
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE media_ingestions SET next_attempt_at=now()-interval '1 second'
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            )
+        with self.assertRaisesRegex(RuntimeError, "simulated object cleanup failure"):
+            ingestor.recover_once(limit=1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, attempts
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("retry", True, 2))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,8 @@ import boto3
 from twilio.rest import Client
 
 from bridge_core.object_storage import S3MediaObjectStore
-from providers.twilio.media import TwilioMediaRetentionWorker
+from providers.twilio.media import TwilioMediaRetentionWorker, TwilioRecordingMediaIngestor
+from providers.twilio.resource_resolver import PostgresTwilioResourceResolver
 
 
 def main():
@@ -28,9 +29,20 @@ def main():
         client=boto3.client("s3"),bucket=os.environ["MEDIA_BUCKET"],
         kms_key_id=os.environ["MEDIA_KMS_KEY_ID"],
     )
+    provider_account_id=os.environ.get("TWILIO_PROVIDER_ACCOUNT_ID","").strip()
+    if not provider_account_id:
+        raise SystemExit("TWILIO_PROVIDER_ACCOUNT_ID is required for ingestion recovery")
+    resolver=PostgresTwilioResourceResolver(connect=connect,provider_account_id=provider_account_id)
+    ingestor=TwilioRecordingMediaIngestor(
+        account_sid=account,api_username=username,api_password=password,
+        provider_account_id=provider_account_id,connect=connect,
+        resource_resolver=resolver,object_store=store,
+        retention_days=int(os.environ.get("MEDIA_RETENTION_DAYS","30")),
+    )
     worker=TwilioMediaRetentionWorker(connect=connect,client=client,object_store=store)
     while True:
         try:
+            ingestor.recover_once(limit=25)
             worker.run_once(limit=50)
         except Exception:
             # Do not log provider identifiers, credentials or media object keys.
