@@ -14,7 +14,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 ## Import flow
 
-1. The user explicitly selects an audio file through SwiftUI's system document importer.
+1. The user explicitly selects one or more audio files through SwiftUI's system document importer. Selected files are processed sequentially so each file gets an independent security-scoped access and validation lifecycle; one invalid file does not discard successful imports from the same batch.
 2. The adapter starts security-scoped access where required and always stops it after the copy/probe flow. NSFileCoordinator coordinates the external document read.
 3. The source size is checked against the core 500 MiB limit before copying, preventing oversized files from consuming app staging storage.
 4. A lightweight container signature probe checks RIFF/WAVE, AIFF/AIFC, CAF, MP3 and ISO-BMFF/MP4-family headers. The filename extension is checked independently by the core validator.
