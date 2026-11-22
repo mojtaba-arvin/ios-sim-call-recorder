@@ -12,7 +12,9 @@ class BearerTokenAuthenticator:
     def __init__(self, token_hashes):
         self._tokens = {}
         for digest, tenant in token_hashes.items():
-            if len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest) or not tenant or not tenant.strip():
+            if (len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest)
+                    or not isinstance(tenant, str) or not tenant or not tenant.strip()
+                    or len(tenant) > 128):
                 raise ValueError('invalid API token hash or tenant identifier')
             self._tokens[digest] = tenant
         if not self._tokens:
