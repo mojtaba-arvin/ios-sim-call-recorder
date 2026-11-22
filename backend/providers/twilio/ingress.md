@@ -7,7 +7,7 @@ TwilioWebhookASGI is the bounded ASGI transport adapter for POST callbacks. It r
 When TWILIO_ENABLED=true, the production ASGI composition root mounts:
 
 - /v1/twilio/consent — DTMF Gather result; after durable processing the route returns Hangup TwiML.
-- /v1/twilio/call-status — terminal outbound consent-call status; completed calls without persisted consent fail closed.
+- /v1/twilio/call-status — busy/no-answer/failed/canceled outcomes mark the participant unavailable; generic completed status is informational and does not decide consent.
 - /v1/twilio/conference — Conference start/end and participant join/leave callbacks.
 - /v1/twilio/recording — recording in-progress/completed/failed/absent callbacks.
 
@@ -25,7 +25,7 @@ The decoder binds the callback to the configured Account SID before resolving pr
 
 ## Consent and media processing
 
-The consent route only accepts digit 1 as affirmative. Empty Gather, other digits and terminal call outcomes without stored affirmative evidence fail the session. A decline queues cancellation of the other consent legs and pending consent requests are dead-lettered. The adapter does not generate a legal disclosure: the exact disclosure and policy version must be injected from a counsel-approved deployment secret.
+The consent route only accepts digit 1 as affirmative. A non-affirmative entered digit is an explicit decline; an empty Gather result and busy/no-answer/failed/canceled call outcomes are unavailable. A generic completed call-status callback is informational because it can race with the authoritative Gather action. Every outcome remains fail-closed: no recording-enabled Conference is created without durable affirmative consent from all participants. Decline or unavailability queues cancellation of the other consent leg and pending consent requests are dead-lettered. The adapter does not generate a legal disclosure: the exact disclosure and policy version must be injected from a counsel-approved deployment secret.
 
 Completed Conference recordings are retrieved with RequestedChannels=2, structurally validated, checked for stereo PCM16 and measurable activity on both channels, then stored with KMS encryption. A verified recording is mapped to two expected participant refs. Invalid or single-channel recordings are marked rejected and the session becomes DEGRADED. Twilio and S3 deletion are tracked as separate retryable steps.
 

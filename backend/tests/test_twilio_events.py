@@ -100,9 +100,9 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
         self.assertEqual(event.participant_ref, "participant-internal-1")
 
-    def test_empty_gather_result_is_a_decline_not_an_implicit_consent(self):
+    def test_empty_gather_result_is_unavailable_not_an_explicit_decline(self):
         event = self.decoder(self.request("consent", self.base()))
-        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_UNAVAILABLE)
 
     def test_absent_recording_callback_fails_closed(self):
         event = self.decoder(self.request("recording", {
@@ -116,18 +116,27 @@ class TwilioWebhookEventDecoderTests(unittest.TestCase):
         }))
         self.assertEqual(event.event_type, EventType.RECORDING_STARTED)
 
-    def test_completed_call_status_is_not_mistaken_for_consent(self):
+    def test_completed_call_status_is_nonterminal_and_not_mistaken_for_refusal(self):
         event = self.decoder(self.request("call-status", {
             **self.base(), "CallStatus": "completed",
         }))
-        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.event_type, EventType.PROVIDER_STATUS)
+        self.assertIsNone(event.participant_ref)
 
-    def test_no_answer_call_status_fails_the_session_participant_closed(self):
+    def test_no_answer_call_status_is_unavailable_not_an_explicit_decline(self):
         event = self.decoder(self.request("call-status", {
             **self.base(), "CallStatus": "no-answer",
         }))
-        self.assertEqual(event.event_type, EventType.PARTICIPANT_DECLINED)
+        self.assertEqual(event.event_type, EventType.PARTICIPANT_UNAVAILABLE)
         self.assertEqual(event.participant_ref, "participant-internal-1")
+
+    def test_busy_failed_and_cancelled_call_statuses_are_unavailable(self):
+        for status in ("busy", "failed", "canceled"):
+            with self.subTest(status=status):
+                event = self.decoder(self.request("call-status", {
+                    **self.base(), "CallStatus": status,
+                }))
+                self.assertEqual(event.event_type, EventType.PARTICIPANT_UNAVAILABLE)
     def test_wrong_account_is_rejected_before_resource_resolution(self):
         fields = {**self.base(), "AccountSid": "AC" + "d" * 32, "Digits": "1"}
         with self.assertRaises(TwilioEventDecodeError):

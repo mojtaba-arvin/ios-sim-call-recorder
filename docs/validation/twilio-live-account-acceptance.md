@@ -43,7 +43,7 @@ A completed result is acceptable only when both participants are recorded as con
 
 ## Negative acceptance runs
 
-Run separately for decline and no-answer cases, coordinating the action with the two test participants:
+Run separately for explicit DTMF decline and no-answer/busy cases, coordinating the action with the two test participants. The API distinguishes an explicit non-affirmative digit (`participant_declined_consent`) from no response or a terminal call outcome (`participant_unavailable`). A generic `completed` call-status callback is not treated as refusal because it can race with the authoritative Gather callback:
 
 ```sh
 python backend/tools/twilio_live_acceptance.py --execute --expect-state failed

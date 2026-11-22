@@ -38,7 +38,7 @@ class NormalizedProviderEvent:
                 raise ValueError(f"{name} must be a non-empty string")
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware")
-        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED}:
+        if self.event_type in {EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED, EventType.PARTICIPANT_UNAVAILABLE}:
             if not isinstance(self.participant_ref, str) or not self.participant_ref.strip():
                 raise ValueError("participant event requires opaque participant_ref")
         if self.event_type is EventType.PARTICIPANT_CONSENTED:
@@ -99,15 +99,18 @@ class WebhookProcessor:
         if kind is EventType.PROVIDER_STATUS:
             return EventApplication(session)
 
-        if kind in {EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED} and session.state in {
+        if kind in {EventType.PARTICIPANT_CONSENTED, EventType.PARTICIPANT_DECLINED, EventType.PARTICIPANT_UNAVAILABLE} and session.state in {
             SessionState.FAILED, SessionState.CANCELLED, SessionState.DEGRADED, SessionState.COMPLETED,
         }:
             return EventApplication(session)
 
-        if kind is EventType.PARTICIPANT_DECLINED:
+        if kind in {EventType.PARTICIPANT_DECLINED, EventType.PARTICIPANT_UNAVAILABLE}:
             if event.participant_ref in session.consented_participants:
                 return EventApplication(session)
-            updated = session.participant_declined(event.participant_ref, at=at)
+            if kind is EventType.PARTICIPANT_DECLINED:
+                updated = session.participant_declined(event.participant_ref, at=at)
+            else:
+                updated = session.participant_unavailable(event.participant_ref, at=at)
             cancel_commands = tuple(
                 OutboxCommand(
                     command_type="consent.cancel",

@@ -8,7 +8,7 @@ This backend contains a provider-neutral session/outbox core, authenticated tena
 - Tenant-scoped authenticated session create/read/cancel API.
 - Transactional initial consent-request outbox commands.
 - Twilio REST commands for outbound consent calls, Conference participant creation/addition, recording-from-start and Conference closure.
-- DTMF Gather disclosure: only digit 1 is affirmative; empty input, other digits, busy, no-answer, failed and unconsented completed calls fail closed.
+- DTMF Gather disclosure: only digit 1 is affirmative. Other entered digits are explicit declines; an empty Gather result and busy/no-answer/failed/canceled call outcomes are unavailable and fail closed. A generic `CallStatus=completed` callback is informational, not a consent decision; Conference creation remains gated on durable affirmative Gather evidence.
 - Signed call-status, consent, Conference and Recording webhooks, with account-scoped resource ownership resolution.
 - Separate immutable provider mappings for consent IVR call SIDs and Conference participant call SIDs.
 - Encrypted tenant-scoped E.164 address vault with authenticated provisioning/deletion API and metadata-only audit trail.

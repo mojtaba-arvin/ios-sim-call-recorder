@@ -272,6 +272,25 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertEqual(commands[0].command_type, "consent.cancel")
         self.assertEqual(commands[0].payload, {"participant_ref": "b"})
 
+    def test_participant_unavailable_fails_closed_without_recording_a_decline(self):
+        self.send(self.event("unavailable", EventType.PARTICIPANT_UNAVAILABLE, "a"))
+        session = self.repo.get_session("session-opaque-1")
+        self.assertEqual(session.state, SessionState.FAILED)
+        self.assertEqual(session.failure_code, "participant_unavailable")
+        self.assertEqual(session.consented_participants, frozenset())
+        commands = self.repo.get_outbox_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].command_type, "consent.cancel")
+        self.assertEqual(commands[0].payload, {"participant_ref": "b"})
+
+    def test_call_status_after_consent_does_not_mark_participant_unavailable(self):
+        self.preconsent()
+        before = self.repo.get_session("session-opaque-1")
+        self.send(self.event("unavailable-after-consent", EventType.PARTICIPANT_UNAVAILABLE, "a"))
+        after = self.repo.get_session("session-opaque-1")
+        self.assertEqual(after.state, before.state)
+        self.assertEqual(after.consented_participants, before.consented_participants)
+
     def test_call_completion_after_consent_does_not_revoke_consent(self):
         self.preconsent()
         before = self.repo.get_session("session-opaque-1")

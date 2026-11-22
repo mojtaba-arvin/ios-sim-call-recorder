@@ -26,6 +26,7 @@ class EventType(StrEnum):
     PARTICIPANT_JOINED = "participant.joined"
     PARTICIPANT_CONSENTED = "participant.consent_granted"
     PARTICIPANT_DECLINED = "participant.consent_declined"
+    PARTICIPANT_UNAVAILABLE = "participant.unavailable"
     PROVIDER_STATUS = "provider.status"
     RECORDING_STARTED = "recording.started"
     CALL_ENDED = "call.ended"
@@ -259,6 +260,16 @@ class BridgeSession:
         if self.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION, SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
             raise InvalidTransition("consent can be declined only before provider participants join")
         return self.transition(SessionState.FAILED, failure_code="participant_declined_consent", at=at)
+
+    def participant_unavailable(self, participant_ref: str, *, at: datetime | None = None) -> BridgeSession:
+        self._require_ref(participant_ref)
+        if participant_ref not in self.expected_participant_refs:
+            raise InvalidParticipant("unavailable participant is not expected for this session")
+        if participant_ref in self.consented_participants:
+            raise InvalidTransition("a previously consented participant cannot become unavailable")
+        if self.state not in {SessionState.CREATED, SessionState.AWAITING_USER_ACTION, SessionState.BRIDGE_LEG_RINGING, SessionState.AWAITING_CONSENT}:
+            raise InvalidTransition("participant availability is resolved only before provider participants join")
+        return self.transition(SessionState.FAILED, failure_code="participant_unavailable", at=at)
 
     def participant_joined(
         self,

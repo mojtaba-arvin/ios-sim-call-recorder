@@ -33,7 +33,7 @@ These modes must remain distinct in product copy, API contracts and release clai
 2. An imported audio file is not proof of two-party consent or legal provenance.
 3. A participant join is forbidden until durable affirmative consent evidence exists for that exact opaque participant reference.
 4. A recording-enabled app-owned Twilio Conference is created only after every expected participant has passed the pre-join DTMF consent gate.
-5. Only DTMF 1 is affirmative. Empty Gather, other digits, busy, failed, no-answer and completed call without stored consent fail closed.
+5. Only DTMF 1 is affirmative. A non-affirmative entered digit is an explicit decline; empty Gather and busy/failed/no-answer/canceled outcomes are participant unavailability. Generic `CallStatus=completed` is informational, not a consent decision, because it can race with the authoritative Gather callback. All outcomes fail closed: no Conference is created without durable affirmative consent from every participant.
 6. A decline or API cancellation dead-letters pending consent requests, prevents new consent dialing and queues cancellation of mapped outstanding consent calls.
 7. A beep, initiator checkbox, webhook join event or a merged PSTN leg is not by itself proof that every human participant consented.
 8. If participant identity, consent, signature, event ordering or provider state is uncertain, the operation fails closed or is held for reconciliation.
