@@ -144,3 +144,18 @@ Do not invent historical branch names. The PR #55 branch is 12 commits ahead and
 6. Complete customer discovery, paid-pilot evidence, unit economics, support/incident readiness and App Store review before commercial release.
 
 **Product boundary remains unchanged:** the Twilio route is an app-owned outbound two-party Conference, not capture or merge of an existing native SIM call and not access to Phone.app private audio. The companion/import path is the safe interim product mode while provider/legal gates remain closed.
+
+
+## Latest verified execution — 2026-11-22 (after PR #64)
+
+**Current main SHA:** `4aff0d48b06b2bc6f47ce3e6129bdef3bf780477`.
+
+- PR #63 merged as `d31d7df46809059224feb25b60f28ed3d1057a2e`; it refreshed the execution roadmap after PRs #60–#62.
+- PR #64, **Constrain recording media redirects**, merged by squash as `4aff0d48b06b2bc6f47ce3e6129bdef3bf780477`. The final PR head was `991f27d8e6af67cef371976436249858d2b05eff`.
+- PR #64 Release Preflight run `45009431882` completed successfully: all eight jobs passed, including PostgreSQL 16/17, Swift core, XCTest on iPhone 16 and iPhone 16 Pro simulators, audio analyzer, Terraform validation and repository policy. Backend staging integration run `45009431858` also passed. These are CI/simulated-stack results; no live Twilio media request, PSTN call, AWS operation or physical-device test occurred.
+- Post-merge mainline Release Preflight run `45010887854` is attached to the exact main SHA above. At the time of this update, six of eight jobs had completed successfully; both simulator XCTest jobs were still in progress. Do not count this mainline run as a full pass until all eight jobs complete successfully.
+- A new crash-consistency/idempotency finding is tracked in [Issue #65](https://github.com/mojtaba-arvin/ios-sim-call-recorder/issues/65): S3 upload currently precedes the media row insert, and the insert conflict outcome is not used as the authoritative source for session finalization. The remediation requires a durable ingestion state/claim, authoritative duplicate resolution, reconciliation/compensation, and PostgreSQL-backed concurrency/failure tests. No speculative code change was made before designing that state machine.
+- PR #64's redirect allowlist protects the Twilio credential-bearing request from arbitrary redirect targets. Continue to validate the actual S3 endpoint forms used by the approved Twilio account before any live acceptance.
+- Release remains **BLOCKED**. Governance Ruleset #27591151 remains incomplete; physical iPhone/SIM/carrier acceptance, live Twilio staging acceptance, AWS deployment/rollback, legal/privacy approval and operational readiness remain unverified.
+
+**Product boundary:** the Twilio path is an app-owned outbound two-party Conference, not recording or merging an existing native SIM/Phone.app call. The companion/import mode remains distinct.
