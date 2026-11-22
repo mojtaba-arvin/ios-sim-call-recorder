@@ -2,9 +2,13 @@
 
 **Status date:** 2026-11-22  
 **Release status:** BLOCKED — software foundation and repository CI exist; external acceptance and governance are incomplete.  
-**Source of truth:** `main` at `81b5d8c2cdfc947c2f3e2116831f519ab9035d6f` after PR #58 (which includes PR #57, PR #54 and the PR #52 baseline). PR #58 is merged; no implementation PR is currently open.
+**Source of truth at last verified baseline:** `main` at `143b05017fb6eed610951c07e0e272f86d411835` after PR #59. PRs #57, #58 and #59 are merged. A follow-up CI correction is proposed in PR `fix/run-release-preflight-on-main-push-20261122`; it is not merged until its checks pass.
 
 ## 0. Latest execution update — 2026-11-22
+
+- PR #59 merged at `143b05017fb6eed610951c07e0e272f86d411835`. Its pre-merge Release Preflight Run `45003000666` passed all eight checks, including XCTest on iPhone 16 and iPhone 16 Pro simulators after runtime provisioning.
+- The post-merge commit was checked independently: no workflow run exists for the final main SHA. Root cause confirmed in `.github/workflows/release-preflight.yml`: `push` covered only `release/**`, not `main`.
+- A focused follow-up proposes adding `main` to the canonical Release Preflight push branches so merge commits receive the same eight-check gate. This change must pass PR CI before merge; do not report it as active until merged and read back.
 
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
 - Final pre-merge PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` passed all nine matrix-expanded Release Preflight checks in Run `44995777499`; the separate infrastructure and repository-policy runs `44995777428` and `44995777383` also succeeded.
