@@ -25,6 +25,7 @@ gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}" --input - <<'JS
   "rules": [
     { "type": "deletion" },
     { "type": "non_fast_forward" },
+    { "type": "required_linear_history" },
     {
       "type": "pull_request",
       "parameters": {
@@ -42,12 +43,14 @@ gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}" --input - <<'JS
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "Repository policy integrity" },
-          { "context": "Conference bridge backend tests" },
-          { "context": "CallRecorderApp simulator build" },
-          { "context": "CallRecorderCore tests" },
-          { "context": "Audio quality analyzer tests" },
-          { "context": "AWS Terraform validation" }
+          { "context": "backend-postgres (PostgreSQL 16)" },
+          { "context": "backend-postgres (PostgreSQL 17)" },
+          { "context": "swift-core" },
+          { "context": "xctest (iPhone 16)" },
+          { "context": "xctest (iPhone 16 Pro)" },
+          { "context": "audio-analyzer" },
+          { "context": "terraform-validate" },
+          { "context": "repository-policy" }
         ]
       }
     }
