@@ -36,7 +36,7 @@ A release may claim support only for exact device, OS build, region, carrier/pla
 
 ### Implemented foundations and remaining external acceptance
 
-- Production ASGI composition root and signed webhook ingress are implemented. AWS ECS/RDS/S3/KMS/ALB Terraform and a manual OIDC deployment workflow are prepared, but no AWS account, DNS, ACM certificate, secret or cloud environment has been provisioned. Rate limiting and automated secret rotation remain open.
+- Production ASGI composition root and signed webhook ingress are implemented. AWS ECS/RDS/S3/KMS/ALB Terraform and a manual OIDC deployment workflow are prepared, but no AWS account, DNS, ACM certificate, secret or cloud environment has been provisioned. Tenant API rate limiting and signed Twilio webhook admission are implemented in main; automated secret rotation and deployed ALB/WAF edge-abuse controls remain open.
 - Live Twilio adapter and consent/webhook/media routes are implemented in PR #52; live Twilio account preflight, billing, real outbound-call acceptance, conference callback ordering and account-level dual-channel recording setting remain unverified.
 - A standalone supervised outbox worker, cancellation of outstanding consent calls and provider-backed Conference close adapter are implemented; long-running lease renewal and provider-side cancellation reconciliation for every edge case remain open.
 - Twilio Conference recording retrieval with RequestedChannels=2, bounded WAV validation, two-channel activity verification, deterministic channel ownership metadata for exactly two expected participants, KMS-backed S3 upload, session verification finalization and retryable Twilio/S3 retention deletion. Rejected/oversized media is retained as a rejection record for provider cleanup; verified media is available only through a tenant-authorized 120-second presigned URL with audit. Channel 1 is the first conference participant; channel 2 is all remaining audio. With exactly two participants this separates the two legs, but it is not biometric speaker identification.
@@ -108,7 +108,7 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] AWS Terraform for ALB HTTPS, ECS Fargate, private RDS, KMS/S3, Secrets Manager integration, CloudWatch logs/alarm and OIDC deploy role.
 - [x] Manual staging deployment workflow runs migrations before service rollout and checks readiness.
 - [ ] Bootstrap AWS VPC/subnets, ACM certificate, DNS and Secrets Manager JSON secret; apply Terraform and validate actual cloud deployment. No AWS resources have been created.
-- [ ] Add rate limits, secret rotation, outbox/dead-letter dashboards, provider error alerts and rollback drills.
+- [x] Add durable tenant API and signed Twilio webhook rate limits; [ ] add secret rotation, an ALB/WAF rate-based rule for unauthenticated edge abuse, outbox/dead-letter dashboards, provider error alerts and rollback drills.
 
 **Exit gate:** app builds from a clean checkout; import/play/export/delete/retention survive relaunch and interruption; accessibility and privacy review evidence attached. This mode remains a companion/import app, not a native Phone-call recorder.
 
@@ -126,7 +126,7 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ### M3 — Turn the backend foundation into a deployable service
 
-- [x] Implement authenticated tenant-scoped ASGI session create/read/cancel component and PostgreSQL tenant ownership; [ ] add durable API idempotency, rate limits and production token rotation.
+- [x] Implement authenticated tenant-scoped ASGI session create/read/cancel component, PostgreSQL tenant ownership, durable session idempotency and shared tenant API rate limits; [x] add signed Twilio account-scoped webhook admission; [ ] implement production token rotation.
 - [ ] Implement canonical public-origin configuration and trusted-proxy handling; reject arbitrary forwarded-host reconstruction.
 - [x] Implement bounded signed-webhook ASGI transport that preserves raw body, exact configured public URL and parsed multi-value form parameters before signature-gated decoding; [x] add strict account-bound Twilio consent/Conference/Recording event normalization with opaque resource resolution (PR #51); [ ] mount the routes in the production ASGI app and verify the full provider callback/replay lifecycle.
 - [x] Implement AES-GCM encrypted tenant-scoped participant-address vault and opaque-reference resolver; [ ] wire it to a reviewed provider adapter and provision addresses through an audited administrative path.
