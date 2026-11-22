@@ -2,7 +2,7 @@
 
 **Status date:** 2026-11-22  
 **Release status:** BLOCKED — software foundation and repository CI exist; external acceptance and governance are incomplete.  
-**Source of truth:** `main` after PR #54 (which includes the PR #52 baseline). PR #53 is closed and **not merged**; none of its content is assumed to exist on `main`.
+**Source of truth:** `main` at `fe9748b08c63a3170d33910666fb350b2e1fd6e5` after PR #57 (which includes PR #54 and the PR #52 baseline). PR #58 is the only open implementation PR; its final-head CI is green, but it has not yet been merged.
 
 ## 0. Latest execution update — 2026-11-22
 
@@ -11,7 +11,7 @@
 - Seven logical jobs are defined; PostgreSQL expands to two versions and XCTest to two simulator devices. All nine resulting checks passed on the same final PR head.
 - PR #55 contains the opt-in Twilio real-account acceptance harness, safety-guard unit tests and operator protocol. The harness is dry-run by default; no live PSTN call has been made.\n- PR #57 merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head passed all eight Release Preflight checks (Run `44998126275`) and the unique Backend Compose lifecycle integration (Run `44998126244`).
 - Ruleset ID `27591151` remains incomplete: only `deletion` and `non_fast_forward` are active. This connection exposes Ruleset GET but not administrative PUT/PATCH; do not claim governance is fixed.
-- Branch inventory must be refreshed after the merge. PR #53 remains closed/unmerged; do not treat its branch as merged content.
+- Branch inventory must be refreshed after the merge. PR #53 remains closed/unmerged, but its branch has no remaining file delta against current `main`; the branch is safe to remove.
 
 ## 1. Verified baseline
 
@@ -29,7 +29,7 @@ Workstreams are ordered by release risk. Release Preflight jobs execute concurre
 |---|---|---|---|
 | A1 | Governance + CI | `release-preflight.yml`, this roadmap, branch ruleset | CI jobs green; ruleset independently verified |
 | A2 | Branch hygiene | Inventory stale refs and classify retention/deletion | No open PR, no deployment/release reference, no unique unmerged work |
-| B | Twilio real-account harness | Opt-in staging harness, account/number preflight, consent and callback assertions, evidence bundle; implementation proposed in PR #55 | A1 merged; PR #55 CI green; credentials and approved test account available |
+| B | Twilio real-account harness | Opt-in staging harness, account/number preflight, consent and callback assertions, evidence bundle; implementation in PR #58 | PR #58 CI green; credentials and approved test account available |
 | C | Physical iPhone/SIM protocol | Device/operator matrix, repeatable call/merge/import/route tests, evidence template | B is not a prerequisite for native-SIM tests; real devices/SIMs required |
 | D | AWS staging | Terraform plan/apply gate, OIDC role, deploy, migration, service health and rollback evidence | A1 merged; AWS account, role, network and staging secrets configured |
 | E1 | Security/privacy | Threat-model closure, key/retention/access review, dependency and callback security | B/D evidence available where relevant |
@@ -75,12 +75,12 @@ Required end state:
 
 ## 5. Branch hygiene inventory
 
-The live branch search returned only `main` and `chore/cross-repo-engineering-baseline`; a follow-up page returned no further branches. This does not substantiate a five-branch deletion list.
+The current live branch inventory contains exactly four refs: `main`, `chore/cross-repo-engineering-baseline`, `feat/twilio-live-acceptance-harness-20261122`, and `feat/twilio-live-acceptance-harness-mainline-20261122`.
 
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
-| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; PR metadata reports 0 changed files / 0 additions / 0 deletions | DELETE CANDIDATE | Verify no open PR, no unique commits needed, then delete |
+| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; compare against current `main` reports no changed files; no open PR | DELETE | No remaining file delta or active PR dependency |\n| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; diverged from `main` (12 ahead / 1 behind); superseded by PR #58 | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |\n| `feat/twilio-live-acceptance-harness-mainline-20261122` | Active PR #58; 8 commits ahead, 0 behind; final-head CI green | KEEP UNTIL MERGE | Merge PR #58, then delete the merged head branch |
 
 Do not invent four additional branch names. Re-run the branch inventory before deletion and compare every candidate against open PRs, tags, deployments and unique commits. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
@@ -90,7 +90,7 @@ Do not invent four additional branch names. Re-run the branch inventory before d
 |---|---|---|---|---|
 | Governance incomplete | Apply the six governance requirements above | Repository admin | Ruleset read-back confirms PR, required checks, linear history, force-push restriction and deletion restriction | Ruleset JSON/screenshot + PR checks |
 | CI gate optimization | PR #57 is merged; keep Release Preflight and unique Backend Compose lifecycle green on relevant PRs | CI owner | All eight matrix-expanded Release Preflight checks green on the same commit; Backend integration green when backend/Compose paths change | Actions run URLs + artifact IDs |
-| Twilio unverified | Use `backend/tools/twilio_live_acceptance.py` (PR #55) in staging only; run consent accept/decline/no-answer, Conference lifecycle, recording-from-start, callback signature/account scope, retrieval, dual-channel validation and retention deletion | Backend/provider owner | Every scenario has expected terminal state; no cross-account callback acceptance; evidence includes sanitized call/Conference/Recording SIDs and timestamps | Manual workflow run, sanitized logs, test matrix; no secrets or phone numbers |
+| Twilio unverified | Use `backend/tools/twilio_live_acceptance.py` (PR #58) in staging only; run consent accept/decline/no-answer, Conference lifecycle, recording-from-start, callback signature/account scope, retrieval, dual-channel validation and retention deletion | Backend/provider owner | Every scenario has expected terminal state; no cross-account callback acceptance; evidence includes sanitized call/Conference/Recording SIDs and timestamps | Manual workflow run, sanitized logs, test matrix; no secrets or phone numbers |
 | Native SIM route unverified | Execute physical protocol on declared iPhone/iOS/carrier/SIM combinations; distinguish native SIM merge from app-owned Twilio Conference | iOS/device QA owner | Repeated runs per combination; record call topology, merge availability, import path, audio integrity, channel attribution, interruptions and failure modes | Signed device matrix, screen/video evidence where lawful, imported test files and analyzer report |
 | AWS staging unverified | Provision staging with Terraform, OIDC, encrypted storage, migrations, API/worker/retention services, readiness and rollback | Cloud/platform owner | Deploy exact commit SHA; migration exit 0; ECS services stable; readiness passes; KMS/S3 access and retention deletion verified | Terraform plan/apply output, deployment run, ECS task/service output, health response, rollback record |
 | Security/privacy review open | Review tenant isolation, callback auth, address encryption, logs, object lifecycle, IAM/KMS and data deletion | Security owner | Threat-model findings dispositioned; no secrets/PII in logs; key/retention controls demonstrated | Review checklist, policy tests, sanitized audit and deletion evidence |
@@ -100,7 +100,7 @@ Do not invent four additional branch names. Re-run the branch inventory before d
 ## 7. Execution policy / timeboxes
 
 - A1 CI and governance read-back: one focused implementation/review cycle; CI jobs have 5–30 minute hard timeouts.
-- B Twilio harness: PR #55 adds a dry-run-by-default script with mandatory `--execute`, `BRIDGE_ENVIRONMENT=staging`, a staging host and `TWILIO_LIVE_TEST_APPROVED=true`; first perform zero-cost configuration/preflight; live PSTN scenarios only on the approved test account and explicit manual dispatch.
+- B Twilio harness: PR #58 adds a dry-run-by-default script with mandatory `--execute`, `BRIDGE_ENVIRONMENT=staging`, a staging host and `TWILIO_LIVE_TEST_APPROVED=true`; first perform zero-cost configuration/preflight; live PSTN scenarios only on the approved test account and explicit manual dispatch.
 - C physical tests: batch by device/iOS/carrier and execute all independent combinations in one lab session; do not infer support from simulator results.
 - D AWS: run plan and static checks in CI first; perform apply/deploy only in the protected staging environment.
 - E security/legal/product/ops: parallel document reviews; legal approval is a hard release gate, not a coding task.
