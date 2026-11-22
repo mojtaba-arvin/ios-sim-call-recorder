@@ -74,18 +74,27 @@ jobs:
           import json, os, urllib.request
           base = "http://127.0.0.1:8000"
           token = os.environ["CI_API_TOKEN"]
-          def request(method, path, payload=None):
+          def request(method, path, payload=None, idempotency_key=None):
               data = None if payload is None else json.dumps(payload).encode()
+              headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+              if idempotency_key is not None:
+                  headers["Idempotency-Key"] = idempotency_key
               req = urllib.request.Request(
-                  base + path, data=data, method=method,
-                  headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+                  base + path, data=data, method=method, headers=headers,
               )
               with urllib.request.urlopen(req, timeout=10) as response:
                   raw = response.read()
                   return response.status, json.loads(raw) if raw else None
-          status, created = request("POST", "/v1/bridge-sessions", {"participant_refs": ["ci-a", "ci-b"]})
+          create_payload = {"participant_refs": ["ci-a", "ci-b"]}
+          status, created = request(
+              "POST", "/v1/bridge-sessions", create_payload, "staging-create-session-001"
+          )
           assert status == 201 and created["state"] == "created"
           session_id = created["session_id"]
+          replay_status, replayed = request(
+              "POST", "/v1/bridge-sessions", create_payload, "staging-create-session-001"
+          )
+          assert replay_status == 200 and replayed["session_id"] == session_id
           status, loaded = request("GET", "/v1/bridge-sessions/" + session_id)
           assert status == 200 and loaded["session_id"] == session_id
           status, cancelled = request("POST", "/v1/bridge-sessions/" + session_id + "/cancel")
