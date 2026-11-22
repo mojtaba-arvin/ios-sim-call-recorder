@@ -3,7 +3,7 @@
 **Snapshot:** 2026-11-22  
 **Purpose:** turn the repository's research and implementation into a sequenced, evidence-gated delivery plan. This is a living execution document, not a claim that hardware, carrier or production work has passed.
 
-> **Execution update (2026-11-22):** PR #54 is merged as `dac0d409388af1623bbebd51306537ad0f842d56`; its Release Preflight passed all nine matrix-expanded checks on final PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` (Run `44995777499`). PR #55 adds the opt-in Twilio acceptance harness; its Backend, Infrastructure, Repository Policy and nine Release Preflight checks passed on head `e2d0ebe81af8cbe24f3ba3c59eb0679a66b5eea4`, with no live PSTN call performed. PR #57 is merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head `3edb5b6410ba716f02a54628911d7e6d6b2b531b` passed all eight Release Preflight checks and the unique Backend Compose lifecycle check (Runs `44998126275` and `44998126244`). The updated CI runs the two iOS simulator build/test jobs in parallel and makes duplicate standalone workflows manual-only. These CI results do not establish live Twilio, physical SIM/carrier, AWS staging, legal or App Store acceptance. PR #53 is closed but not merged. The detailed blockers and acceptance criteria are tracked in [Next execution roadmap](../release/next-execution-roadmap.md).
+> **Execution update (2026-11-22):** PR #54 is merged as `dac0d409388af1623bbebd51306537ad0f842d56`; its Release Preflight passed all nine matrix-expanded checks on final PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` (Run `44995777499`). PR #58 carries the opt-in Twilio acceptance harness on current mainline; its eight Release Preflight checks and the unique Backend Compose lifecycle check passed on final head `ff022f01838c3e594f6d88ca127066ceca1e4abe` (Runs `44999656253` and `44999656176`). No live PSTN call was performed. PR #57 is merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head `3edb5b6410ba716f02a54628911d7e6d6b2b531b` passed all eight Release Preflight checks and the unique Backend Compose lifecycle check (Runs `44998126275` and `44998126244`). The updated CI runs the two iOS simulator build/test jobs in parallel and makes duplicate standalone workflows manual-only. These CI results do not establish live Twilio, physical SIM/carrier, AWS staging, legal or App Store acceptance. PR #53 is closed but not merged. The detailed blockers and acceptance criteria are tracked in [Next execution roadmap](../release/next-execution-roadmap.md).
 
 ## Product boundary and release definition
 
@@ -63,7 +63,7 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Resolve the stale stacked import PR; PR #32 was closed after the clean mainline implementation in PR #40.
 - [x] Consolidate governance/agent-tooling in PR #42 without reverting CI path filters, permissions, action pins or cache improvements.
 - [x] Merge and verify PR #54's all-PR `release-preflight.yml`; all nine matrix-expanded checks passed on the final PR head (Run `44995777499`). The workflow has seven logical jobs; PostgreSQL and XCTest expand to matrices. [ ] Apply and read back the required PR/status-check/linear-history/force-push rules on `protect main`; current Ruleset ID 27591151 contains only `deletion` and `non_fast_forward`.
-- [x] Publish the post-PR #52 dependency/workstream map in [Next execution roadmap](../release/next-execution-roadmap.md). [ ] Reconcile branch hygiene against the live GitHub inventory: only `main` and `chore/cross-repo-engineering-baseline` were present before PR #54; PR #53 is closed/unmerged and its `chore/cross-repo-engineering-baseline` branch is a deletion candidate after unique-commit/open-PR checks. The merged PR #54 branch is also stale after confirming no deployment/reference dependency. Do not act on the historical five-branch count without fresh branch evidence.
+- [x] Publish the post-PR #52 dependency/workstream map in [Next execution roadmap](../release/next-execution-roadmap.md). [ ] Reconcile branch hygiene against the live GitHub inventory: the current inventory contains `main`, `chore/cross-repo-engineering-baseline`, the superseded PR #55 branch `feat/twilio-live-acceptance-harness-20261122`, and the active PR #58 branch `feat/twilio-live-acceptance-harness-mainline-20261122`. PR #53 is closed/unmerged and its branch has no file diff against `main`; PR #55 is superseded by PR #58. Keep the active PR #58 branch until merge, then delete the stale refs. Do not act on historical branch names that are absent from the live inventory.
 
 **Exit gate:** clean mainline; all required checks green; no duplicate stacked PRs; one source of truth for project scope, evidence and release gates.
 
@@ -184,12 +184,12 @@ Run the tracks in parallel; do not select a pathway from documentation alone.
 
 ## Immediate next execution batch
 
-1. Finish the M3 live-provider boundary: mount the Twilio event routes, add audited participant-address provisioning, implement the consent IVR and concrete command adapter with reconciliation.
+1. Run the guarded PR #58 Twilio acceptance harness only after staging account, numbers, consent wording and legal/operator approvals are available; do not claim live acceptance from CI.
 2. Complete M4 media retrieval, encrypted tenant object storage, two-sided/channel verification and provider/product deletion reconciliation.
 3. Execute M2 physical iPhone/SIM/accessory/acoustic tests and publish the sanitized compatibility matrix; no software-only test can replace these.
 4. Complete M5 jurisdiction-specific legal/privacy review, App Store privacy labels and independent security testing.
 5. Deploy the local staging scaffold to an isolated remote environment, add real monitoring/alerts/rollback evidence, and configure Apple distribution signing.
-6. Remove the five superseded branch refs and strengthen mainline ruleset enforcement when repository administration permissions are available.
+6. Delete only the two verified stale branch refs after PR #58 is merged, and strengthen mainline ruleset enforcement when repository administration permissions are available.
 
 
 ## Verified repository controls (2026-11-19)
