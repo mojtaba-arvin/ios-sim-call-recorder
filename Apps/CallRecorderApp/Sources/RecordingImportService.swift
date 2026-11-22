@@ -69,7 +69,7 @@ struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
     let byteCount: Int64
     let durationSeconds: Double
     let importedAt: Date
-    let contentSHA256: String? = nil
+    let contentSHA256: String?
 }
 
 /// Owns user-mediated imports, app-private storage, catalog recovery and retention.
