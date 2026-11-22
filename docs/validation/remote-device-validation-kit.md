@@ -20,7 +20,7 @@ A simulator can validate UI and state logic but cannot validate a carrier's nati
 
 1. Run the companion app import/playback tests first; this proves only the archive workflow.
 2. Run three outgoing and three incoming baseline attempts using the conference-bridge path.
-3. For every run, follow physical-device-test-protocol.md and speak only the synthetic phrase set.
+3. For every run, follow [the physical-device-test protocol](../engineering/physical-device-test-protocol.md) and speak only the synthetic phrase set.
 4. Test merge rejection and no-answer cases. A rejected merge must remain a failed/incomplete session, never a successful recording.
 5. Repeat the baseline with Bluetooth HFP, wired headset and speaker/receiver routes.
 6. Record both endpoints' subjective intelligibility and whether the two audio channels contain the expected independent speech.

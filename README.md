@@ -65,6 +65,7 @@ Positive physical configurations require at least three repeated runs and indepe
 ## Roadmap and validation
 
 - [Executable delivery roadmap](docs/engineering/executable-product-roadmap.md)
+- [Next execution / release blockers roadmap](docs/release/next-execution-roadmap.md)
 - [Product validation and go/no-go plan](docs/research/product-validation.md)
 - [Twilio bridge unit economics](docs/research/unit-economics.md)
 - [Remote physical-device validation kit](docs/validation/remote-device-validation-kit.md)

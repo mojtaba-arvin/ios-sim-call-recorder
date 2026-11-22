@@ -1,0 +1,214 @@
+name: Release preflight
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["release/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preflight-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-postgres:
+    name: backend-postgres (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        postgres: ["16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: bridge_test
+          POSTGRES_PASSWORD: bridge_test
+          POSTGRES_DB: bridge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bridge_test -d bridge_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://bridge_test:bridge_test@localhost:5432/bridge_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements.txt
+      - name: Run backend unit and integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=backend python -m unittest discover -s backend/tests -v 2>&1 | tee backend-postgres-${{ matrix.postgres }}.log
+      - name: Upload backend test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: backend-postgres-${{ matrix.postgres }}-logs
+          path: backend-postgres-${{ matrix.postgres }}.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  swift-core:
+    name: swift-core
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run Swift package tests
+        shell: bash
+        run: |
+          set -o pipefail
+          swift test --package-path Packages/CallRecorderCore 2>&1 | tee swift-core.log
+      - name: Upload Swift test log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: swift-core-logs
+          path: swift-core.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios-sim-build:
+    name: ios-sim-build
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Validate privacy manifest
+        run: plutil -lint Apps/CallRecorderApp/Resources/PrivacyInfo.xcprivacy
+      - name: Build simulator app
+        run: |
+          set -o pipefail
+          xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesimulator -configuration Debug -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios-sim-build.log
+      - name: Upload simulator build and log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-sim-build
+          path: |
+            build/DerivedData/Build/Products/Debug-iphonesimulator/CallRecorderApp.app
+            ios-sim-build.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  xctest:
+    name: xctest (${{ matrix.device }})
+    needs: ios-sim-build
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        device: ["iPhone 16", "iPhone 16 Pro"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Run XCTest on simulator
+        shell: bash
+        run: |
+          set -o pipefail
+          RESULT="xctest.xcresult"
+          xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination "platform=iOS Simulator,name=${{ matrix.device }}" -parallel-testing-enabled NO -resultBundlePath "$RESULT" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee xctest.log
+      - name: Upload XCTest result bundle and log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xctest-${{ matrix.device }}
+          path: |
+            xctest.xcresult
+            xctest.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  audio-analyzer:
+    name: audio-analyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run WAV analyzer tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_analyze_call_audio.py' -v 2>&1 | tee audio-analyzer.log
+      - name: Upload analyzer log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: audio-analyzer-logs
+          path: audio-analyzer.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  terraform-validate:
+    name: terraform-validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configure Terraform provider cache
+        run: |
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-plugin-cache" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/terraform-plugin-cache"
+      - name: Check Terraform formatting
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 fmt -check -diff -recursive infra/aws
+      - name: Initialize providers without remote backend
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws init -backend=false -input=false
+      - name: Validate Terraform configuration
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 -chdir=infra/aws validate
+
+  repository-policy:
+    name: repository-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run repository policy tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Validate repository workflow guardrails
+        run: python3 scripts/validate_repo_policy.py
+      - name: Validate agent assets and task template
+        run: |
+          python3 scripts/validate_agent_assets.py
+          python3 scripts/validate_agent_tasks.py .agents/templates/task.example.json
+      - name: Validate documentation
+        run: python3 scripts/validate_docs.py
