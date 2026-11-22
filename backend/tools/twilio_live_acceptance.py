@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -64,12 +65,71 @@ def _json_request(base_url: str, token: str, method: str, path: str, payload=Non
         raise HarnessError(f"API request failed: {type(exc).__name__}") from None
 
 
-def _download_verified_media(url: str, destination: str):
-    if not url.startswith("https://"):
-        raise HarnessError("media download URL must use HTTPS")
-    request = urllib.request.Request(url, headers={"Accept": "audio/wav"})
+def _validate_media_url(url: str):
+    """Accept only HTTPS AWS S3 presigned URLs; never follow arbitrary API URLs."""
     try:
-        with urllib.request.urlopen(request, timeout=30) as response, open(destination, "wb") as target:
+        parsed = urlsplit(url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError:
+        raise HarnessError("media download URL is malformed") from None
+    suffix = ".amazonaws.com.cn" if hostname.endswith(".amazonaws.com.cn") else ".amazonaws.com"
+    aws_suffix = hostname.endswith(suffix) and hostname != suffix.lstrip(".")
+    prefix = hostname[:-len(suffix)].rstrip(".") if aws_suffix else ""
+    labels = prefix.split(".") if prefix else []
+
+    def valid_region(value: str) -> bool:
+        return re.fullmatch(r"[a-z]{2,3}(?:-[a-z]+)*-[0-9]+", value) is not None
+
+    # Accept documented S3 virtual-host/path-style regional endpoints and
+    # the global accelerate endpoint. Do not accept arbitrary AWS hostnames
+    # merely because an attacker inserted an "s3" label somewhere.
+    s3_endpoint = False
+    for index, label in enumerate(labels):
+        tail = labels[index + 1:]
+        if label == "s3":
+            valid_tail = (
+                tail == []
+                or (len(tail) == 1 and valid_region(tail[0]))
+                or (len(tail) == 2 and tail[0] == "dualstack" and valid_region(tail[1]))
+            )
+        elif label.startswith("s3-"):
+            endpoint = label[3:]
+            valid_tail = (
+                (valid_region(endpoint) and tail == [])
+                or (endpoint == "accelerate" and tail in ([], ["dualstack"]))
+            )
+        else:
+            continue
+        if valid_tail and (index == 0 or all(labels[:index])):
+            s3_endpoint = True
+            break
+
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or not aws_suffix
+        or not s3_endpoint
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or port not in (None, 443)
+    ):
+        raise HarnessError("media download URL must be an HTTPS AWS S3 presigned URL")
+
+
+class _S3OnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_media_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _download_verified_media(url: str, destination: str):
+    _validate_media_url(url)
+    request = urllib.request.Request(url, headers={"Accept": "audio/wav"})
+    opener = urllib.request.build_opener(_S3OnlyRedirectHandler())
+    try:
+        with opener.open(request, timeout=30) as response, open(destination, "wb") as target:
             total = 0
             while True:
                 chunk = response.read(1024 * 1024)
