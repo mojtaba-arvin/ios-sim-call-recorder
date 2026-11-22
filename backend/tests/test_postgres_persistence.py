@@ -386,5 +386,75 @@ class PostgresPersistenceTests(unittest.TestCase):
         self.assertEqual(row, ("retry", True, 2))
 
 
+
+    def test_media_ingestion_claim_is_exclusive_under_concurrency(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+
+        class Store:
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "a" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=Store(),
+        )
+        barrier = threading.Barrier(2)
+
+        def claim(_):
+            barrier.wait()
+            return ingestor._claim("RE" + "a" * 32, self.session.session_id, "tenant-test")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(pool.map(claim, range(2)))
+        self.assertEqual(sum(token is not None for token in claims), 1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, attempts FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                ("RE" + "a" * 32,),
+            ).fetchone()
+        self.assertEqual(row, ("processing", 1))
+
+    def test_expired_media_ingestion_lease_can_be_reclaimed(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+
+        class Store:
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "b" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=Store(),
+        )
+        recording_sid = "RE" + "b" * 32
+        first = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(first)
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE media_ingestions SET lease_expires_at=now()-interval '1 second'
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            )
+        second = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(second)
+        self.assertNotEqual(first, second)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, attempts, claim_token FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row[0], "processing")
+        self.assertEqual(row[1], 2)
+        self.assertEqual(str(row[2]), second)
+
+
 if __name__ == "__main__":
     unittest.main()
