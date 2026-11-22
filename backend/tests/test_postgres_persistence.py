@@ -450,10 +450,17 @@ class PostgresPersistenceTests(unittest.TestCase):
 
         # Model a legacy writer winning the unique recording key after our S3
         # upload but before this worker's INSERT ... ON CONFLICT resolution.
+        uploaded_key = store._key(
+            tenant_id="tenant-test", session_id=self.session.session_id,
+            media_id=str(__import__("uuid").uuid5(
+                __import__("uuid").NAMESPACE_URL,
+                f"twilio:{'AC' + 'd' * 32}:{recording_sid}",
+            )),
+        )
         ingestor._commit_asset(
             recording_sid=recording_sid, session_id=self.session.session_id,
             tenant_id="tenant-test", claim_token=token,
-            object_key="test/new-upload.wav", sha256="b" * 64,
+            object_key=uploaded_key, sha256="b" * 64,
             byte_count=32044, duration=1.0, sample_rate=8000, channels=2,
             activity=[0.5, 0.5], channel_map={"channel_1": "participant-a",
                                              "channel_2": "participant-b"},
@@ -477,13 +484,7 @@ class PostgresPersistenceTests(unittest.TestCase):
         self.assertTrue(row[1])
         self.assertIsNone(row[2])
         self.assertEqual(asset, ("rejected", None))
-        self.assertEqual(row[3], store._key(
-            tenant_id="tenant-test", session_id=self.session.session_id,
-            media_id=str(__import__("uuid").uuid5(
-                __import__("uuid").NAMESPACE_URL,
-                f"twilio:{'AC' + 'd' * 32}:{recording_sid}",
-            )),
-        ))
+        self.assertEqual(row[3], uploaded_key)
 
         # Recovery must delete the losing upload first, then adopt the persisted
         # rejected row without downloading or uploading a second object.
