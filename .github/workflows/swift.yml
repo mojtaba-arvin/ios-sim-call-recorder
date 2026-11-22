@@ -1,18 +1,13 @@
 name: Swift core checks
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/swift.yml"
-      - "Packages/CallRecorderCore/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: swift-core-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: swift-core-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,4 +24,3 @@ jobs:
           persist-credentials: false
       - name: Run package tests
         run: swift test --package-path Packages/CallRecorderCore
-
