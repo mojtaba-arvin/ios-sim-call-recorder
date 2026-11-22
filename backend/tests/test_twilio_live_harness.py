@@ -31,10 +31,15 @@ class TwilioLiveHarnessTests(unittest.TestCase):
     def test_media_url_requires_https_aws_s3_endpoint(self):
         _validate_media_url("https://bucket.s3.us-east-1.amazonaws.com/object?signature=redacted")
         _validate_media_url("https://s3.amazonaws.com/bucket/object?signature=redacted")
+        _validate_media_url("https://bucket.s3.dualstack.eu-central-1.amazonaws.com/object")
+        _validate_media_url("https://bucket.s3-accelerate.amazonaws.com/object")
         for url in (
             "http://bucket.s3.us-east-1.amazonaws.com/object",
             "https://example.com/object",
             "https://bucket.s3.us-east-1.amazonaws.com.evil.example/object",
+            "https://s3.attacker.amazonaws.com/object",
+            "https://bucket.s3.attacker.amazonaws.com/object",
+            "https://bucket.s3-control.us-east-1.amazonaws.com/object",
             "https://user:pass@bucket.s3.us-east-1.amazonaws.com/object",
             "https://bucket.s3.us-east-1.amazonaws.com:8443/object",
             "https://bucket.s3.us-east-1.amazonaws.com/object#fragment",
