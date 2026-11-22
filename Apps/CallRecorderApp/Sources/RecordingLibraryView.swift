@@ -219,7 +219,7 @@ struct RecordingLibraryView: View {
             .fileImporter(
                 isPresented: $isImporterPresented,
                 allowedContentTypes: [.audio],
-                allowsMultipleSelection: false,
+                allowsMultipleSelection: true,
                 onCompletion: handleImportSelection
             )
             .sheet(isPresented: $isShareSheetPresented, onDismiss: {
@@ -324,25 +324,57 @@ struct RecordingLibraryView: View {
             statusMessage = error.localizedDescription
             isError = true
         case .success(let urls):
-            guard let url = urls.first else { return }
+            guard !urls.isEmpty else { return }
             isImporting = true
             isError = false
-            announceStatus("Import started. Validating and copying the selected audio file.")
-            let backgroundLease = BackgroundExecutionLease(name: "RecordingImport")
+            announceStatus("Import started for \(urls.count) audio files.")
+            let backgroundLease = BackgroundExecutionLease(name: "RecordingBatchImport")
             Task { @MainActor in
-                defer { backgroundLease.end() }
-                do {
-                    let recording = try await importService.importRecording(
-                        from: url,
-                        source: .filesApp
-                    )
-                    recordings.insert(recording, at: 0)
-                    announceStatus("Recording imported and validated successfully.")
-                } catch {
-                    announceStatus(error.localizedDescription, isError: true)
-                    isError = true
+                defer {
+                    backgroundLease.end()
+                    isImporting = false
                 }
-                isImporting = false
+
+                var importedCount = 0
+                var duplicateCount = 0
+                var failedCount = 0
+                var firstFailure: String?
+
+                for (index, url) in urls.enumerated() {
+                    announceStatus("Validating file \(index + 1) of \(urls.count).")
+                    do {
+                        let recording = try await importService.importRecording(
+                            from: url,
+                            source: .filesApp
+                        )
+                        recordings.insert(recording, at: 0)
+                        importedCount += 1
+                    } catch RecordingImportServiceError.duplicateRecording {
+                        duplicateCount += 1
+                    } catch {
+                        failedCount += 1
+                        if firstFailure == nil {
+                            firstFailure = error.localizedDescription
+                        }
+                    }
+                }
+
+                var summary = "Imported \(importedCount) recording(s)."
+                if duplicateCount > 0 {
+                    summary += " Skipped \(duplicateCount) duplicate(s)."
+                }
+                if failedCount > 0 {
+                    summary += " \(failedCount) file(s) could not be imported."
+                    if let firstFailure {
+                        summary += " First error: \(firstFailure)"
+                    }
+                } else if importedCount == 0 && duplicateCount > 0 {
+                    summary = "No new recordings imported. All selected files were already in your library."
+                }
+
+                statusMessage = summary
+                isError = failedCount > 0
+                announceStatus(summary, isError: isError)
             }
         }
     }
