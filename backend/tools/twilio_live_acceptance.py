@@ -24,7 +24,7 @@ if str(BACKEND) not in sys.path:
 
 from providers.twilio.media import analyze_dual_channel_wav  # noqa: E402
 
-_E164 = re.compile(r"^\\+[1-9][0-9]{7,14}$")
+_E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
 _TERMINAL = {"completed", "failed", "degraded", "cancelled"}
 
 
