@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover
 from bridge_core.application import EventApplication, OutboxCommand
 from bridge_core.domain import BridgeSession, SessionState
 from bridge_core.persistence import CommandIdentityConflict, EventIdentityConflict, LeaseLost, PostgresBridgeRepository, SessionIdempotencyConflict
+from providers.twilio.rate_limit import PostgresTwilioWebhookRateLimiter
 from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -31,7 +32,7 @@ class PostgresPersistenceTests(unittest.TestCase):
 
     def setUp(self):
         with self.connect() as conn:
-            conn.execute("TRUNCATE outbox_commands, provider_event_receipts, bridge_sessions CASCADE")
+            conn.execute("TRUNCATE provider_webhook_rate_limits, outbox_commands, provider_event_receipts, bridge_sessions CASCADE")
         self.repo = PostgresBridgeRepository(self.connect)
         self.session = BridgeSession(
             "session-test", 2,
@@ -92,6 +93,29 @@ class PostgresPersistenceTests(unittest.TestCase):
                 request_digest="d" * 64,
             )
         self.assertIsNone(self.repo.get_session(second.session_id, tenant_id="tenant-idempotency"))
+
+
+    def test_twilio_webhook_rate_limit_is_atomic_and_account_scoped(self):
+        limiter = PostgresTwilioWebhookRateLimiter(
+            connect=self.connect, provider_account_id="account-rate-limit",
+            capacity=5, refill_per_second=0.0001,
+        )
+        barrier = threading.Barrier(12)
+        def consume(_):
+            barrier.wait()
+            return limiter.consume()
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            results = list(pool.map(consume, range(12)))
+        self.assertEqual(sum(1 for allowed, _ in results if allowed), 5)
+        rejected = [retry for allowed, retry in results if not allowed]
+        self.assertEqual(len(rejected), 7)
+        self.assertTrue(all(value >= 1 for value in rejected))
+
+        isolated = PostgresTwilioWebhookRateLimiter(
+            connect=self.connect, provider_account_id="account-rate-limit-other",
+            capacity=1, refill_per_second=0.0001,
+        )
+        self.assertEqual(isolated.consume(), (True, 0))
 
     def test_encrypted_address_vault_round_trip_is_tenant_scoped(self):
         resolver = PostgresParticipantAddressResolver(
