@@ -16,6 +16,7 @@ gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}" --input - <<'JS
   "name": "protect main",
   "target": "branch",
   "enforcement": "active",
+  "bypass_actors": [],
   "conditions": {
     "ref_name": {
       "include": ["refs/heads/main"],
