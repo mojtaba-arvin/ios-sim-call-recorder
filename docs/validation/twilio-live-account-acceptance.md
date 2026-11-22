@@ -39,6 +39,8 @@ python backend/tools/twilio_live_acceptance.py --execute --expect-state complete
 
 The harness provisions two opaque participant refs, creates one session, waits for the two consent legs and Conference flow, retrieves only the API's verified media asset, downloads it to a temporary file, runs the repository's dual-channel WAV analyzer, deletes the temporary file, and prints a sanitized evidence summary. It never prints phone numbers, bearer tokens, Twilio Auth Tokens, signed media URLs or webhook payloads.
 
+Media downloads are restricted to HTTPS AWS S3 presigned URLs. Redirects are checked before following and must remain on an approved HTTPS S3 endpoint; arbitrary HTTPS hosts and downgrade redirects are rejected.
+
 A completed result is acceptable only when both participants are recorded as consented, the session reaches `completed`, and the downloaded recording passes stereo PCM16/two-channel activity analysis.
 
 ## Negative acceptance runs
