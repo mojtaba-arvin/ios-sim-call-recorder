@@ -355,6 +355,7 @@ class PostgresPersistenceTests(unittest.TestCase):
         finally:
             Path(source_path).unlink(missing_ok=True)
         self.assertTrue(store.uploaded)
+        self.assertEqual(store.deleted, [])
         with self.connect() as conn:
             row = conn.execute(
                 """SELECT state, cleanup_required, last_error
@@ -375,6 +376,7 @@ class PostgresPersistenceTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(RuntimeError, "simulated object cleanup failure"):
             ingestor.recover_once(limit=1)
+        self.assertEqual(len(store.deleted), 1)
         with self.connect() as conn:
             row = conn.execute(
                 """SELECT state, cleanup_required, attempts

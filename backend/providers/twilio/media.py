@@ -214,11 +214,13 @@ class TwilioRecordingMediaIngestor:
                         tenant_id, session_id, object_key, state, claim_token,
                         lease_expires_at, attempts, next_attempt_at, updated_at)
                        VALUES ('twilio',%s,%s,%s,%s,%s,%s,'processing',%s,
-                               now()+interval '2 minutes',1,now(),now())
+                               now()+interval '15 minutes',1,now(),now())
                        ON CONFLICT (provider, provider_account_id, provider_recording_sid)
                        DO UPDATE SET state='processing', claim_token=EXCLUDED.claim_token,
                            lease_expires_at=EXCLUDED.lease_expires_at,
                            attempts=media_ingestions.attempts+1, updated_at=now(),
+                           cleanup_required=media_ingestions.cleanup_required
+                               OR media_ingestions.state='processing',
                            last_error=NULL
                        WHERE (media_ingestions.state IN ('pending','retry')
                               AND media_ingestions.next_attempt_at <= now())
@@ -252,9 +254,33 @@ class TwilioRecordingMediaIngestor:
                 tenant_id=tenant_id, claim_token=claim_token,
             ):
                 return
-            # A prior worker may have died after S3 accepted the upload but before
-            # PostgreSQL committed. The deterministic key makes compensation safe.
-            self.object_store.delete(tenant_id=tenant_id, session_id=session_id, media_id=media_id)
+            with self.connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT cleanup_required FROM media_ingestions
+                           WHERE provider='twilio' AND provider_account_id=%s
+                             AND provider_recording_sid=%s AND claim_token=%s""",
+                        (self.provider_account_id, recording_sid, UUID(claim_token)),
+                    )
+                    cleanup_row = cur.fetchone()
+                    if cleanup_row is None:
+                        raise RuntimeError("media ingestion lease was lost")
+            if cleanup_row[0]:
+                # A previous attempt may have died during/after S3 upload. Delete
+                # only when the durable upload-intent flag says an object may exist.
+                self.object_store.delete(
+                    tenant_id=tenant_id, session_id=session_id, media_id=media_id,
+                )
+                with self.connect() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE media_ingestions SET cleanup_required=false, updated_at=now()
+                               WHERE provider='twilio' AND provider_account_id=%s
+                                 AND provider_recording_sid=%s AND claim_token=%s""",
+                            (self.provider_account_id, recording_sid, UUID(claim_token)),
+                        )
+                        if cur.rowcount != 1:
+                            raise RuntimeError("media ingestion lease was lost")
             try:
                 source = self._download(recording_sid)
             except MediaRejected as rejected:
@@ -282,6 +308,7 @@ class TwilioRecordingMediaIngestor:
                     validation_error="dual_channel_verification_failed",
                 )
                 return
+            self._mark_upload_started(recording_sid, claim_token)
             stored = self.object_store.put_wav(
                 tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
             )
@@ -414,6 +441,19 @@ class TwilioRecordingMediaIngestor:
             (updated.state.value, updated.failure_code, updated.updated_at, session_id),
         )
 
+    def _mark_upload_started(self, recording_sid: str, claim_token: str) -> None:
+        """Persist cleanup intent before issuing the external S3 upload."""
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE media_ingestions SET cleanup_required=true, updated_at=now()
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s""",
+                    (self.provider_account_id, recording_sid, UUID(claim_token)),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError("media ingestion lease was lost")
+
     def _schedule_retry(self, recording_sid: str, claim_token: str, exc: Exception) -> None:
         # Do not persist exception text: it may contain provider URLs or credentials.
         with self.connect() as conn:
@@ -421,7 +461,7 @@ class TwilioRecordingMediaIngestor:
                 cur.execute(
                     """UPDATE media_ingestions
                        SET state=CASE WHEN attempts >= 8 THEN 'manual_cleanup' ELSE 'retry' END,
-                           claim_token=NULL, lease_expires_at=NULL, cleanup_required=true,
+                           claim_token=NULL, lease_expires_at=NULL,
                            next_attempt_at=now()+make_interval(secs =>
                                LEAST(300, power(2, LEAST(attempts,8))::int)),
                            last_error=%s, updated_at=now()
