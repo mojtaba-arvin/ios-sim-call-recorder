@@ -70,6 +70,8 @@ struct PlaybackRequestGate {
 struct RecordingLibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("recordingRetentionDays") private var retentionDays = 0
+    @AppStorage("recordingSortOrder") private var recordingSortOrder = "newest"
+    @State private var searchText = ""
     @State private var isImporterPresented = false
     @State private var isImporting = false
     @State private var recordings: [ImportedRecording] = []
@@ -143,7 +145,7 @@ struct RecordingLibraryView: View {
                 } else {
                     List {
                         Section("Imported recordings") {
-                            ForEach(recordings) { recording in
+                            ForEach(displayedRecordings) { recording in
                                 HStack(spacing: 12) {
                                     Image(systemName: "waveform")
                                         .foregroundStyle(.tint)
@@ -180,7 +182,9 @@ struct RecordingLibraryView: View {
                                     .accessibilityLabel(playingRecordingID == recording.id && isPlaying ? "Pause \(recordingAccessibilityDate(recording))" : "Play \(recordingAccessibilityDate(recording))")
                                 }
                             }
-                            .onDelete(perform: deleteRecordings)
+                            .onDelete { offsets in
+                                deleteRecordings(ids: offsets.map { displayedRecordings[$0].id })
+                            }
                         }
                     }
                     .listStyle(.plain)
@@ -201,9 +205,16 @@ struct RecordingLibraryView: View {
             .padding()
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Date, duration, size, or format")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        Picker("Sort recordings", selection: $recordingSortOrder) {
+                            Text("Newest first").tag("newest")
+                            Text("Oldest first").tag("oldest")
+                            Text("Longest first").tag("longest")
+                            Text("Largest first").tag("largest")
+                        }
                         Picker("Automatically delete recordings", selection: $retentionDays) {
                             Text("Never").tag(0)
                             Text("After 30 days").tag(30)
@@ -528,8 +539,7 @@ struct RecordingLibraryView: View {
         }
     }
 
-    private func deleteRecordings(at offsets: IndexSet) {
-        let ids = offsets.map { recordings[$0].id }
+    private func deleteRecordings(ids: [UUID]) {
         // Invalidate any in-flight file lookup before deleting from storage.
         shareRequestID = UUID()
         playbackRequestGate.invalidate(recordingIDs: Set(ids))
@@ -553,6 +563,31 @@ struct RecordingLibraryView: View {
                 statusMessage = "A recording could not be deleted."
                 isError = true
             }
+        }
+    }
+
+    private var displayedRecordings: [ImportedRecording] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered = recordings.filter { recording in
+            guard !query.isEmpty else { return true }
+            let searchable = [
+                recording.importedAt.formatted(date: .abbreviated, time: .shortened),
+                formattedDuration(recording.durationSeconds),
+                formattedSize(recording.byteCount),
+                recording.fileExtension
+            ].joined(separator: " ")
+            return searchable.localizedCaseInsensitiveContains(query)
+        }
+
+        switch recordingSortOrder {
+        case "oldest":
+            return filtered.sorted { $0.importedAt < $1.importedAt }
+        case "longest":
+            return filtered.sorted { $0.durationSeconds > $1.durationSeconds }
+        case "largest":
+            return filtered.sorted { $0.byteCount > $1.byteCount }
+        default:
+            return filtered.sorted { $0.importedAt > $1.importedAt }
         }
     }
 
