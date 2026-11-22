@@ -21,6 +21,7 @@ from providers.twilio.factory import TwilioConsentCommandFactory
 from providers.twilio.ingress import TwilioWebhookASGI
 from providers.twilio.media import TwilioRecordingMediaIngestor
 from providers.twilio.resource_resolver import PostgresTwilioResourceResolver
+from providers.twilio.rate_limit import PostgresTwilioWebhookRateLimiter
 from providers.twilio.signatures import TwilioWebhookSignatureVerifier
 
 
@@ -117,10 +118,14 @@ def create_app():
         address_vault=vault,
         media_service=PostgresMediaDownloadService(connect=connect, object_store=object_store),
     )
+    webhook_rate_limiter = PostgresTwilioWebhookRateLimiter(
+        connect=connect, provider_account_id=provider_account_id,
+    )
     webhooks = TwilioWebhookASGI(
         processor=processor,
         decode_verified_request=decoder,
         canonical_public_origin=_required("TWILIO_PUBLIC_ORIGIN"),
+        rate_limit=webhook_rate_limiter.consume,
         after_process=media_ingestor,
     )
     return ApplicationRouter(sessions=sessions, webhooks=webhooks)
