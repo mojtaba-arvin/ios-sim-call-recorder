@@ -51,7 +51,6 @@ Workflow: `.github/workflows/release-preflight.yml`
 |---|---|---|
 | `backend-postgres` | PostgreSQL 16/17 matrix, Python 3.13, backend unittest suite | Per-version test log artifact |
 | `swift-core` | Swift 6.2 package tests | Swift test log artifact |
-| `ios-sim-build` | XcodeGen, privacy manifest lint, simulator build | Build log and app artifact |
 | `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; each job generates the project and builds/tests independently | Per-device log; `.xcresult` retained on failure |
 | `audio-analyzer` | WAV analyzer unittest suite | Analyzer log artifact |
 | `terraform-validate` | Terraform fmt, backendless init, validate | Job log |
@@ -61,7 +60,7 @@ Execution controls:
 - `pull_request` to `main`, `push` to `main` and `release/**`, and `workflow_dispatch`. The `main` push trigger is proposed in PR #60 and becomes active only after merge.
 - Concurrency group per PR/ref with `cancel-in-progress: true`.
 - Bounded job timeouts and fail-fast matrices.
-- Independent jobs run in parallel; XCTest alone depends on `ios-sim-build`.
+- All eight required check identities are produced by the workflow: PostgreSQL 16/17 matrix (two checks), Swift core, XCTest iPhone 16/iPhone 16 Pro matrix (two checks), audio analyzer, Terraform validation and repository policy. Each XCTest matrix job independently generates the project and builds/tests its own simulator destination; there is no separate `ios-sim-build` job.
 - Python dependency cache through `setup-python`; test/build outputs uploaded as artifacts with 14-day retention.
 - No live Twilio or AWS credentials are used by pull-request jobs. Live provider/deployment operations remain separately gated and opt-in.
 
@@ -77,18 +76,19 @@ Required end state:
 5. Keep branch deletion restricted.
 6. Do not configure bypass actors for routine development. Preserve only an explicitly documented emergency break-glass policy if organizationally required.
 
-**Verification:** inspect the saved Ruleset after editing and confirm the exact rules, target ref and required-check names. The required matrix-expanded check identities observed on PR #54 were `backend-postgres (PostgreSQL 16)`, `backend-postgres (PostgreSQL 17)`, `swift-core`, `ios-sim-build`, `xctest (iPhone 16)`, `xctest (iPhone 16 Pro)`, `audio-analyzer`, `terraform-validate`, and `repository-policy`. A green workflow is not evidence that branch protection is enabled.
+**Verification:** inspect the saved Ruleset after editing and confirm the exact rules, target ref and required-check names. PR #54 historically had nine checks including `ios-sim-build`; PR #57 removed that separate job and established the current eight-check set listed above. Do not require the retired `ios-sim-build` identity. A green workflow is not evidence that branch protection is enabled.
 
 ## 5. Branch hygiene inventory
 
-The current live branch inventory contains exactly two refs: `main` and `feat/twilio-live-acceptance-harness-20261122`.
+The live branch inventory at this review contains three refs: `main`, `feat/twilio-live-acceptance-harness-20261122`, and `fix/run-release-preflight-on-main-push-20261122` (PR #60).
 
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
-| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; superseded by merged PR #58; no open PR references it | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |
+| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed/unmerged; no open PR references it. Compared with `main`, the harness script differs only by a one-character formatting/newline delta; README, backend README, harness tests and acceptance protocol are byte-identical. Its roadmap files are older than main. | DELETE CANDIDATE | Superseded by PR #58; retain until tags/deployment references are checked and the ref-deletion action is available |
+| `fix/run-release-preflight-on-main-push-20261122` | Open PR #60; contains the `main` push trigger and roadmap reconciliation | KEEP | Active review branch; do not delete before PR #60 is resolved |
 
-Do not invent four additional branch names. Re-run the branch inventory before deletion and compare every candidate against open PRs, tags, deployments and unique commits. Branch deletion is not a release gate and must not delay A1/B/C/D.
+Do not invent historical branch names. The PR #55 branch is 12 commits ahead and 3 behind by ancestry because the replacement PR was squash-merged; compare its actual file content before deletion. Current code/test/acceptance files are present on `main`; roadmap differences are stale historical text, not new implementation. Tags/deployment references were not verified through the available connector, and the connector exposes no ref-deletion action. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
 ## 6. Release blockers — measurable actions
 
