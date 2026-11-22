@@ -398,7 +398,7 @@ class TwilioRecordingMediaIngestor:
                      json.dumps(activity), json.dumps(channel_map), state, validation_error, expires),
                 )
                 cur.execute(
-                    """SELECT media_id, tenant_id, session_id, verification_state
+                    """SELECT media_id, tenant_id, session_id, verification_state, object_key
                        FROM media_assets WHERE provider='twilio'
                          AND provider_account_id=%s AND provider_recording_sid=%s FOR UPDATE""",
                     (self.provider_account_id, recording_sid),
