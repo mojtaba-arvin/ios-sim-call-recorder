@@ -78,6 +78,32 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
             ).fetchone()[0]
         self.assertEqual(count,1)
 
+    async def test_tenant_rate_limit_is_atomic_across_concurrent_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        def consume(_):
+            return self.repo.consume_tenant_rate_limit(
+                tenant_id="tenant-rate-limit",
+                bucket="write",
+                capacity=5,
+                refill_per_second=0.0001,
+            )
+
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            results = list(pool.map(consume, range(12)))
+        self.assertEqual(sum(1 for allowed, _ in results if allowed), 5)
+        rejected = [retry for allowed, retry in results if not allowed]
+        self.assertEqual(len(rejected), 7)
+        self.assertTrue(all(value >= 1 for value in rejected))
+
+        other_tenant = self.repo.consume_tenant_rate_limit(
+            tenant_id="tenant-rate-limit-other",
+            bucket="write",
+            capacity=1,
+            refill_per_second=0.0001,
+        )
+        self.assertEqual(other_tenant, (True, 0))
+
     async def test_cancel_during_consent_closes_pending_outbox_and_queues_call_cancellation(self):
         session = BridgeSession(
             "session-consent-cancel",
