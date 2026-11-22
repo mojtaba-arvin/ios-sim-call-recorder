@@ -4,7 +4,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: ["release/**"]
+    # Run the canonical gate after merges to main as well as on release branches.
+    branches: [main, "release/**"]
   workflow_dispatch:
 
 permissions:

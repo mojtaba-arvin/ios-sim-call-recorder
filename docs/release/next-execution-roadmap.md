@@ -2,9 +2,16 @@
 
 **Status date:** 2026-11-22  
 **Release status:** BLOCKED — software foundation and repository CI exist; external acceptance and governance are incomplete.  
-**Source of truth:** `main` at `81b5d8c2cdfc947c2f3e2116831f519ab9035d6f` after PR #58 (which includes PR #57, PR #54 and the PR #52 baseline). PR #58 is merged; no implementation PR is currently open.
+**Source of truth at last verified baseline:** `main` at `143b05017fb6eed610951c07e0e272f86d411835` after PR #59. PRs #57, #58 and #59 are merged. A follow-up CI correction is proposed in PR `fix/run-release-preflight-on-main-push-20261122`; it is not merged until its checks pass.
 
 ## 0. Latest execution update — 2026-11-22
+
+- PR #59 merged at `143b05017fb6eed610951c07e0e272f86d411835`. Its pre-merge Release Preflight Run `45003000666` passed all eight checks, including XCTest on iPhone 16 and iPhone 16 Pro simulators after runtime provisioning.
+- The post-merge commit was checked independently: no workflow run exists for the final main SHA. Root cause confirmed in `.github/workflows/release-preflight.yml`: `push` covered only `release/**`, not `main`.
+- A focused follow-up proposes adding `main` to the canonical Release Preflight push branches so merge commits receive the same eight-check gate. This change must pass PR CI before merge; do not report it as active until merged and read back.
+- A separate static security review found that the opt-in live Twilio harness accepted arbitrary HTTPS media URLs and unconstrained redirects. PR #61 proposes restricting downloads and redirects to HTTPS AWS S3 endpoints, with regression tests; it does not make provider calls.
+- PR #62 corrects consent-event semantics: explicit non-affirmative DTMF is a refusal, while empty Gather and unavailable call outcomes are distinct; generic `CallStatus=completed` is informational. Regression tests and related backend/privacy/counsel documentation are included; CI is pending.
+- For PR #60, only a completed run attached to the final PR head counts as validation; canceled runs from superseded commits are not evidence.
 
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
 - Final pre-merge PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` passed all nine matrix-expanded Release Preflight checks in Run `44995777499`; the separate infrastructure and repository-policy runs `44995777428` and `44995777383` also succeeded.
@@ -46,17 +53,16 @@ Workflow: `.github/workflows/release-preflight.yml`
 |---|---|---|
 | `backend-postgres` | PostgreSQL 16/17 matrix, Python 3.13, backend unittest suite | Per-version test log artifact |
 | `swift-core` | Swift 6.2 package tests | Swift test log artifact |
-| `ios-sim-build` | XcodeGen, privacy manifest lint, simulator build | Build log and app artifact |
 | `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; each job generates the project and builds/tests independently | Per-device log; `.xcresult` retained on failure |
 | `audio-analyzer` | WAV analyzer unittest suite | Analyzer log artifact |
 | `terraform-validate` | Terraform fmt, backendless init, validate | Job log |
 | `repository-policy` | Policy tests, workflow/agent/docs validators | Job log |
 
 Execution controls:
-- `pull_request` to `main`, `push` to `release/**`, and `workflow_dispatch`.
+- `pull_request` to `main`, `push` to `main` and `release/**`, and `workflow_dispatch`. The `main` push trigger is proposed in PR #60 and becomes active only after merge.
 - Concurrency group per PR/ref with `cancel-in-progress: true`.
 - Bounded job timeouts and fail-fast matrices.
-- Independent jobs run in parallel; XCTest alone depends on `ios-sim-build`.
+- All eight required check identities are produced by the workflow: PostgreSQL 16/17 matrix (two checks), Swift core, XCTest iPhone 16/iPhone 16 Pro matrix (two checks), audio analyzer, Terraform validation and repository policy. Each XCTest matrix job independently generates the project and builds/tests its own simulator destination; there is no separate `ios-sim-build` job.
 - Python dependency cache through `setup-python`; test/build outputs uploaded as artifacts with 14-day retention.
 - No live Twilio or AWS credentials are used by pull-request jobs. Live provider/deployment operations remain separately gated and opt-in.
 
@@ -72,18 +78,21 @@ Required end state:
 5. Keep branch deletion restricted.
 6. Do not configure bypass actors for routine development. Preserve only an explicitly documented emergency break-glass policy if organizationally required.
 
-**Verification:** inspect the saved Ruleset after editing and confirm the exact rules, target ref and required-check names. The required matrix-expanded check identities observed on PR #54 were `backend-postgres (PostgreSQL 16)`, `backend-postgres (PostgreSQL 17)`, `swift-core`, `ios-sim-build`, `xctest (iPhone 16)`, `xctest (iPhone 16 Pro)`, `audio-analyzer`, `terraform-validate`, and `repository-policy`. A green workflow is not evidence that branch protection is enabled.
+**Verification:** inspect the saved Ruleset after editing and confirm the exact rules, target ref and required-check names. PR #54 historically had nine checks including `ios-sim-build`; PR #57 removed that separate job and established the current eight-check set listed above. Do not require the retired `ios-sim-build` identity. A green workflow is not evidence that branch protection is enabled.
 
 ## 5. Branch hygiene inventory
 
-The current live branch inventory contains exactly two refs: `main` and `feat/twilio-live-acceptance-harness-20261122`.
+The live branch inventory at this review contains five refs: `main`, `feat/twilio-live-acceptance-harness-20261122`, `fix/run-release-preflight-on-main-push-20261122` (PR #60), `fix/harden-live-harness-media-url-20261122` (PR #61), and `fix/distinguish-consent-decline-from-no-answer-20261122` (PR #62).
 
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
-| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; superseded by merged PR #58; no open PR references it | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |
+| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed/unmerged; no open PR references it. Compared with `main`, the harness script differs only by a one-character formatting/newline delta; README, backend README, harness tests and acceptance protocol are byte-identical. Its roadmap files are older than main. | DELETE CANDIDATE | Superseded by PR #58; retain until tags/deployment references are checked and the ref-deletion action is available |
+| `fix/run-release-preflight-on-main-push-20261122` | Open PR #60; contains the `main` push trigger and roadmap reconciliation | KEEP | Active review branch; do not delete before PR #60 is resolved |
+| `fix/harden-live-harness-media-url-20261122` | Open PR #61; hardens the opt-in media downloader and adds URL/redirect regression tests | KEEP | Active security review branch; do not delete before PR #61 is resolved |
+| `fix/distinguish-consent-decline-from-no-answer-20261122` | Open PR #62; distinguishes explicit refusal from unavailable participants and aligns consent documentation | KEEP | Active consent-correctness review branch; do not delete before PR #62 is resolved |
 
-Do not invent four additional branch names. Re-run the branch inventory before deletion and compare every candidate against open PRs, tags, deployments and unique commits. Branch deletion is not a release gate and must not delay A1/B/C/D.
+Do not invent historical branch names. The PR #55 branch is 12 commits ahead and 3 behind by ancestry because the replacement PR was squash-merged; compare its actual file content before deletion. Current code/test/acceptance files are present on `main`; roadmap differences are stale historical text, not new implementation. Tags/deployment references were not verified through the available connector, and the connector exposes no ref-deletion action. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
 ## 6. Release blockers — measurable actions
 
