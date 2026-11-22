@@ -3,6 +3,8 @@ name: Release preflight
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: ["release/**"]
   workflow_dispatch:
 
 permissions:
@@ -177,13 +179,14 @@ jobs:
     timeout-minutes: 12
     env:
       TF_IN_AUTOMATION: "true"
-      TF_PLUGIN_CACHE_DIR: $RUNNER_TEMP/terraform-plugin-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Create provider cache directory
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - name: Configure Terraform provider cache
+        run: |
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-plugin-cache" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/terraform-plugin-cache"
       - name: Check Terraform formatting
         run: docker run --rm -v "$PWD:/workspace" -w /workspace hashicorp/terraform:1.9.8 fmt -check -diff -recursive infra/aws
       - name: Initialize providers without remote backend
