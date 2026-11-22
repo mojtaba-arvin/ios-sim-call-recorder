@@ -7,7 +7,7 @@ TwilioWebhookASGI is the bounded ASGI transport adapter for POST callbacks. It r
 When TWILIO_ENABLED=true, the production ASGI composition root mounts:
 
 - /v1/twilio/consent — DTMF Gather result; after durable processing the route returns Hangup TwiML.
-- /v1/twilio/call-status — terminal outbound consent-call status; completed calls without persisted consent fail closed.
+- /v1/twilio/call-status — busy/no-answer/failed/canceled outcomes mark the participant unavailable; generic completed status is informational and does not decide consent.
 - /v1/twilio/conference — Conference start/end and participant join/leave callbacks.
 - /v1/twilio/recording — recording in-progress/completed/failed/absent callbacks.
 
