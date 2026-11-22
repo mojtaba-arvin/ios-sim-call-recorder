@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -64,12 +65,42 @@ def _json_request(base_url: str, token: str, method: str, path: str, payload=Non
         raise HarnessError(f"API request failed: {type(exc).__name__}") from None
 
 
-def _download_verified_media(url: str, destination: str):
-    if not url.startswith("https://"):
-        raise HarnessError("media download URL must use HTTPS")
-    request = urllib.request.Request(url, headers={"Accept": "audio/wav"})
+def _validate_media_url(url: str):
+    """Accept only HTTPS AWS S3 presigned URLs; never follow arbitrary API URLs."""
     try:
-        with urllib.request.urlopen(request, timeout=30) as response, open(destination, "wb") as target:
+        parsed = urlsplit(url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError:
+        raise HarnessError("media download URL is malformed") from None
+    labels = hostname.split(".")
+    aws_suffix = hostname.endswith(".amazonaws.com") or hostname.endswith(".amazonaws.com.cn")
+    s3_endpoint = any(label == "s3" or label.startswith("s3-") for label in labels)
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or not aws_suffix
+        or not s3_endpoint
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or port not in (None, 443)
+    ):
+        raise HarnessError("media download URL must be an HTTPS AWS S3 presigned URL")
+
+
+class _S3OnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_media_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _download_verified_media(url: str, destination: str):
+    _validate_media_url(url)
+    request = urllib.request.Request(url, headers={"Accept": "audio/wav"})
+    opener = urllib.request.build_opener(_S3OnlyRedirectHandler())
+    try:
+        with opener.open(request, timeout=30) as response, open(destination, "wb") as target:
             total = 0
             while True:
                 chunk = response.read(1024 * 1024)
