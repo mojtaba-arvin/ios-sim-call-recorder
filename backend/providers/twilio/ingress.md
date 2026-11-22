@@ -21,7 +21,8 @@ The decoder binds the callback to the configured Account SID before resolving pr
 - Reject duplicate security-sensitive form fields.
 - Never log full form payloads, caller numbers, signatures, Auth Tokens, provider SIDs or media URLs.
 - Durable event-ID deduplication is enforced by the repository. Unknown provider-resource mappings fail closed.
-- Public deployment must add ingress rate limits and monitoring; no rate-limit service is included in this ASGI adapter.
+- After Twilio signature verification and before business decoding, a PostgreSQL token bucket is keyed by the configured opaque provider-account ID (300-request burst, 10 tokens/second). Excess signed callbacks receive HTTP 429 with Retry-After; an unavailable admission store returns HTTP 503. No account ID is accepted from the callback body or headers.
+- This account-scoped limiter does not protect the body parser or signature verifier from unauthenticated volumetric traffic. Public deployment still requires an independently configured ALB/WAF rate-based rule and monitoring; no WAF is deployed by this code change.
 
 ## Consent and media processing
 
