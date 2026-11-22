@@ -9,7 +9,7 @@
 - PR #59 merged at `143b05017fb6eed610951c07e0e272f86d411835`. Its pre-merge Release Preflight Run `45003000666` passed all eight checks, including XCTest on iPhone 16 and iPhone 16 Pro simulators after runtime provisioning.
 - The post-merge commit was checked independently: no workflow run exists for the final main SHA. Root cause confirmed in `.github/workflows/release-preflight.yml`: `push` covered only `release/**`, not `main`.
 - A focused follow-up proposes adding `main` to the canonical Release Preflight push branches so merge commits receive the same eight-check gate. This change must pass PR CI before merge; do not report it as active until merged and read back.
-- PR #60's current head is `7c7983b07c93d1533fa2f7c2e478dd08c91f2147`; Run `45003805378` was created for the earlier PR head `67dd2c831ff70d8cee230e6e11bea038aefd13ae`, so it is not sufficient evidence for the latest commit.
+- For PR #60, only a completed run attached to the final PR head counts as validation; canceled runs from superseded commits are not evidence.
 
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
 - Final pre-merge PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` passed all nine matrix-expanded Release Preflight checks in Run `44995777499`; the separate infrastructure and repository-policy runs `44995777428` and `44995777383` also succeeded.
