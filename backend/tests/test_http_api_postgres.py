@@ -31,13 +31,16 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
         self.repo=PostgresBridgeRepository(self.connect)
         self.app=BridgeSessionsASGI(repository=self.repo,authenticator=BearerTokenAuthenticator({hashlib.sha256(self.token.encode()).hexdigest():'tenant-integration'}))
 
-    async def request(self,method,path,body=None):
+    async def request(self,method,path,body=None,idempotency_key='pg-session-key-001'):
         raw=json.dumps(body).encode() if body is not None else b''
         incoming=[{'type':'http.request','body':raw,'more_body':False}]
         outgoing=[]
         async def receive(): return incoming.pop(0)
         async def send(message): outgoing.append(message)
-        await self.app({'type':'http','method':method,'path':path,'headers':[(b'authorization',f'Bearer {self.token}'.encode())]},receive,send)
+        headers=[(b'authorization',f'Bearer {self.token}'.encode())]
+        if idempotency_key is not None:
+            headers.append((b'idempotency-key',idempotency_key.encode()))
+        await self.app({'type':'http','method':method,'path':path,'headers':headers},receive,send)
         start=next(item for item in outgoing if item['type']=='http.response.start')
         payload=next(item for item in outgoing if item['type']=='http.response.body')['body']
         return start['status'],json.loads(payload) if payload else None
@@ -54,6 +57,26 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status,200)
         self.assertEqual(cancelled['state'],'cancelled')
         self.assertEqual(self.repo.get_session(session_id,tenant_id='tenant-integration').state.value,'cancelled')
+
+    async def test_http_session_create_replay_and_payload_conflict_are_durable(self):
+        body = {'participant_refs':['participant-a','participant-b']}
+        status, first = await self.request('POST','/v1/bridge-sessions',body,'durable-retry-key')
+        self.assertEqual(status,201)
+        replay_status, replay = await self.request('POST','/v1/bridge-sessions',body,'durable-retry-key')
+        self.assertEqual(replay_status,200)
+        self.assertEqual(replay['session_id'],first['session_id'])
+        conflict_status, conflict = await self.request(
+            'POST','/v1/bridge-sessions',
+            {'participant_refs':['participant-c','participant-d']},'durable-retry-key',
+        )
+        self.assertEqual(conflict_status,409)
+        self.assertEqual(conflict,{'error':'idempotency_key_reused'})
+        with self.connect() as conn:
+            count=conn.execute(
+                "SELECT count(*) FROM bridge_sessions WHERE tenant_id=%s",
+                ('tenant-integration',),
+            ).fetchone()[0]
+        self.assertEqual(count,1)
 
     async def test_cancel_during_consent_closes_pending_outbox_and_queues_call_cancellation(self):
         session = BridgeSession(

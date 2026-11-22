@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover
     psycopg = None
 from bridge_core.application import EventApplication, OutboxCommand
 from bridge_core.domain import BridgeSession, SessionState
-from bridge_core.persistence import CommandIdentityConflict, EventIdentityConflict, LeaseLost, PostgresBridgeRepository
+from bridge_core.persistence import CommandIdentityConflict, EventIdentityConflict, LeaseLost, PostgresBridgeRepository, SessionIdempotencyConflict
 from bridge_core.address_vault import EncryptedParticipantAddressCodec, PostgresParticipantAddressResolver
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -44,6 +44,54 @@ class PostgresPersistenceTests(unittest.TestCase):
         return OutboxCommand("recording.start", key or f"recording-start:{uuid4()}",
                              self.session.session_id, "twilio", "account-test",
                              {"session_id": self.session.session_id})
+
+    def test_concurrent_session_creation_with_same_key_persists_one_session(self):
+        barrier = threading.Barrier(8)
+        digest = "b" * 64
+        def create(index):
+            barrier.wait()
+            candidate = BridgeSession(
+                f"session-idempotency-candidate-{index}", 2,
+                expected_participant_refs=frozenset({"participant-a", "participant-b"}),
+                state=SessionState.CREATED,
+            )
+            return self.repo.create_session_idempotently(
+                candidate, tenant_id="tenant-idempotency",
+                idempotency_key="concurrent-create-001", request_digest=digest,
+            )
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(create, range(8)))
+        self.assertEqual(len({session.session_id for session, _ in results}), 1)
+        self.assertEqual(sum(1 for _, replayed in results if not replayed), 1)
+        self.assertEqual(sum(1 for _, replayed in results if replayed), 7)
+        with self.connect() as conn:
+            count = conn.execute(
+                "SELECT count(*) FROM bridge_sessions WHERE tenant_id=%s",
+                ("tenant-idempotency",),
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_session_idempotency_key_rejects_different_request_digest(self):
+        first = BridgeSession(
+            "session-idempotency-first", 2,
+            expected_participant_refs=frozenset({"participant-a", "participant-b"}),
+            state=SessionState.CREATED,
+        )
+        self.repo.create_session_idempotently(
+            first, tenant_id="tenant-idempotency", idempotency_key="digest-conflict",
+            request_digest="c" * 64,
+        )
+        second = BridgeSession(
+            "session-idempotency-second", 2,
+            expected_participant_refs=frozenset({"participant-c", "participant-d"}),
+            state=SessionState.CREATED,
+        )
+        with self.assertRaises(SessionIdempotencyConflict):
+            self.repo.create_session_idempotently(
+                second, tenant_id="tenant-idempotency", idempotency_key="digest-conflict",
+                request_digest="d" * 64,
+            )
+        self.assertIsNone(self.repo.get_session(second.session_id, tenant_id="tenant-idempotency"))
 
     def test_encrypted_address_vault_round_trip_is_tenant_scoped(self):
         resolver = PostgresParticipantAddressResolver(

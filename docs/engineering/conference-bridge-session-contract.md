@@ -47,13 +47,13 @@ Only explicit, idempotent transitions are accepted. Provider events may arrive l
 
 `POST /v1/bridge-sessions`
 
-Request fields:
-- `client_request_id`: client-generated idempotency key
-- `call_direction`: `incoming` or `outgoing`
-- `country_code`: intended physical test country
-- `locale`: user-facing instruction and disclosure locale
-- `participant_count`: expected number of human participants
-- `consent_policy_version`: version of the disclosure/consent policy
+Request headers:
+- `Idempotency-Key`: required client-generated key (1–128 ASCII characters from letters, digits, `.`, `_`, `:`, `-`), scoped to the authenticated tenant and retained for 24 hours.
+
+Request body (current implemented API):
+- `participant_refs`: exactly two opaque, distinct participant references.
+
+A replay with the same key and canonical participant set returns the current persisted session with HTTP 200. Reusing a key for a different participant set returns HTTP 409. The key record, session and initial outbox commands commit in one PostgreSQL transaction; this does not imply exactly-once provider execution.
 
 Response fields:
 - `session_id`
