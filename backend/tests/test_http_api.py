@@ -144,6 +144,18 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 201)
 
+    async def test_rate_limit_store_failure_fails_closed(self):
+        class UnavailableRepository(FakeRepository):
+            def consume_tenant_rate_limit(self, **kwargs):
+                raise RuntimeError("database unavailable")
+
+        self.app.repository = UnavailableRepository()
+        status, payload = await self.request(
+            "GET", "/v1/bridge-sessions/unknown", token=self.token,
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(payload, {"error": "rate_limit_unavailable"})
+
     async def test_health_endpoints_are_available_without_tenant_credentials(self):
         status, payload = await self.request("GET", "/health/live")
         self.assertEqual(status, 200)
