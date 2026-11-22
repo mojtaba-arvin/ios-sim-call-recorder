@@ -9,7 +9,7 @@
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
 - Final pre-merge PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` passed all nine matrix-expanded Release Preflight checks in Run `44995777499`; the separate infrastructure and repository-policy runs `44995777428` and `44995777383` also succeeded.
 - Seven logical jobs are defined; PostgreSQL expands to two versions and XCTest to two simulator devices. All nine resulting checks passed on the same final PR head.
-- PR #55 is the next batch for the opt-in Twilio real-account acceptance harness, safety-guard unit tests and operator protocol. The harness is dry-run by default and cannot run in CI; no live PSTN call has been made.
+- PR #55 contains the opt-in Twilio real-account acceptance harness, safety-guard unit tests and operator protocol. The harness is dry-run by default; no live PSTN call has been made.\n- PR #57 merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head passed all eight Release Preflight checks (Run `44998126275`) and the unique Backend Compose lifecycle integration (Run `44998126244`).
 - Ruleset ID `27591151` remains incomplete: only `deletion` and `non_fast_forward` are active. This connection exposes Ruleset GET but not administrative PUT/PATCH; do not claim governance is fixed.
 - Branch inventory must be refreshed after the merge. PR #53 remains closed/unmerged; do not treat its branch as merged content.
 
@@ -23,7 +23,7 @@
 
 ## 2. Workstream map and PR batches
 
-Workstreams are ordered by release risk. Independent CI jobs execute concurrently; only XCTest depends on the simulator build.
+Workstreams are ordered by release risk. Release Preflight jobs execute concurrently; the two XCTest device jobs each generate/build/test independently, with no serial simulator-build dependency. Backend staging lifecycle remains a separate path-filtered integration check.
 
 | Batch | Workstream | PR scope | Dependency / exit condition |
 |---|---|---|---|
@@ -46,7 +46,7 @@ Workflow: `.github/workflows/release-preflight.yml`
 | `backend-postgres` | PostgreSQL 16/17 matrix, Python 3.13, backend unittest suite | Per-version test log artifact |
 | `swift-core` | Swift 6.2 package tests | Swift test log artifact |
 | `ios-sim-build` | XcodeGen, privacy manifest lint, simulator build | Build log and app artifact |
-| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; depends only on simulator build | XCTest log and .xcresult artifact |
+| `xctest` | iPhone 16 / iPhone 16 Pro simulator matrix; each job generates the project and builds/tests independently | Per-device log; `.xcresult` retained on failure |
 | `audio-analyzer` | WAV analyzer unittest suite | Analyzer log artifact |
 | `terraform-validate` | Terraform fmt, backendless init, validate | Job log |
 | `repository-policy` | Policy tests, workflow/agent/docs validators | Job log |
@@ -65,7 +65,7 @@ The currently observed active Ruleset `protect main` (ID `27591151`) targets the
 
 Required end state:
 1. Require a pull request before merging to `main`.
-2. Require status checks: `backend-postgres`, `swift-core`, `ios-sim-build`, both `xctest` matrix checks (or the stable job check identity if GitHub presents one), `audio-analyzer`, `terraform-validate`, and `repository-policy`.
+2. Require the eight stable Release Preflight checks: `backend-postgres (PostgreSQL 16)`, `backend-postgres (PostgreSQL 17)`, `swift-core`, `xctest (iPhone 16)`, `xctest (iPhone 16 Pro)`, `audio-analyzer`, `terraform-validate`, and `repository-policy`. Do not require the path-filtered `Backend staging integration` check globally; it is intentionally absent for unrelated PRs.
 3. Require linear history.
 4. Restrict force pushes.
 5. Keep branch deletion restricted.
@@ -89,7 +89,7 @@ Do not invent four additional branch names. Re-run the branch inventory before d
 | Blocker | Action | Owner role | Acceptance criteria | CI / evidence |
 |---|---|---|---|---|
 | Governance incomplete | Apply the six governance requirements above | Repository admin | Ruleset read-back confirms PR, required checks, linear history, force-push restriction and deletion restriction | Ruleset JSON/screenshot + PR checks |
-| CI lacks one release gate | Merge and run release preflight | CI owner | All seven required jobs green on the same commit; artifacts retained | Actions run URL + artifact IDs |
+| CI gate optimization | PR #57 is merged; keep Release Preflight and unique Backend Compose lifecycle green on relevant PRs | CI owner | All eight matrix-expanded Release Preflight checks green on the same commit; Backend integration green when backend/Compose paths change | Actions run URLs + artifact IDs |
 | Twilio unverified | Use `backend/tools/twilio_live_acceptance.py` (PR #55) in staging only; run consent accept/decline/no-answer, Conference lifecycle, recording-from-start, callback signature/account scope, retrieval, dual-channel validation and retention deletion | Backend/provider owner | Every scenario has expected terminal state; no cross-account callback acceptance; evidence includes sanitized call/Conference/Recording SIDs and timestamps | Manual workflow run, sanitized logs, test matrix; no secrets or phone numbers |
 | Native SIM route unverified | Execute physical protocol on declared iPhone/iOS/carrier/SIM combinations; distinguish native SIM merge from app-owned Twilio Conference | iOS/device QA owner | Repeated runs per combination; record call topology, merge availability, import path, audio integrity, channel attribution, interruptions and failure modes | Signed device matrix, screen/video evidence where lawful, imported test files and analyzer report |
 | AWS staging unverified | Provision staging with Terraform, OIDC, encrypted storage, migrations, API/worker/retention services, readiness and rollback | Cloud/platform owner | Deploy exact commit SHA; migration exit 0; ECS services stable; readiness passes; KMS/S3 access and retention deletion verified | Terraform plan/apply output, deployment run, ECS task/service output, health response, rollback record |
