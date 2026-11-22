@@ -6,13 +6,15 @@ import hashlib, hmac, json, re
 from typing import Any
 from uuid import uuid4
 from .domain import BridgeSession, InvalidTransition, SessionState
-from .persistence import SessionIdempotencyConflict
+from .persistence import RateLimitStoreUnavailable, SessionIdempotencyConflict
 
 class BearerTokenAuthenticator:
     def __init__(self, token_hashes):
         self._tokens = {}
         for digest, tenant in token_hashes.items():
-            if len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest) or not tenant or not tenant.strip():
+            if (len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest)
+                    or not isinstance(tenant, str) or not tenant or not tenant.strip()
+                    or len(tenant) > 128):
                 raise ValueError('invalid API token hash or tenant identifier')
             self._tokens[digest] = tenant
         if not self._tokens:
@@ -31,11 +33,19 @@ class BearerTokenAuthenticator:
 class BridgeSessionsASGI:
     MAX_BODY_BYTES = 16384
     MAX_PARTICIPANTS = 2
-    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None, media_service=None):
+    DEFAULT_RATE_LIMITS = {"read": (120, 2.0), "write": (30, 0.5)}
+
+    def __init__(self, *, repository, authenticator, initial_commands=None, address_vault=None, media_service=None, rate_limits=None):
         self.repository, self.authenticator = repository, authenticator
         self.initial_commands = initial_commands
         self.address_vault = address_vault
         self.media_service = media_service
+        self.rate_limits = dict(rate_limits or self.DEFAULT_RATE_LIMITS)
+        if set(self.rate_limits) != {"read", "write"} or any(
+            not isinstance(capacity, int) or capacity < 1 or refill <= 0
+            for capacity, refill in self.rate_limits.values()
+        ):
+            raise ValueError("rate limits must define positive read/write capacities and refill rates")
 
     async def __call__(self, scope, receive, send):
         if scope.get('type') != 'http':
@@ -66,6 +76,23 @@ class BridgeSessionsASGI:
             await self.respond(send, 401, {'error':'unauthorized'}); return
         method, path = scope.get('method','GET').upper(), scope.get('path','')
         parts = [p for p in path.split('/') if p]
+        bucket = "write" if method in {"POST", "PUT", "PATCH", "DELETE"} else "read"
+        capacity, refill_per_second = self.rate_limits[bucket]
+        try:
+            allowed, retry_after = self.repository.consume_tenant_rate_limit(
+                tenant_id=tenant, bucket=bucket, capacity=capacity,
+                refill_per_second=refill_per_second,
+            )
+        except RateLimitStoreUnavailable:
+            await self.respond(send, 503, {"error": "rate_limit_unavailable"}); return
+        except Exception:
+            await self.respond(send, 503, {"error": "rate_limit_unavailable"}); return
+        if not allowed:
+            await self.respond(
+                send, 429, {"error": "rate_limit_exceeded"},
+                extra_headers=[(b"retry-after", str(max(1, retry_after)).encode("ascii"))],
+            )
+            return
         try:
             if len(parts) == 4 and parts[:2] == ['v1', 'participants'] and parts[3] == 'address':
                 participant_ref = parts[2]
@@ -163,7 +190,9 @@ class BridgeSessionsASGI:
         return {'session_id':session.session_id,'state':session.state.value,'expected_participants':session.expected_participants,'joined_participants':len(session.joined_participants),'consented_participants':len(session.consented_participants),'failure_code':session.failure_code,'updated_at':session.updated_at.isoformat() if session.updated_at else None}
 
     @staticmethod
-    async def respond(send,status,payload):
+    async def respond(send,status,payload,extra_headers=()):
         body=json.dumps(payload,separators=(',',':'),sort_keys=True).encode('utf-8')
-        await send({'type':'http.response.start','status':status,'headers':[(b'content-type',b'application/json; charset=utf-8'),(b'cache-control',b'no-store'),(b'content-length',str(len(body)).encode('ascii'))]})
+        response_headers=[(b'content-type',b'application/json; charset=utf-8'),(b'cache-control',b'no-store'),(b'content-length',str(len(body)).encode('ascii'))]
+        response_headers.extend(extra_headers)
+        await send({'type':'http.response.start','status':status,'headers':response_headers})
         await send({'type':'http.response.body','body':body})

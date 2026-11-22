@@ -26,6 +26,9 @@ class CommandIdentityConflict(ValueError):
 class SessionIdempotencyConflict(ValueError):
     """A session idempotency key was reused for a different request."""
 
+class RateLimitStoreUnavailable(RuntimeError):
+    """The durable rate-limit store could not make an authoritative decision."""
+
 @dataclass(frozen=True, slots=True)
 class DeadLetterCommand:
     command_id: UUID
@@ -564,6 +567,79 @@ class PostgresBridgeRepository:
                     (limit,))
                 rows = cur.fetchall()
         return tuple(DeadLetterCommand(*row) for row in rows)
+
+    def consume_tenant_rate_limit(
+        self, *, tenant_id: str, bucket: str, capacity: int,
+        refill_per_second: float,
+    ) -> tuple[bool, int]:
+        """Atomically consume one token from a tenant-scoped PostgreSQL bucket.
+
+        The upsert serializes concurrent API instances on the tenant/bucket
+        primary key. Store failures are fail-closed at the HTTP boundary.
+        """
+        if (not tenant_id or not tenant_id.strip() or len(tenant_id) > 128
+                or bucket not in {"read", "write"}
+                or not isinstance(capacity, int) or capacity < 1
+                or not isinstance(refill_per_second, (int, float))
+                or refill_per_second <= 0):
+            raise ValueError("invalid tenant rate-limit parameters")
+        sql = """
+            WITH limits AS (
+                SELECT %s::numeric AS capacity, %s::numeric AS refill
+            )
+            INSERT INTO tenant_api_rate_limits
+                (tenant_id, bucket, tokens, updated_at, last_allowed)
+            VALUES (%s, %s, (SELECT capacity - 1 FROM limits), now(), true)
+            ON CONFLICT (tenant_id, bucket) DO UPDATE SET
+                tokens = CASE
+                    WHEN LEAST(
+                        (SELECT capacity FROM limits),
+                        tenant_api_rate_limits.tokens
+                          + GREATEST(0, EXTRACT(EPOCH FROM
+                              (now() - tenant_api_rate_limits.updated_at)))
+                            * (SELECT refill FROM limits)
+                    ) >= 1
+                    THEN LEAST(
+                        (SELECT capacity FROM limits),
+                        tenant_api_rate_limits.tokens
+                          + GREATEST(0, EXTRACT(EPOCH FROM
+                              (now() - tenant_api_rate_limits.updated_at)))
+                            * (SELECT refill FROM limits)
+                    ) - 1
+                    ELSE LEAST(
+                        (SELECT capacity FROM limits),
+                        tenant_api_rate_limits.tokens
+                          + GREATEST(0, EXTRACT(EPOCH FROM
+                              (now() - tenant_api_rate_limits.updated_at)))
+                            * (SELECT refill FROM limits)
+                    )
+                END,
+                last_allowed = LEAST(
+                    (SELECT capacity FROM limits),
+                    tenant_api_rate_limits.tokens
+                      + GREATEST(0, EXTRACT(EPOCH FROM
+                          (now() - tenant_api_rate_limits.updated_at)))
+                        * (SELECT refill FROM limits)
+                ) >= 1,
+                updated_at = now()
+            RETURNING last_allowed, tokens
+        """
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (capacity, refill_per_second, tenant_id, bucket))
+                    row = cur.fetchone()
+                    if row is None:
+                        raise RuntimeError("rate-limit upsert returned no row")
+                    allowed, tokens = bool(row[0]), float(row[1])
+                    if allowed:
+                        return True, 0
+                    import math
+                    return False, max(1, math.ceil((1.0 - tokens) / refill_per_second))
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise RateLimitStoreUnavailable("durable rate-limit decision failed") from exc
 
     @staticmethod
     def _session_from_row(row: tuple[Any, ...]) -> BridgeSession:

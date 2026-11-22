@@ -15,6 +15,7 @@ class FakeRepository:
         self.owners = {}
         self.commands = []
         self.idempotency = {}
+        self.rate_limit_buckets = {}
 
     def ping(self):
         return None
@@ -35,6 +36,14 @@ class FakeRepository:
         self.create_session(session, tenant_id=tenant_id, commands=commands)
         self.idempotency[key] = (request_digest, session.session_id)
         return session, False
+
+    def consume_tenant_rate_limit(self, *, tenant_id, bucket, capacity, refill_per_second):
+        key = (tenant_id, bucket)
+        count = self.rate_limit_buckets.get(key, 0)
+        if count >= capacity:
+            return False, 1
+        self.rate_limit_buckets[key] = count + 1
+        return True, 0
 
     def get_session(self, session_id, *, tenant_id):
         if self.owners.get(session_id) != tenant_id:
@@ -107,6 +116,45 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         start = next(item for item in sent if item["type"] == "http.response.start")
         response = next(item for item in sent if item["type"] == "http.response.body")
         return start["status"], json.loads(response["body"])
+
+    async def test_tenant_write_rate_limit_rejects_excess_and_isolated_by_tenant(self):
+        other_token = "c" * 48
+        self.app.authenticator = BearerTokenAuthenticator({
+            hashlib.sha256(self.token.encode()).hexdigest(): "tenant-a",
+            hashlib.sha256(other_token.encode()).hexdigest(): "tenant-b",
+        })
+        self.app.rate_limits = {"read": (100, 1.0), "write": (2, 0.01)}
+        body = {"participant_refs": ["opaque-a", "opaque-b"]}
+        for key in ("limit-a", "limit-b"):
+            status, _ = await self.request(
+                "POST", "/v1/bridge-sessions", token=self.token,
+                body=body, idempotency_key=key,
+            )
+            self.assertEqual(status, 201)
+        status, payload = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body=body, idempotency_key="limit-c",
+        )
+        self.assertEqual(status, 429)
+        self.assertEqual(payload, {"error": "rate_limit_exceeded"})
+
+        status, _ = await self.request(
+            "POST", "/v1/bridge-sessions", token=other_token,
+            body=body, idempotency_key="tenant-b-first",
+        )
+        self.assertEqual(status, 201)
+
+    async def test_rate_limit_store_failure_fails_closed(self):
+        class UnavailableRepository(FakeRepository):
+            def consume_tenant_rate_limit(self, **kwargs):
+                raise RuntimeError("database unavailable")
+
+        self.app.repository = UnavailableRepository()
+        status, payload = await self.request(
+            "GET", "/v1/bridge-sessions/unknown", token=self.token,
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(payload, {"error": "rate_limit_unavailable"})
 
     async def test_health_endpoints_are_available_without_tenant_credentials(self):
         status, payload = await self.request("GET", "/health/live")

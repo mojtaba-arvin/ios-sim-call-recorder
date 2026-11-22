@@ -30,7 +30,7 @@ cd backend
 python migrate.py
 ```
 
-Migrations currently run through 0012_session_idempotency.sql. The application does not run DDL at startup. Migration 0012 adds tenant-scoped session idempotency records; expired keys are reusable after 24 hours and opportunistically cleaned in bounded batches during session creation.
+Migrations currently run through 0013_tenant_api_rate_limits.sql. The application does not run DDL at startup. Migration 0012 adds tenant-scoped session idempotency records; expired keys are reusable after 24 hours and opportunistically cleaned in bounded batches during session creation. Migration 0013 adds shared PostgreSQL token buckets for authenticated tenant API traffic.
 
 ## API flow
 
@@ -42,6 +42,18 @@ Migrations currently run through 0012_session_idempotency.sql. The application d
 6. The session becomes COMPLETED only after both channels contain activity and encrypted object storage succeeds; otherwise it becomes DEGRADED. Retention deletes the Twilio recording and S3 object as separate retryable steps.
 
 DELETE /v1/participants/{participant_ref}/address removes the tenant-scoped encrypted address and records a metadata-only audit event. GET /v1/bridge-sessions/{session_id}/media returns a 120-second presigned URL only for a verified, undeleted media asset and records the grant in media_access_audit. API session cancellation while consent calls may exist dead-letters pending consent requests and queues provider call cancellation.
+
+## API rate limits
+
+Authenticated tenant API requests use durable PostgreSQL token buckets shared by all
+application instances. Read routes have a burst capacity of 120 requests and refill
+at 2 tokens/second; write routes have a burst capacity of 30 requests and refill at
+0.5 tokens/second. The buckets are keyed by authenticated tenant and route class,
+not by caller-supplied identifiers or forwarded IP headers. Excess requests receive
+HTTP 429 with a Retry-After header. If PostgreSQL cannot make an authoritative
+rate-limit decision, the API fails closed with HTTP 503. Health endpoints remain
+available for orchestration. Twilio webhook ingress is a separate provider trust
+boundary and is not governed by these tenant API buckets.
 
 ## Runtime configuration
 
