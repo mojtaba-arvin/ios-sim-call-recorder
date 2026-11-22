@@ -136,7 +136,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          RESULT="xctest-${{ strategy.job-index }}.xcresult"
+          RESULT="xctest.xcresult"
           xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -destination "platform=iOS Simulator,name=${{ matrix.device }}" -parallel-testing-enabled NO -resultBundlePath "$RESULT" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee xctest.log
       - name: Upload XCTest result bundle and log
         if: always()
@@ -144,7 +144,7 @@ jobs:
         with:
           name: xctest-${{ matrix.device }}
           path: |
-            xctest-*.xcresult
+            xctest.xcresult
             xctest.log
           if-no-files-found: ignore
           retention-days: 14
