@@ -1,15 +1,13 @@
 name: Infrastructure validation
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: infrastructure-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: infrastructure-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
