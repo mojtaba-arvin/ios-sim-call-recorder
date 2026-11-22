@@ -1,5 +1,8 @@
 from __future__ import annotations
 import os
+import struct
+import tempfile
+import wave
 import threading
 import time
 import unittest
@@ -333,6 +336,286 @@ class PostgresPersistenceTests(unittest.TestCase):
         )
         self.assertEqual(status, "dead")
         self.assertEqual(self.repo.claim_outbox(worker_id="worker-retry", limit=10), ())
+
+
+    def test_s3_success_then_database_failure_is_scheduled_for_recovery(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+        from bridge_core.object_storage import StoredMediaObject
+
+        class Store:
+            def __init__(self):
+                self.deleted = []
+                self.uploaded = False
+                self.fail_delete = False
+
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+            def delete(self, **kwargs):
+                self.deleted.append(kwargs)
+                if self.fail_delete:
+                    raise RuntimeError("simulated object cleanup failure")
+
+            def put_wav(self, **kwargs):
+                self.uploaded = True
+                return StoredMediaObject(
+                    object_key="test/object.wav", byte_count=32044,
+                    sha256="a" * 64, duration_seconds=1.0,
+                    sample_rate_hz=8000, channel_count=2,
+                )
+
+        class Resolver:
+            @staticmethod
+            def expected_participants(_session_id):
+                return ("participant-a", "participant-b")
+
+        store = Store()
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "c" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=Resolver(), object_store=store,
+        )
+        recording_sid = "RE" + "c" * 32
+        token = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp:
+            source_path = temp.name
+        try:
+            with wave.open(source_path, "wb") as output:
+                output.setnchannels(2)
+                output.setsampwidth(2)
+                output.setframerate(8000)
+                frames = bytearray()
+                for _ in range(8000):
+                    frames.extend(struct.pack("<hh", 6000, 7000))
+                output.writeframes(bytes(frames))
+            ingestor._download = lambda _sid: Path(source_path)
+
+            def fail_database_commit(**_kwargs):
+                raise RuntimeError("simulated database commit failure")
+
+            ingestor._commit_asset = fail_database_commit
+            with self.assertRaisesRegex(RuntimeError, "simulated database commit failure"):
+                ingestor._process_claim(
+                    recording_sid=recording_sid, session_id=self.session.session_id,
+                    tenant_id="tenant-test", claim_token=token,
+                )
+        finally:
+            Path(source_path).unlink(missing_ok=True)
+        self.assertTrue(store.uploaded)
+        self.assertEqual(store.deleted, [])
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, last_error
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("retry", True, "RuntimeError"))
+
+        store.fail_delete = True
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE media_ingestions SET next_attempt_at=now()-interval '1 second'
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            )
+        with self.assertRaisesRegex(RuntimeError, "simulated object cleanup failure"):
+            ingestor.recover_once(limit=1)
+        self.assertEqual(len(store.deleted), 1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, attempts
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("retry", True, 2))
+
+
+
+    def test_upload_conflict_with_legacy_asset_is_durably_cleaned_before_adoption(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+        from uuid import uuid4
+
+        class Store:
+            def __init__(self):
+                self.deleted = []
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+            def delete(self, **kwargs):
+                self.deleted.append(kwargs)
+
+        store = Store()
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "d" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=store,
+        )
+        recording_sid = "RE" + "d" * 32
+        token = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(token)
+        media_id = uuid4()
+        # Persist valid consent evidence so the terminal session fixture
+        # satisfies the domain invariants when the recovery path reloads it.
+        current = self.repo.get_session(self.session.session_id)
+        for participant_ref in ("participant-a", "participant-b"):
+            updated = current.participant_consented(
+                participant_ref, provider="twilio", provider_account_id="account-test",
+                event_id=f"legacy-conflict-consent-{participant_ref}",
+                policy_version="consent-v1", consent_method="dtmf",
+                evidence_digest=f"sha256:{participant_ref}",
+                at=datetime.now(timezone.utc),
+            )
+            self.repo.apply_event_once(
+                "twilio", f"legacy-conflict-consent-{participant_ref}",
+                self.session.session_id, lambda _session, value=updated: value,
+                provider_account_id="account-test",
+            )
+            current = self.repo.get_session(self.session.session_id)
+        with self.connect() as conn:
+            # Terminal session makes finalization a no-op after authoritative
+            # legacy-row adoption, while retaining valid consent evidence.
+            conn.execute(
+                "UPDATE bridge_sessions SET state='degraded' WHERE session_id=%s",
+                (self.session.session_id,),
+            )
+            conn.execute(
+                """INSERT INTO media_assets
+                   (media_id, tenant_id, session_id, provider, provider_account_id,
+                    provider_recording_sid, object_key, sha256, byte_count,
+                    duration_seconds, sample_rate_hz, channel_count, channel_activity,
+                    channel_map, verification_state, validation_error, retention_expires_at)
+                   VALUES (%s,'tenant-test',%s,'twilio','account-test',%s,NULL,%s,
+                           32044,1.0,8000,2,'[]'::jsonb,'[]'::jsonb,'rejected',
+                           'legacy_rejection',now()+interval '30 days')""",
+                (media_id, self.session.session_id, recording_sid, "a" * 64),
+            )
+
+        # Model a legacy writer winning the unique recording key after our S3
+        # upload but before this worker's INSERT ... ON CONFLICT resolution.
+        uploaded_key = store._key(
+            tenant_id="tenant-test", session_id=self.session.session_id,
+            media_id=str(__import__("uuid").uuid5(
+                __import__("uuid").NAMESPACE_URL,
+                f"twilio:{'AC' + 'd' * 32}:{recording_sid}",
+            )),
+        )
+        ingestor._commit_asset(
+            recording_sid=recording_sid, session_id=self.session.session_id,
+            tenant_id="tenant-test", claim_token=token,
+            object_key=uploaded_key, sha256="b" * 64,
+            byte_count=32044, duration=1.0, sample_rate=8000, channels=2,
+            activity=[0.5, 0.5], channel_map={"channel_1": "participant-a",
+                                             "channel_2": "participant-b"},
+            state="verified", validation_error=None,
+        )
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, claim_token, object_key
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+            asset = conn.execute(
+                """SELECT verification_state, object_key FROM media_assets
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row[0], "retry")
+        self.assertTrue(row[1])
+        self.assertIsNone(row[2])
+        self.assertEqual(asset, ("rejected", None))
+        self.assertEqual(row[3], uploaded_key)
+
+        # Recovery must delete the losing upload first, then adopt the persisted
+        # rejected row without downloading or uploading a second object.
+        ingestor._download = lambda _sid: self.fail("must not redownload an existing asset")
+        self.assertEqual(ingestor.recover_once(limit=1), 1)
+        self.assertEqual(len(store.deleted), 1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("rejected", False))
+
+    def test_media_ingestion_claim_is_exclusive_under_concurrency(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+
+        class Store:
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "a" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=Store(),
+        )
+        barrier = threading.Barrier(2)
+
+        def claim(_):
+            barrier.wait()
+            return ingestor._claim("RE" + "a" * 32, self.session.session_id, "tenant-test")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(pool.map(claim, range(2)))
+        self.assertEqual(sum(token is not None for token in claims), 1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, attempts FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                ("RE" + "a" * 32,),
+            ).fetchone()
+        self.assertEqual(row, ("processing", 1))
+
+    def test_expired_media_ingestion_lease_can_be_reclaimed(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+
+        class Store:
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "b" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=Store(),
+        )
+        recording_sid = "RE" + "b" * 32
+        first = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(first)
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE media_ingestions SET lease_expires_at=now()-interval '1 second'
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            )
+        second = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(second)
+        self.assertNotEqual(first, second)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, attempts, claim_token FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row[0], "processing")
+        self.assertEqual(row[1], 2)
+        self.assertEqual(str(row[2]), second)
+
 
 if __name__ == "__main__":
     unittest.main()

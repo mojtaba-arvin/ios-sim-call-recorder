@@ -193,76 +193,198 @@ class TwilioRecordingMediaIngestor:
             raise TwilioEventDecodeError("recording callback identifiers are invalid")
         session_id, _ = self.resolver(None, conference_sid)
         tenant_id = self.resolver.tenant_for_session(session_id)
-        media_id = str(uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}"))
-        existing = self._existing(recording_sid)
-        if existing:
-            self._finalize_session(session_id, verified=(existing == "verified"))
+        token = self._claim(recording_sid, session_id, tenant_id)
+        if token is None:
             return
-        try:
-            source = self._download(recording_sid)
-        except MediaRejected as rejected:
-            self._persist_asset(
-                media_id=media_id, tenant_id=tenant_id, session_id=session_id,
-                recording_sid=recording_sid, object_key=None, sha256=None,
-                byte_count=rejected.byte_count, duration=None, sample_rate=None,
-                channels=None, activity=[], channel_map=[], state="rejected",
-                validation_error=rejected.code,
-            )
-            self._finalize_session(session_id, verified=False)
-            return
-        try:
-            try:
-                metadata = validate_wav(source, max_bytes=self.max_bytes)
-            except MediaValidationError as rejected:
-                self._persist_asset(
-                    media_id=media_id, tenant_id=tenant_id, session_id=session_id,
-                    recording_sid=recording_sid, object_key=None,
-                    sha256=self._sha256_file(source), byte_count=source.stat().st_size,
-                    duration=None, sample_rate=None, channels=None, activity=[],
-                    channel_map=[], state="rejected", validation_error=rejected.code,
+        self._process_claim(recording_sid=recording_sid, session_id=session_id,
+                            tenant_id=tenant_id, claim_token=token)
+
+    def _claim(self, recording_sid: str, session_id: str, tenant_id: str) -> str | None:
+        """Acquire a durable, idempotent lease before downloading or storing media."""
+        media_id = uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}")
+        object_key = self.object_store._key(
+            tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
+        )
+        token = uuid5(NAMESPACE_URL, f"twilio-claim:{self.account_sid}:{recording_sid}:{os.urandom(16).hex()}")
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO media_ingestions
+                       (provider, provider_account_id, provider_recording_sid, media_id,
+                        tenant_id, session_id, object_key, state, claim_token,
+                        lease_expires_at, attempts, next_attempt_at, updated_at)
+                       VALUES ('twilio',%s,%s,%s,%s,%s,%s,'processing',%s,
+                               now()+interval '15 minutes',1,now(),now())
+                       ON CONFLICT (provider, provider_account_id, provider_recording_sid)
+                       DO UPDATE SET state='processing', claim_token=EXCLUDED.claim_token,
+                           lease_expires_at=EXCLUDED.lease_expires_at,
+                           attempts=media_ingestions.attempts+1, updated_at=now(),
+                           cleanup_required=media_ingestions.cleanup_required
+                               OR media_ingestions.state='processing',
+                           last_error=NULL
+                       WHERE (media_ingestions.state IN ('pending','retry')
+                              AND media_ingestions.next_attempt_at <= now())
+                          OR (media_ingestions.state='processing'
+                              AND media_ingestions.lease_expires_at <= now())
+                       RETURNING claim_token""",
+                    (self.provider_account_id, recording_sid, media_id, tenant_id,
+                     session_id, object_key, token),
                 )
-                self._finalize_session(session_id, verified=False)
+                row = cur.fetchone()
+                if row:
+                    return str(row[0])
+                cur.execute(
+                    """SELECT state, session_id, tenant_id FROM media_ingestions
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s""",
+                    (self.provider_account_id, recording_sid),
+                )
+                existing = cur.fetchone()
+                if existing and (existing[1] != session_id or existing[2] != tenant_id):
+                    raise ValueError("recording identity is already bound to another session")
+                return None
+
+    def _process_claim(self, *, recording_sid: str, session_id: str,
+                       tenant_id: str, claim_token: str) -> None:
+        media_id = str(uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}"))
+        source = None
+        try:
+            # Reconcile a possibly orphaned upload before adopting a legacy asset.
+            # Otherwise an authoritative-row fast path could clear cleanup_required
+            # while leaving this attempt's different S3 object behind.
+            with self.connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT cleanup_required FROM media_ingestions
+                           WHERE provider='twilio' AND provider_account_id=%s
+                             AND provider_recording_sid=%s AND claim_token=%s""",
+                        (self.provider_account_id, recording_sid, UUID(claim_token)),
+                    )
+                    cleanup_row = cur.fetchone()
+                    if cleanup_row is None:
+                        raise RuntimeError("media ingestion lease was lost")
+            if cleanup_row[0]:
+                # A previous attempt may have died during/after S3 upload. Delete
+                # only when the durable upload-intent flag says an object may exist.
+                self.object_store.delete(
+                    tenant_id=tenant_id, session_id=session_id, media_id=media_id,
+                )
+                with self.connect() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE media_ingestions SET cleanup_required=false, updated_at=now()
+                               WHERE provider='twilio' AND provider_account_id=%s
+                                 AND provider_recording_sid=%s AND claim_token=%s""",
+                            (self.provider_account_id, recording_sid, UUID(claim_token)),
+                        )
+                        if cur.rowcount != 1:
+                            raise RuntimeError("media ingestion lease was lost")
+            if self._finalize_existing_asset(
+                recording_sid=recording_sid, session_id=session_id,
+                tenant_id=tenant_id, claim_token=claim_token,
+            ):
                 return
+            try:
+                source = self._download(recording_sid)
+            except MediaRejected as rejected:
+                self._commit_asset(
+                    recording_sid=recording_sid, session_id=session_id, tenant_id=tenant_id,
+                    claim_token=claim_token, object_key=None, sha256=None,
+                    byte_count=rejected.byte_count, duration=None, sample_rate=None,
+                    channels=None, activity=[], channel_map=[], state="rejected",
+                    validation_error=rejected.code,
+                )
+                return
+            metadata = validate_wav(source, max_bytes=self.max_bytes)
             participants = self.resolver.expected_participants(session_id)
             try:
                 analysis = analyze_dual_channel_wav(source)
                 if len(participants) != 2:
                     raise ValueError("dual-channel ownership requires exactly two expected participants")
             except ValueError:
-                self._persist_asset(
-                    media_id=media_id, tenant_id=tenant_id, session_id=session_id,
-                    recording_sid=recording_sid, object_key=None, sha256=metadata.sha256,
+                self._commit_asset(
+                    recording_sid=recording_sid, session_id=session_id, tenant_id=tenant_id,
+                    claim_token=claim_token, object_key=None, sha256=metadata.sha256,
                     byte_count=metadata.byte_count, duration=metadata.duration_seconds,
                     sample_rate=metadata.sample_rate_hz, channels=metadata.channel_count,
                     activity=[], channel_map=[], state="rejected",
                     validation_error="dual_channel_verification_failed",
                 )
-                self._finalize_session(session_id, verified=False)
                 return
+            self._mark_upload_started(recording_sid, claim_token)
             stored = self.object_store.put_wav(
                 tenant_id=tenant_id, session_id=session_id, media_id=media_id, source_path=source,
             )
-            self._persist_asset(
-                media_id=media_id, tenant_id=tenant_id, session_id=session_id,
-                recording_sid=recording_sid, object_key=stored.object_key, sha256=stored.sha256,
+            self._commit_asset(
+                recording_sid=recording_sid, session_id=session_id, tenant_id=tenant_id,
+                claim_token=claim_token, object_key=stored.object_key, sha256=stored.sha256,
                 byte_count=stored.byte_count, duration=analysis.duration_seconds,
                 sample_rate=analysis.sample_rate_hz, channels=2,
                 activity=list(analysis.channel_activity),
                 channel_map={"channel_1": participants[0], "channel_2": participants[1]},
                 state="verified", validation_error=None,
             )
-            self._finalize_session(session_id, verified=True)
+        except MediaValidationError as rejected:
+            self._commit_asset(
+                recording_sid=recording_sid, session_id=session_id, tenant_id=tenant_id,
+                claim_token=claim_token, object_key=None,
+                sha256=self._sha256_file(source) if source else None,
+                byte_count=source.stat().st_size if source else None,
+                duration=None, sample_rate=None, channels=None, activity=[],
+                channel_map=[], state="rejected", validation_error=rejected.code,
+            )
+        except Exception as exc:
+            self._schedule_retry(recording_sid, claim_token, exc)
+            raise
         finally:
-            source.unlink(missing_ok=True)
+            if source is not None:
+                source.unlink(missing_ok=True)
 
-    def _persist_asset(
-        self, *, media_id, tenant_id, session_id, recording_sid, object_key,
-        sha256, byte_count, duration, sample_rate, channels, activity,
-        channel_map, state, validation_error,
-    ):
-        expires = datetime.now(timezone.utc) + timedelta(days=self.retention_days)
+    def _finalize_existing_asset(self, *, recording_sid, session_id, tenant_id, claim_token) -> bool:
+        """Adopt an existing committed row and finalize only from its persisted state."""
         with self.connect() as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT media_id, tenant_id, session_id, verification_state, object_key
+                       FROM media_assets WHERE provider='twilio'
+                         AND provider_account_id=%s AND provider_recording_sid=%s
+                       FOR UPDATE""",
+                    (self.provider_account_id, recording_sid),
+                )
+                asset = cur.fetchone()
+                if asset is None:
+                    return False
+                if asset[1] != tenant_id or asset[2] != session_id:
+                    raise ValueError("authoritative media asset belongs to another session")
+                self._finalize_in_transaction(cur, session_id, asset[3] == "verified")
+                cur.execute(
+                    """UPDATE media_ingestions SET state=%s, claim_token=NULL,
+                       lease_expires_at=NULL, cleanup_required=false, updated_at=now()
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s""",
+                    (asset[3], self.provider_account_id, recording_sid, UUID(claim_token)),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError("media ingestion lease was lost")
+                return True
+
+    def _commit_asset(self, *, recording_sid, session_id, tenant_id, claim_token,
+                      object_key, sha256, byte_count, duration, sample_rate, channels,
+                      activity, channel_map, state, validation_error):
+        """Commit asset, authoritative state and session transition in one DB transaction."""
+        expires = datetime.now(timezone.utc) + timedelta(days=self.retention_days)
+        media_id = uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}")
+        token = UUID(claim_token)
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT state FROM media_ingestions
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s FOR UPDATE""",
+                    (self.provider_account_id, recording_sid, token),
+                )
+                if cur.fetchone() is None:
+                    raise RuntimeError("media ingestion lease was lost")
                 cur.execute(
                     """INSERT INTO media_assets
                     (media_id, tenant_id, session_id, provider, provider_account_id,
@@ -275,6 +397,123 @@ class TwilioRecordingMediaIngestor:
                      object_key, sha256, byte_count, duration, sample_rate, channels,
                      json.dumps(activity), json.dumps(channel_map), state, validation_error, expires),
                 )
+                cur.execute(
+                    """SELECT media_id, tenant_id, session_id, verification_state, object_key
+                       FROM media_assets WHERE provider='twilio'
+                         AND provider_account_id=%s AND provider_recording_sid=%s FOR UPDATE""",
+                    (self.provider_account_id, recording_sid),
+                )
+                authoritative = cur.fetchone()
+                if authoritative is None or authoritative[1] != tenant_id or authoritative[2] != session_id:
+                    raise RuntimeError("authoritative media asset identity mismatch")
+                final_state = authoritative[3]
+                # A concurrent legacy writer may have won the unique recording
+                # constraint after this worker uploaded. Never discard that
+                # conflict: durably schedule deletion of this attempt's object
+                # before the existing authoritative row is adopted.
+                if object_key is not None and authoritative[4] != object_key:
+                    cur.execute(
+                        """UPDATE media_ingestions
+                           SET state='retry', claim_token=NULL, lease_expires_at=NULL,
+                               cleanup_required=true, next_attempt_at=now(),
+                               updated_at=now(), last_error='authoritative_asset_conflict'
+                           WHERE provider='twilio' AND provider_account_id=%s
+                             AND provider_recording_sid=%s AND claim_token=%s""",
+                        (self.provider_account_id, recording_sid, token),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError("media ingestion lease was lost")
+                    return
+                self._finalize_in_transaction(cur, session_id, final_state == "verified")
+                cur.execute(
+                    """UPDATE media_ingestions SET state=%s, claim_token=NULL,
+                       lease_expires_at=NULL, cleanup_required=false, updated_at=now(),
+                       object_key=COALESCE(%s, object_key)
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s""",
+                    (final_state, object_key, self.provider_account_id, recording_sid, token),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError("media ingestion lease was lost")
+
+    @staticmethod
+    def _finalize_in_transaction(cur, session_id: str, verified: bool) -> None:
+        cur.execute(
+            """SELECT session_id, expected_participants, expected_participant_refs, state,
+                      joined_participants, consented_participants, consent_evidence,
+                      failure_code, updated_at
+               FROM bridge_sessions WHERE session_id=%s FOR UPDATE""",
+            (session_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise LookupError("media session does not exist")
+        session = PostgresBridgeRepository._session_from_row(row)
+        if session.state in {SessionState.COMPLETED, SessionState.DEGRADED}:
+            return
+        if session.state is not SessionState.VERIFYING:
+            raise ValueError("recording media arrived outside verification state")
+        target = SessionState.COMPLETED if verified else SessionState.DEGRADED
+        failure = None if verified else "media_channel_verification_failed"
+        updated = session.transition(target, failure_code=failure, at=datetime.now(timezone.utc))
+        cur.execute(
+            "UPDATE bridge_sessions SET state=%s, failure_code=%s, updated_at=%s WHERE session_id=%s",
+            (updated.state.value, updated.failure_code, updated.updated_at, session_id),
+        )
+
+    def _mark_upload_started(self, recording_sid: str, claim_token: str) -> None:
+        """Persist cleanup intent before issuing the external S3 upload."""
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE media_ingestions SET cleanup_required=true, updated_at=now()
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s""",
+                    (self.provider_account_id, recording_sid, UUID(claim_token)),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError("media ingestion lease was lost")
+
+    def _schedule_retry(self, recording_sid: str, claim_token: str, exc: Exception) -> None:
+        # Do not persist exception text: it may contain provider URLs or credentials.
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE media_ingestions
+                       SET state=CASE WHEN attempts >= 8 THEN 'manual_cleanup' ELSE 'retry' END,
+                           claim_token=NULL, lease_expires_at=NULL,
+                           next_attempt_at=now()+make_interval(secs =>
+                               LEAST(300, power(2, LEAST(attempts,8))::int)),
+                           last_error=%s, updated_at=now()
+                       WHERE provider='twilio' AND provider_account_id=%s
+                         AND provider_recording_sid=%s AND claim_token=%s""",
+                    (type(exc).__name__[:80], self.provider_account_id, recording_sid, UUID(claim_token)),
+                )
+
+    def recover_once(self, *, limit: int = 25) -> int:
+        """Reclaim expired leases and due retries without a new provider callback."""
+        if not 1 <= limit <= 100:
+            raise ValueError("recovery batch limit is invalid")
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT provider_recording_sid, session_id, tenant_id
+                       FROM media_ingestions
+                       WHERE (state='retry' AND next_attempt_at <= now())
+                          OR (state='processing' AND lease_expires_at <= now())
+                       ORDER BY updated_at LIMIT %s""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+        recovered = 0
+        for recording_sid, session_id, tenant_id in rows:
+            token = self._claim(recording_sid, session_id, tenant_id)
+            if token is None:
+                continue
+            self._process_claim(recording_sid=recording_sid, session_id=session_id,
+                                tenant_id=tenant_id, claim_token=token)
+            recovered += 1
+        return recovered
 
     def _download(self, recording_sid: str) -> Path:
         url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Recordings/{recording_sid}.wav?RequestedChannels=2"
