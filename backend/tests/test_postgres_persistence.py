@@ -389,6 +389,99 @@ class PostgresPersistenceTests(unittest.TestCase):
 
 
 
+    def test_upload_conflict_with_legacy_asset_is_durably_cleaned_before_adoption(self):
+        from providers.twilio.media import TwilioRecordingMediaIngestor
+        from uuid import uuid4
+
+        class Store:
+            def __init__(self):
+                self.deleted = []
+            @staticmethod
+            def _key(*, tenant_id, session_id, media_id):
+                return f"test/{tenant_id}/{session_id}/{media_id}"
+            def delete(self, **kwargs):
+                self.deleted.append(kwargs)
+
+        store = Store()
+        ingestor = TwilioRecordingMediaIngestor(
+            account_sid="AC" + "d" * 32, api_username="key", api_password="secret",
+            provider_account_id="account-test", connect=self.connect,
+            resource_resolver=None, object_store=store,
+        )
+        recording_sid = "RE" + "d" * 32
+        token = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
+        self.assertIsNotNone(token)
+        media_id = uuid4()
+        with self.connect() as conn:
+            # Terminal session makes the test focus on ingestion conflict handling;
+            # finalization is intentionally a no-op for terminal sessions.
+            conn.execute(
+                "UPDATE bridge_sessions SET state='degraded' WHERE session_id=%s",
+                (self.session.session_id,),
+            )
+            conn.execute(
+                """INSERT INTO media_assets
+                   (media_id, tenant_id, session_id, provider, provider_account_id,
+                    provider_recording_sid, object_key, sha256, byte_count,
+                    duration_seconds, sample_rate_hz, channel_count, channel_activity,
+                    channel_map, verification_state, validation_error, retention_expires_at)
+                   VALUES (%s,'tenant-test',%s,'twilio','account-test',%s,NULL,%s,
+                           32044,1.0,8000,2,'[]'::jsonb,'[]'::jsonb,'rejected',
+                           'legacy_rejection',now()+interval '30 days')""",
+                (media_id, self.session.session_id, recording_sid, "a" * 64),
+            )
+
+        # Model a legacy writer winning the unique recording key after our S3
+        # upload but before this worker's INSERT ... ON CONFLICT resolution.
+        ingestor._commit_asset(
+            recording_sid=recording_sid, session_id=self.session.session_id,
+            tenant_id="tenant-test", claim_token=token,
+            object_key="test/new-upload.wav", sha256="b" * 64,
+            byte_count=32044, duration=1.0, sample_rate=8000, channels=2,
+            activity=[0.5, 0.5], channel_map={"channel_1": "participant-a",
+                                             "channel_2": "participant-b"},
+            state="verified", validation_error=None,
+        )
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required, claim_token, object_key
+                   FROM media_ingestions WHERE provider='twilio'
+                     AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+            asset = conn.execute(
+                """SELECT verification_state, object_key FROM media_assets
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row[0], "retry")
+        self.assertTrue(row[1])
+        self.assertIsNone(row[2])
+        self.assertEqual(asset, ("rejected", None))
+        self.assertEqual(row[3], store._key(
+            tenant_id="tenant-test", session_id=self.session.session_id,
+            media_id=str(__import__("uuid").uuid5(
+                __import__("uuid").NAMESPACE_URL,
+                f"twilio:{'AC' + 'd' * 32}:{recording_sid}",
+            )),
+        ))
+
+        # Recovery must delete the losing upload first, then adopt the persisted
+        # rejected row without downloading or uploading a second object.
+        ingestor._download = lambda _sid: self.fail("must not redownload an existing asset")
+        self.assertEqual(ingestor.recover_once(limit=1), 1)
+        self.assertEqual(len(store.deleted), 1)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT state, cleanup_required FROM media_ingestions
+                   WHERE provider='twilio' AND provider_account_id='account-test'
+                     AND provider_recording_sid=%s""",
+                (recording_sid,),
+            ).fetchone()
+        self.assertEqual(row, ("rejected", False))
+
     def test_media_ingestion_claim_is_exclusive_under_concurrency(self):
         from providers.twilio.media import TwilioRecordingMediaIngestor
 
