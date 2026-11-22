@@ -1,5 +1,6 @@
 import AVFoundation
 import CallRecorderCore
+import CryptoKit
 import Foundation
 
 enum RecordingImportServiceError: LocalizedError {
@@ -13,6 +14,7 @@ enum RecordingImportServiceError: LocalizedError {
     case recordingNotFound
     case recordingFileMissing
     case catalogCorrupted
+    case duplicateRecording
 
     var errorDescription: String? {
         switch self {
@@ -55,6 +57,8 @@ enum RecordingImportServiceError: LocalizedError {
             return "The audio file for this recording is missing."
         case .catalogCorrupted:
             return "The recording catalog is damaged and no valid backup is available. Audio files were left untouched."
+        case .duplicateRecording:
+            return "This audio file is already in your library."
         }
     }
 }
@@ -65,6 +69,7 @@ struct ImportedRecording: Codable, Identifiable, Equatable, Sendable {
     let byteCount: Int64
     let durationSeconds: Double
     let importedAt: Date
+    let contentSHA256: String? = nil
 }
 
 /// Owns user-mediated imports, app-private storage, catalog recovery and retention.
@@ -195,13 +200,36 @@ actor RecordingImportService {
         // Resolve/recover the catalog before moving staged media into the
         // managed directory. Otherwise a first import would look like an
         // unexplained orphan to the missing-catalog fail-closed guard.
+        let contentDigest = try sha256(of: stagedURL)
         var entries = try loadCatalog()
+        var catalogNeedsSave = false
+        // Backfill older catalog entries lazily so upgrades gain duplicate
+        // detection without a destructive catalog migration or filename storage.
+        for index in entries.indices where entries[index].contentSHA256 == nil {
+            let existingURL = try recordingURL(for: entries[index])
+            guard fileManager.fileExists(atPath: existingURL.path) else { continue }
+            let existingDigest = try sha256(of: existingURL)
+            entries[index] = ImportedRecording(
+                id: entries[index].id,
+                fileExtension: entries[index].fileExtension,
+                byteCount: entries[index].byteCount,
+                durationSeconds: entries[index].durationSeconds,
+                importedAt: entries[index].importedAt,
+                contentSHA256: existingDigest
+            )
+            catalogNeedsSave = true
+        }
+        if catalogNeedsSave { try saveCatalog(entries) }
+        guard !entries.contains(where: { $0.contentSHA256 == contentDigest }) else {
+            throw RecordingImportServiceError.duplicateRecording
+        }
         let entry = ImportedRecording(
             id: UUID(),
             fileExtension: container.rawValue,
             byteCount: size,
             durationSeconds: duration,
-            importedAt: Date()
+            importedAt: Date(),
+            contentSHA256: contentDigest
         )
         let finalURL = try recordingURL(for: entry)
 
@@ -463,7 +491,8 @@ actor RecordingImportService {
                   entry.durationSeconds.isFinite,
                   entry.durationSeconds > 0,
                   entry.durationSeconds <= RecordingImportValidator.maximumDurationSeconds,
-                  entry.importedAt.timeIntervalSince1970.isFinite else {
+                  entry.importedAt.timeIntervalSince1970.isFinite,
+                  entry.contentSHA256 == nil || (entry.contentSHA256?.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil) else {
                 throw RecordingImportServiceError.catalogCorrupted
             }
         }
@@ -506,6 +535,16 @@ actor RecordingImportService {
             try protectCatalogFile(primary)
             return recovered
         }
+    }
+
+    private func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func saveCatalog(_ entries: [ImportedRecording]) throws {
