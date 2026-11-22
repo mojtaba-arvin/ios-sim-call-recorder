@@ -249,11 +249,9 @@ class TwilioRecordingMediaIngestor:
         media_id = str(uuid5(NAMESPACE_URL, f"twilio:{self.account_sid}:{recording_sid}"))
         source = None
         try:
-            if self._finalize_existing_asset(
-                recording_sid=recording_sid, session_id=session_id,
-                tenant_id=tenant_id, claim_token=claim_token,
-            ):
-                return
+            # Reconcile a possibly orphaned upload before adopting a legacy asset.
+            # Otherwise an authoritative-row fast path could clear cleanup_required
+            # while leaving this attempt's different S3 object behind.
             with self.connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -281,6 +279,11 @@ class TwilioRecordingMediaIngestor:
                         )
                         if cur.rowcount != 1:
                             raise RuntimeError("media ingestion lease was lost")
+            if self._finalize_existing_asset(
+                recording_sid=recording_sid, session_id=session_id,
+                tenant_id=tenant_id, claim_token=claim_token,
+            ):
+                return
             try:
                 source = self._download(recording_sid)
             except MediaRejected as rejected:
@@ -342,7 +345,7 @@ class TwilioRecordingMediaIngestor:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT media_id, tenant_id, session_id, verification_state
+                    """SELECT media_id, tenant_id, session_id, verification_state, object_key
                        FROM media_assets WHERE provider='twilio'
                          AND provider_account_id=%s AND provider_recording_sid=%s
                        FOR UPDATE""",
@@ -404,6 +407,23 @@ class TwilioRecordingMediaIngestor:
                 if authoritative is None or authoritative[1] != tenant_id or authoritative[2] != session_id:
                     raise RuntimeError("authoritative media asset identity mismatch")
                 final_state = authoritative[3]
+                # A concurrent legacy writer may have won the unique recording
+                # constraint after this worker uploaded. Never discard that
+                # conflict: durably schedule deletion of this attempt's object
+                # before the existing authoritative row is adopted.
+                if object_key is not None and authoritative[4] != object_key:
+                    cur.execute(
+                        """UPDATE media_ingestions
+                           SET state='retry', claim_token=NULL, lease_expires_at=NULL,
+                               cleanup_required=true, next_attempt_at=now(),
+                               updated_at=now(), last_error='authoritative_asset_conflict'
+                           WHERE provider='twilio' AND provider_account_id=%s
+                             AND provider_recording_sid=%s AND claim_token=%s""",
+                        (self.provider_account_id, recording_sid, token),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError("media ingestion lease was lost")
+                    return
                 self._finalize_in_transaction(cur, session_id, final_state == "verified")
                 cur.execute(
                     """UPDATE media_ingestions SET state=%s, claim_token=NULL,
