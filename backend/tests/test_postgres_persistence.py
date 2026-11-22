@@ -412,9 +412,26 @@ class PostgresPersistenceTests(unittest.TestCase):
         token = ingestor._claim(recording_sid, self.session.session_id, "tenant-test")
         self.assertIsNotNone(token)
         media_id = uuid4()
+        # Persist valid consent evidence so the terminal session fixture
+        # satisfies the domain invariants when the recovery path reloads it.
+        current = self.repo.get_session(self.session.session_id)
+        for participant_ref in ("participant-a", "participant-b"):
+            updated = current.participant_consented(
+                participant_ref, provider="twilio", provider_account_id="account-test",
+                event_id=f"legacy-conflict-consent-{participant_ref}",
+                policy_version="consent-v1", consent_method="dtmf",
+                evidence_digest=f"sha256:{participant_ref}",
+                at=datetime.now(timezone.utc),
+            )
+            self.repo.apply_event_once(
+                "twilio", f"legacy-conflict-consent-{participant_ref}",
+                self.session.session_id, lambda _session, value=updated: value,
+                provider_account_id="account-test",
+            )
+            current = self.repo.get_session(self.session.session_id)
         with self.connect() as conn:
-            # Terminal session makes the test focus on ingestion conflict handling;
-            # finalization is intentionally a no-op for terminal sessions.
+            # Terminal session makes finalization a no-op after authoritative
+            # legacy-row adoption, while retaining valid consent evidence.
             conn.execute(
                 "UPDATE bridge_sessions SET state='degraded' WHERE session_id=%s",
                 (self.session.session_id,),
