@@ -7,7 +7,7 @@ This package implements a Twilio Programmable Voice outbound Conference flow and
 1. The authenticated API provisions E.164 addresses into the tenant-scoped AES-GCM address vault. Writes/deletes create metadata-only audit rows.
 2. Session creation enqueues one consent.request command per expected participant in the same PostgreSQL transaction.
 3. The outbox worker uses the Twilio REST API to call each participant and plays the configured disclosure with a one-digit Gather. Only DTMF 1 is affirmative.
-4. Empty Gather, other digits, busy, failed, no-answer or an unconsented completed call marks the session failed and queues cancellation of the other consent legs.
+4. A non-affirmative entered digit is an explicit decline. Empty Gather and busy/failed/no-answer/canceled call outcomes mark the participant unavailable and queue cancellation of the other consent leg. A generic completed call-status callback is informational and cannot override the authoritative Gather result; without durable affirmative consent, no Conference is created.
 5. After all participants consent, the reducer enqueues a recording-enabled Conference participant creation. The first participant join event causes the second participant.add command.
 6. Signed Conference callbacks map provider resource IDs to the immutable account/session/participant records. Consent IVR call SIDs and Conference participant call SIDs are stored separately.
 7. Recording callbacks trigger media retrieval, two-channel verification, encrypted object storage and session finalization.
