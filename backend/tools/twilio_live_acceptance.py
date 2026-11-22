@@ -73,9 +73,38 @@ def _validate_media_url(url: str):
         port = parsed.port
     except ValueError:
         raise HarnessError("media download URL is malformed") from None
-    labels = hostname.split(".")
-    aws_suffix = hostname.endswith(".amazonaws.com") or hostname.endswith(".amazonaws.com.cn")
-    s3_endpoint = any(label == "s3" or label.startswith("s3-") for label in labels)
+    suffix = ".amazonaws.com.cn" if hostname.endswith(".amazonaws.com.cn") else ".amazonaws.com"
+    aws_suffix = hostname.endswith(suffix) and hostname != suffix.lstrip(".")
+    prefix = hostname[:-len(suffix)].rstrip(".") if aws_suffix else ""
+    labels = prefix.split(".") if prefix else []
+
+    def valid_region(value: str) -> bool:
+        return re.fullmatch(r"[a-z]{2,3}(?:-[a-z]+)*-[0-9]+", value) is not None
+
+    # Accept documented S3 virtual-host/path-style regional endpoints and
+    # the global accelerate endpoint. Do not accept arbitrary AWS hostnames
+    # merely because an attacker inserted an "s3" label somewhere.
+    s3_endpoint = False
+    for index, label in enumerate(labels):
+        tail = labels[index + 1:]
+        if label == "s3":
+            valid_tail = (
+                tail == []
+                or (len(tail) == 1 and valid_region(tail[0]))
+                or (len(tail) == 2 and tail[0] == "dualstack" and valid_region(tail[1]))
+            )
+        elif label.startswith("s3-"):
+            endpoint = label[3:]
+            valid_tail = (
+                (valid_region(endpoint) and tail == [])
+                or (endpoint == "accelerate" and tail in ([], ["dualstack"]))
+            )
+        else:
+            continue
+        if valid_tail and (index == 0 or all(labels[:index])):
+            s3_endpoint = True
+            break
+
     if (
         parsed.scheme != "https"
         or not hostname
