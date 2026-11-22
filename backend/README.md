@@ -5,7 +5,7 @@ This backend contains a provider-neutral session/outbox core, authenticated tena
 ## Included
 
 - Guarded bridge lifecycle and durable pre-join consent evidence.
-- Tenant-scoped authenticated session create/read/cancel API.
+- Tenant-scoped authenticated session create/read/cancel API; session creation requires a bounded `Idempotency-Key` header and durably replays the original session for 24 hours.
 - Transactional initial consent-request outbox commands.
 - Twilio REST commands for outbound consent calls, Conference participant creation/addition, recording-from-start and Conference closure.
 - DTMF Gather disclosure: only digit 1 is affirmative. Other entered digits are explicit declines; an empty Gather result and busy/no-answer/failed/canceled call outcomes are unavailable and fail closed. A generic `CallStatus=completed` callback is informational, not a consent decision; Conference creation remains gated on durable affirmative Gather evidence.
@@ -30,12 +30,12 @@ cd backend
 python migrate.py
 ```
 
-Migrations currently run through 0011_rejected_media_metadata.sql. The application does not run DDL at startup.
+Migrations currently run through 0012_session_idempotency.sql. The application does not run DDL at startup. Migration 0012 adds tenant-scoped session idempotency records; expired keys are reusable after 24 hours and opportunistically cleaned in bounded batches during session creation.
 
 ## API flow
 
 1. Provision each participant address through authenticated PUT /v1/participants/{participant_ref}/address with a JSON phone_number field. The response never echoes the address.
-2. Create a session with exactly two opaque participant_refs. When TWILIO_ENABLED=true, session creation and the two consent.request outbox commands commit atomically.
+2. Create a session with exactly two opaque participant_refs and a unique `Idempotency-Key` header (1–128 ASCII characters from letters, digits, `.`, `_`, `:`, `-`). Repeating the same key and canonical participant set within 24 hours returns the current persisted session; reusing it with a different participant set returns HTTP 409. The key is scoped to the authenticated tenant. When TWILIO_ENABLED=true, the idempotency record, session and two consent.request outbox commands commit atomically.
 3. Both participants receive a separate consent call. Only after every affirmative Gather event does the reducer enqueue conference.create.
 4. The first participant joins a recording-enabled Conference. Its join callback causes the second participant.add command.
 5. Conference callbacks move the session into recording/finalization. A completed Recording callback triggers media retrieval and two-channel validation.

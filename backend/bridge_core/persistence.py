@@ -23,6 +23,9 @@ class ProviderResourceConflict(ValueError):
 class CommandIdentityConflict(ValueError):
     """An idempotency key was reused for a different provider command."""
 
+class SessionIdempotencyConflict(ValueError):
+    """A session idempotency key was reused for a different request."""
+
 @dataclass(frozen=True, slots=True)
 class DeadLetterCommand:
     command_id: UUID
@@ -102,6 +105,99 @@ class PostgresBridgeRepository:
                     if command.session_id != session.session_id:
                         raise ValueError("initial outbox command must belong to the created session")
                     self._insert_command(cur, command)
+
+    def create_session_idempotently(
+        self, session: BridgeSession, *, tenant_id: str, idempotency_key: str,
+        request_digest: str, commands: tuple[OutboxCommand, ...] = (),
+    ) -> tuple[BridgeSession, bool]:
+        """Create once per tenant/key; return the persisted session on safe replay."""
+        if not tenant_id or not tenant_id.strip() or len(tenant_id) > 128:
+            raise ValueError("tenant_id must be a non-empty bounded identifier")
+        if (not isinstance(idempotency_key, str)
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", idempotency_key) is None):
+            raise ValueError("invalid idempotency key")
+        if re.fullmatch(r"[0-9a-f]{64}", request_digest or "") is None:
+            raise ValueError("request_digest must be a SHA-256 hex digest")
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """DELETE FROM session_idempotency_keys
+                       WHERE tenant_id=%s AND idempotency_key=%s AND expires_at <= now()""",
+                    (tenant_id, idempotency_key),
+                )
+                cur.execute(
+                    """DELETE FROM session_idempotency_keys
+                       WHERE (tenant_id, idempotency_key) IN (
+                           SELECT tenant_id, idempotency_key FROM session_idempotency_keys
+                           WHERE expires_at <= now() ORDER BY expires_at LIMIT 100
+                       )"""
+                )
+                cur.execute(
+                    """INSERT INTO session_idempotency_keys
+                       (tenant_id, idempotency_key, request_digest, session_id, expires_at)
+                       VALUES (%s, %s, %s, %s, now() + interval '24 hours')
+                       ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                       RETURNING session_id""",
+                    (tenant_id, idempotency_key, request_digest, session.session_id),
+                )
+                claimed = cur.fetchone()
+                if claimed is None:
+                    cur.execute(
+                        """SELECT request_digest, session_id FROM session_idempotency_keys
+                           WHERE tenant_id=%s AND idempotency_key=%s FOR UPDATE""",
+                        (tenant_id, idempotency_key),
+                    )
+                    existing = cur.fetchone()
+                    if existing is None:
+                        raise RuntimeError("session idempotency claim disappeared")
+                    if existing[0] != request_digest:
+                        raise SessionIdempotencyConflict(
+                            "idempotency key was already used with a different request"
+                        )
+                    cur.execute(
+                        """SELECT session_id, expected_participants, expected_participant_refs, state,
+                           joined_participants, consented_participants, consent_evidence,
+                           failure_code, updated_at
+                           FROM bridge_sessions WHERE session_id=%s AND tenant_id=%s""",
+                        (existing[1], tenant_id),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        raise RuntimeError("idempotent session record is missing")
+                    return self._session_from_row(row), True
+
+                for participant_ref in sorted(session.expected_participant_refs):
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                        (f"{tenant_id}\\0{participant_ref}",),
+                    )
+                if commands:
+                    cur.execute(
+                        """SELECT participant_ref FROM participant_address_vault
+                           WHERE tenant_id=%s AND participant_ref = ANY(%s)""",
+                        (tenant_id, sorted(session.expected_participant_refs)),
+                    )
+                    provisioned = {row[0] for row in cur.fetchall()}
+                    if provisioned != set(session.expected_participant_refs):
+                        raise ValueError("every expected participant must have a provisioned address")
+                cur.execute(
+                    """INSERT INTO bridge_sessions
+                    (tenant_id, session_id, expected_participants, expected_participant_refs, state,
+                     joined_participants, consented_participants, consent_evidence, failure_code, updated_at)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)""",
+                    (tenant_id, session.session_id, session.expected_participants,
+                     json.dumps(sorted(session.expected_participant_refs)), session.state.value,
+                     json.dumps(sorted(session.joined_participants)),
+                     json.dumps(sorted(session.consented_participants)),
+                     json.dumps([item.to_dict() for item in session.consent_evidence]),
+                     session.failure_code, session.updated_at),
+                )
+                for command in commands:
+                    if command.session_id != session.session_id:
+                        raise ValueError("initial outbox command must belong to the created session")
+                    self._insert_command(cur, command)
+                return session, False
 
     def get_session(self, session_id: str, *, tenant_id: str | None = None) -> BridgeSession | None:
         with self._connect() as conn:

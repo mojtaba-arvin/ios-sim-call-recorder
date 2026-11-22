@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from bridge_core.address_vault import ParticipantAddressInUseError
-import hashlib, hmac, json
+import hashlib, hmac, json, re
 from typing import Any
 from uuid import uuid4
 from .domain import BridgeSession, InvalidTransition, SessionState
+from .persistence import SessionIdempotencyConflict
 
 class BearerTokenAuthenticator:
     def __init__(self, token_hashes):
@@ -57,7 +58,9 @@ class BridgeSessionsASGI:
                 except Exception:
                     await self.respond(send, 503, {'status': 'not_ready'})
             return
-        headers = {k.decode('latin-1').lower():v.decode('latin-1') for k,v in scope.get('headers',[])}
+        raw_headers = scope.get('headers', [])
+        headers = {k.decode('latin-1').lower():v.decode('latin-1') for k,v in raw_headers}
+        idempotency_values = [v.decode('latin-1') for k, v in raw_headers if k.lower() == b'idempotency-key']
         tenant = self.authenticator.tenant_for(headers.get('authorization'))
         if tenant is None:
             await self.respond(send, 401, {'error':'unauthorized'}); return
@@ -93,18 +96,30 @@ class BridgeSessionsASGI:
                     await self.respond(send, 200, {'status': 'deleted'}); return
                 await self.respond(send, 405, {'error': 'method_not_allowed'}); return
             if method == 'POST' and parts == ['v1','bridge-sessions']:
+                if len(idempotency_values) != 1:
+                    await self.respond(send,400,{'error':'idempotency_key_required'}); return
+                idempotency_key = idempotency_values[0]
+                if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,127}', idempotency_key) is None:
+                    await self.respond(send,400,{'error':'invalid_idempotency_key'}); return
                 payload = await self.read_json(receive)
                 refs = payload.get('participant_refs')
                 if set(payload) != {'participant_refs'} or not isinstance(refs,list) or not 2 <= len(refs) <= self.MAX_PARTICIPANTS or any(not isinstance(x,str) for x in refs) or len(set(refs)) != len(refs):
                     await self.respond(send,400,{'error':'invalid_request'}); return
+                canonical_request = json.dumps(
+                    {'participant_refs': sorted(refs)}, separators=(',', ':'), sort_keys=True,
+                ).encode('utf-8')
+                request_digest = hashlib.sha256(canonical_request).hexdigest()
                 state = SessionState.AWAITING_USER_ACTION if self.initial_commands else SessionState.CREATED
                 session = BridgeSession(str(uuid4()),len(refs),frozenset(refs),state=state)
                 commands = tuple(self.initial_commands(session)) if self.initial_commands else ()
-                if self.initial_commands:
-                    self.repository.create_session(session,tenant_id=tenant,commands=commands)
-                else:
-                    self.repository.create_session(session,tenant_id=tenant)
-                await self.respond(send,201,self.serialize(session)); return
+                try:
+                    persisted, replayed = self.repository.create_session_idempotently(
+                        session, tenant_id=tenant, idempotency_key=idempotency_key,
+                        request_digest=request_digest, commands=commands,
+                    )
+                except SessionIdempotencyConflict:
+                    await self.respond(send,409,{'error':'idempotency_key_reused'}); return
+                await self.respond(send,200 if replayed else 201,self.serialize(persisted)); return
             if len(parts) == 4 and parts[:2] == ['v1','bridge-sessions'] and parts[3] == 'media' and method == 'GET':
                 if self.media_service is None:
                     await self.respond(send, 404, {'error': 'not_found'}); return

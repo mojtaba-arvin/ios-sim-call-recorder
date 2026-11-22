@@ -6,6 +6,7 @@ import unittest
 
 from bridge_core.domain import BridgeSession, InvalidTransition, SessionState
 from bridge_core.http_api import BearerTokenAuthenticator, BridgeSessionsASGI
+from bridge_core.persistence import SessionIdempotencyConflict
 
 
 class FakeRepository:
@@ -13,6 +14,7 @@ class FakeRepository:
         self.sessions = {}
         self.owners = {}
         self.commands = []
+        self.idempotency = {}
 
     def ping(self):
         return None
@@ -21,6 +23,18 @@ class FakeRepository:
         self.sessions[session.session_id] = session
         self.owners[session.session_id] = tenant_id
         self.commands.extend(commands)
+
+    def create_session_idempotently(self, session, *, tenant_id, idempotency_key, request_digest, commands=()):
+        key = (tenant_id, idempotency_key)
+        existing = self.idempotency.get(key)
+        if existing is not None:
+            digest, session_id = existing
+            if digest != request_digest:
+                raise SessionIdempotencyConflict()
+            return self.sessions[session_id], True
+        self.create_session(session, tenant_id=tenant_id, commands=commands)
+        self.idempotency[key] = (request_digest, session.session_id)
+        return session, False
 
     def get_session(self, session_id, *, tenant_id):
         if self.owners.get(session_id) != tenant_id:
@@ -69,7 +83,7 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
             }),
         )
 
-    async def request(self, method, path, *, token=None, body=None):
+    async def request(self, method, path, *, token=None, body=None, idempotency_key='test-key-001'):
         raw = json.dumps(body).encode() if body is not None else b""
         messages = [{"type": "http.request", "body": raw, "more_body": False}]
         sent = []
@@ -83,6 +97,8 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         headers = []
         if token is not None:
             headers.append((b"authorization", f"Bearer {token}".encode()))
+        if idempotency_key is not None:
+            headers.append((b"idempotency-key", idempotency_key.encode()))
         await self.app(
             {"type": "http", "method": method, "path": path, "headers": headers, "query_string": b""},
             receive,
@@ -194,6 +210,51 @@ class HTTPAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({item.command_type for item in self.repo.commands}, {"consent.request"})
         self.assertTrue(all(item.session_id == created["session_id"] for item in self.repo.commands))
         self.assertNotIn("+", repr(self.repo.commands))
+
+    async def test_create_session_replay_returns_the_original_session(self):
+        body = {"participant_refs": ["opaque-a", "opaque-b"]}
+        status, first = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token, body=body,
+            idempotency_key="retry-session-001",
+        )
+        replay_status, replay = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token, body=body,
+            idempotency_key="retry-session-001",
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(replay_status, 200)
+        self.assertEqual(replay["session_id"], first["session_id"])
+        self.assertEqual(len(self.repo.sessions), 1)
+
+    async def test_reusing_idempotency_key_with_different_payload_conflicts(self):
+        status, _ = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-a", "opaque-b"]},
+            idempotency_key="retry-session-conflict",
+        )
+        self.assertEqual(status, 201)
+        status, payload = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-c", "opaque-d"]},
+            idempotency_key="retry-session-conflict",
+        )
+        self.assertEqual(status, 409)
+        self.assertEqual(payload, {"error": "idempotency_key_reused"})
+        self.assertEqual(len(self.repo.sessions), 1)
+
+    async def test_create_session_requires_one_valid_idempotency_key(self):
+        status, payload = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-a", "opaque-b"]}, idempotency_key=None,
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "idempotency_key_required")
+        status, payload = await self.request(
+            "POST", "/v1/bridge-sessions", token=self.token,
+            body={"participant_refs": ["opaque-a", "opaque-b"]}, idempotency_key="bad key",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_idempotency_key")
 
     async def test_invalid_participant_refs_are_rejected(self):
         status, payload = await self.request(
