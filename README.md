@@ -69,6 +69,7 @@ Positive physical configurations require at least three repeated runs and indepe
 - [Product validation and go/no-go plan](docs/research/product-validation.md)
 - [Twilio bridge unit economics](docs/research/unit-economics.md)
 - [Remote physical-device validation kit](docs/validation/remote-device-validation-kit.md)
+- [Twilio live-account acceptance harness](docs/validation/twilio-live-account-acceptance.md)
 - [Customer discovery and paid-pilot kit](docs/validation/customer-discovery-kit.md)
 - [Counsel-ready legal brief](docs/legal/counsel-brief.md)
 - [Physical-device acceptance protocol](docs/engineering/physical-device-test-protocol.md)

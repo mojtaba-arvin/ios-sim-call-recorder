@@ -57,6 +57,10 @@ The ASGI factory is asgi:create_app. With TWILIO_ENABLED=false it exposes only t
 
 The standalone worker entry point is python worker_main.py. The retention service entry point is python retention_main.py. Compose exposes these only through its opt-in provider profile. Never use a personal production Twilio account for development.
 
+## Live-account acceptance
+
+The opt-in, staging-only real-account harness and its evidence/cleanup requirements are documented in [Twilio live-account acceptance](../docs/validation/twilio-live-account-acceptance.md). The executable is `backend/tools/twilio_live_acceptance.py`; it is inert without `--execute`, `BRIDGE_ENVIRONMENT=staging` and `TWILIO_LIVE_TEST_APPROVED=true`. Never run it in pull-request CI.
+
 ## Outbox and idempotency
 
 The dispatcher commits a lease before provider I/O and reconciles every delivery before retrying. Consent calls and conference legs have distinct resource tables because their Call SIDs are different. Twilio Calls.create does not provide a general idempotency guarantee; if the provider side effect may have happened but no mapping was committed, the adapter returns UNKNOWN and does not dial again. This favors avoiding duplicate calls over automatic recovery.
