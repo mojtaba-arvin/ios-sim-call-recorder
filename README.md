@@ -20,7 +20,7 @@ ReplayKit and microphone APIs are not treated as a way to obtain the private dow
 
 ## Current implementation
 
-- **Swift core and iOS companion:** user-mediated audio import, app-private storage, opaque catalog, local playback/seeking, interruption and route handling, share/export, retention and recovery.
+- **Swift core and iOS companion:** user-mediated single- or multi-file audio import with per-file outcomes, app-private storage, opaque catalog, streaming SHA-256 duplicate detection, local playback/seeking, interruption and route handling, share/export, retention and recovery.
 - **Import validation:** RIFF/WAV chunk boundaries, physical EOF checks, bounded decoding, streaming SHA-256 duplicate detection (including lazy backfill for legacy catalogs) and catalog-recovery regression tests.
 - **iOS hardening:** VoiceOver announcements, Dynamic Type, foreground recovery, low-storage preflight, complete file protection and bundled PrivacyInfo.xcprivacy.
 - **Backend session API:** authenticated tenant-scoped create/read/cancel, PostgreSQL persistence and ordered migrations.
