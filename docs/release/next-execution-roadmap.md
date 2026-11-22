@@ -117,3 +117,30 @@ Do not invent historical branch names. The PR #55 branch is 12 commits ahead and
 - Stop and report the first failing gate with its run URL/log/artifact. Do not rerun successful jobs unnecessarily.
 - Never label a test, benchmark, live call, deployment, legal review or device combination Passed without a durable artifact or signed external evidence.
 - Release remains blocked until all release-critical rows in section 6 are accepted.
+
+
+## Latest verified execution — 2026-11-22 (after PRs #60–#62)
+
+**Current main:** `9f59fecd7a79834437ef57bee1488fd6b7991797` (PR #61 merge). PRs #60, #61 and #62 are merged. There are no open pull requests at this snapshot.
+
+- PR #60 enabled the canonical Release Preflight on pushes to `main` as well as PRs and release branches. Its first mainline run on the #62 merge SHA (`45006994080`) was superseded/cancelled when the next main push arrived; four completed jobs passed and the two XCTest jobs were cancelled. Do not count that run as a full pass.
+- PR #61 hardened the opt-in live Twilio acceptance harness: media retrieval and redirect targets are restricted to approved HTTPS AWS S3 endpoint forms. Final PR-head Release Preflight `45006749306` passed all 8 jobs and backend staging integration `45006749375` passed. Merged as `9f59fecd7a79834437ef57bee1488fd6b7991797`.
+- PR #62 distinguishes explicit non-affirmative DTMF refusal from no-answer/busy/failed/canceled/unanswered outcomes. Generic `CallStatus=completed` is informational and cannot override authoritative Gather consent. Final PR-head Release Preflight `45004464750` passed all 8 jobs and backend staging integration `45004464735` passed. Merged as `46e44bc7f2b18b998e13cc519bce110e09ad0d10`.
+- **Latest mainline verification:** Release Preflight run `45007294450` on exact current main SHA `9f59fecd7a79834437ef57bee1488fd6b7991797` completed with conclusion `success`; all 8 jobs passed: PostgreSQL 16, PostgreSQL 17, Swift core, XCTest iPhone 16, XCTest iPhone 16 Pro, audio analyzer, Terraform validate and repository policy. This is simulator/software CI evidence only.
+- The previous mainline run `45006994080` completed as `cancelled` due to superseding push, not as a test failure and not as a full pass.
+- Active Ruleset `protect main` (ID `27591151`) was read back again. It is active, targets `~DEFAULT_BRANCH`, has empty bypass actors, and still contains only `deletion` and `non_fast_forward`. It does **not** require PRs, the eight status checks, or linear history. The branch API reports `main` protected, but this does not establish that the required rules are configured. The connected GitHub actions expose ruleset reads but no ruleset administrative write action.
+- Live branch inventory contains only `main` and stale branch `feat/twilio-live-acceptance-harness-20261122` at `834d8b91a30c547e67739cbe370bc2b46e0738a7`. PR #55 is closed/unmerged and the branch is superseded by merged PR #58. No branch-ref deletion action is exposed by the current GitHub connection; retain this as an admin/branch-cleanup action rather than claiming deletion.
+- PR #56 remains open to track the privileged Ruleset update. It is not closed because the required administrative state has not been applied and verified.
+
+### Current release decision
+
+**Release remains BLOCKED.** The green mainline run proves the current repository software gates, not production readiness. Remaining independent gates are:
+
+1. Privileged update and read-back of Ruleset #27591151: require PRs, all eight stable Release Preflight checks, linear history, force-push restriction, deletion restriction and no routine bypass actors.
+2. Select and document one launch jurisdiction and intended product mode; obtain counsel approval for disclosure, lawful basis, vendor/data-transfer terms, retention and user rights. Keep `TWILIO_ENABLED=false` until approved.
+3. Perform the opt-in staging Twilio acceptance only after the safety contract is satisfied: two authorized test participants, approved disclosure, dedicated staging account/numbers, spending cap, signed callbacks, positive consent, explicit refusal, no-answer, cancellation, media validation and independent Twilio/S3 deletion verification.
+4. Provision AWS staging only after account/role/secrets/network/certificate ownership and a reviewed costed Terraform plan are available; then deploy, migrate, health-check and execute rollback evidence. No AWS resources have been applied.
+5. Run physical iPhone/SIM/carrier/accessory tests for any native-call pathway claim. At least three repeats establish bounded feasibility only; the documented production-support threshold remains at least 20 consecutive successful core runs plus interruption/route-change scenarios. No physical-device or carrier acceptance is currently established.
+6. Complete customer discovery, paid-pilot evidence, unit economics, support/incident readiness and App Store review before commercial release.
+
+**Product boundary remains unchanged:** the Twilio route is an app-owned outbound two-party Conference, not capture or merge of an existing native SIM call and not access to Phone.app private audio. The companion/import path is the safe interim product mode while provider/legal gates remain closed.
