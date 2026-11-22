@@ -9,6 +9,7 @@
 - PR #59 merged at `143b05017fb6eed610951c07e0e272f86d411835`. Its pre-merge Release Preflight Run `45003000666` passed all eight checks, including XCTest on iPhone 16 and iPhone 16 Pro simulators after runtime provisioning.
 - The post-merge commit was checked independently: no workflow run exists for the final main SHA. Root cause confirmed in `.github/workflows/release-preflight.yml`: `push` covered only `release/**`, not `main`.
 - A focused follow-up proposes adding `main` to the canonical Release Preflight push branches so merge commits receive the same eight-check gate. This change must pass PR CI before merge; do not report it as active until merged and read back.
+- A separate static security review found that the opt-in live Twilio harness accepted arbitrary HTTPS media URLs and unconstrained redirects. PR #61 proposes restricting downloads and redirects to HTTPS AWS S3 endpoints, with regression tests; it does not make provider calls.
 - For PR #60, only a completed run attached to the final PR head counts as validation; canceled runs from superseded commits are not evidence.
 
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
@@ -80,13 +81,14 @@ Required end state:
 
 ## 5. Branch hygiene inventory
 
-The live branch inventory at this review contains three refs: `main`, `feat/twilio-live-acceptance-harness-20261122`, and `fix/run-release-preflight-on-main-push-20261122` (PR #60).
+The live branch inventory at this review contains four refs: `main`, `feat/twilio-live-acceptance-harness-20261122`, `fix/run-release-preflight-on-main-push-20261122` (PR #60), and `fix/harden-live-harness-media-url-20261122` (PR #61).
 
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
 | `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed/unmerged; no open PR references it. Compared with `main`, the harness script differs only by a one-character formatting/newline delta; README, backend README, harness tests and acceptance protocol are byte-identical. Its roadmap files are older than main. | DELETE CANDIDATE | Superseded by PR #58; retain until tags/deployment references are checked and the ref-deletion action is available |
 | `fix/run-release-preflight-on-main-push-20261122` | Open PR #60; contains the `main` push trigger and roadmap reconciliation | KEEP | Active review branch; do not delete before PR #60 is resolved |
+| `fix/harden-live-harness-media-url-20261122` | Open PR #61; hardens the opt-in media downloader and adds URL/redirect regression tests | KEEP | Active security review branch; do not delete before PR #61 is resolved |
 
 Do not invent historical branch names. The PR #55 branch is 12 commits ahead and 3 behind by ancestry because the replacement PR was squash-merged; compare its actual file content before deletion. Current code/test/acceptance files are present on `main`; roadmap differences are stale historical text, not new implementation. Tags/deployment references were not verified through the available connector, and the connector exposes no ref-deletion action. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
