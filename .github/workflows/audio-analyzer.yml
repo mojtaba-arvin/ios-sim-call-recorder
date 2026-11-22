@@ -1,19 +1,13 @@
 name: Audio analyzer checks
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/audio-analyzer.yml"
-      - "scripts/analyze_call_audio.py"
-      - "scripts/tests/test_analyze_call_audio.py"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: audio-analyzer-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: audio-analyzer-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,4 +22,3 @@ jobs:
           persist-credentials: false
       - name: Run local WAV analyzer tests
         run: python3 -m unittest discover -s scripts/tests -p 'test_analyze_call_audio.py'
-
