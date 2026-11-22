@@ -9,7 +9,8 @@
 - PR #54 merged successfully as `dac0d409388af1623bbebd51306537ad0f842d56`.
 - Final pre-merge PR head `7938c89c7053eee2ec0cc9b799f36b489aa9b00f` passed all nine matrix-expanded Release Preflight checks in Run `44995777499`; the separate infrastructure and repository-policy runs `44995777428` and `44995777383` also succeeded.
 - Seven logical jobs are defined; PostgreSQL expands to two versions and XCTest to two simulator devices. All nine resulting checks passed on the same final PR head.
-- PR #55 contains the opt-in Twilio real-account acceptance harness, safety-guard unit tests and operator protocol. The harness is dry-run by default; no live PSTN call has been made.\n- PR #57 merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head passed all eight Release Preflight checks (Run `44998126275`) and the unique Backend Compose lifecycle integration (Run `44998126244`).
+- PR #58 contains the opt-in Twilio real-account acceptance harness, safety-guard unit tests and operator protocol. Its eight Release Preflight checks and the unique Backend Compose lifecycle check passed on final head `ff022f01838c3e594f6d88ca127066ceca1e4abe` (Runs `44999656253` and `44999656176`). The harness is dry-run by default; no live PSTN call has been made.
+- PR #57 merged as `fe9748b08c63a3170d33910666fb350b2e1fd6e5`; its final head passed all eight Release Preflight checks (Run `44998126275`) and the unique Backend Compose lifecycle integration (Run `44998126244`).
 - Ruleset ID `27591151` remains incomplete: only `deletion` and `non_fast_forward` are active. This connection exposes Ruleset GET but not administrative PUT/PATCH; do not claim governance is fixed.
 - Branch inventory must be refreshed after the merge. PR #53 remains closed/unmerged, but its branch has no remaining file delta against current `main`; the branch is safe to remove.
 
@@ -80,7 +81,9 @@ The current live branch inventory contains exactly four refs: `main`, `chore/cro
 | Branch | Evidence | Classification | Action |
 |---|---|---|---|
 | `main` | Default branch | KEEP | Protected release base |
-| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; compare against current `main` reports no changed files; no open PR | DELETE | No remaining file delta or active PR dependency |\n| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; diverged from `main` (12 ahead / 1 behind); superseded by PR #58 | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |\n| `feat/twilio-live-acceptance-harness-mainline-20261122` | Active PR #58; 11 commits ahead, 0 behind; latest-head CI running | KEEP UNTIL MERGE | Merge PR #58, then delete the merged head branch |
+| `chore/cross-repo-engineering-baseline` | PR #53 is closed, not merged; compare against current `main` reports no changed files; no open PR | DELETE | No remaining file delta or active PR dependency |
+| `feat/twilio-live-acceptance-harness-20261122` | PR #55 closed, not merged; diverged from `main` (12 ahead / 1 behind); superseded by PR #58 | DELETE | Its implementation and reconciled roadmap changes are carried by PR #58 |
+| `feat/twilio-live-acceptance-harness-mainline-20261122` | Active PR #58; 11 commits ahead, 0 behind; latest-head CI running | KEEP UNTIL MERGE | Merge PR #58, then delete the merged head branch |
 
 Do not invent four additional branch names. Re-run the branch inventory before deletion and compare every candidate against open PRs, tags, deployments and unique commits. Branch deletion is not a release gate and must not delay A1/B/C/D.
 
