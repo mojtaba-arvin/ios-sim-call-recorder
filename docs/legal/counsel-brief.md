@@ -14,7 +14,7 @@ This is not native Phone.app audio interception. The companion/import mode and a
 1. Authenticated tenant submits two opaque participant references.
 2. Tenant provisions E.164 addresses through the authenticated API; the backend encrypts them with AES-256-GCM and writes a metadata-only audit record.
 3. Backend calls each participant and plays the configured disclosure.
-4. Only affirmative DTMF "1" produces consent evidence. Any other key, empty Gather result, busy, failed, no-answer or completed call without recorded consent fails the session and queues cancellation of outstanding consent legs.
+4. Only affirmative DTMF "1" produces consent evidence. A non-affirmative entered digit is an explicit refusal; an empty Gather result and busy, failed, no-answer or canceled call outcome mean consent was not obtained and fail closed. A generic completed call-status callback is informational and does not establish consent or refusal; the Gather result is authoritative. No recording-enabled Conference is created unless every expected participant has durable affirmative consent.
 5. Only after every expected participant has consented does the outbox create a recording-enabled Conference.
 6. Twilio sends signed Conference and Recording callbacks. The backend resolves provider IDs through account-scoped mappings.
 7. The completed media is downloaded with RequestedChannels=2, structurally validated, checked for active audio in both channels, encrypted with KMS and stored under opaque tenant/session/media IDs.
