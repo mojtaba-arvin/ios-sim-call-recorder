@@ -109,6 +109,8 @@ def run(args) -> dict:
         raise HarnessError("two distinct E.164 test participant numbers are required")
     if not 60 <= args.timeout_seconds <= 1800:
         raise HarnessError("timeout must be between 60 and 1800 seconds")
+    if not 1 <= args.poll_seconds <= 30:
+        raise HarnessError("poll interval must be between 1 and 30 seconds")
     if args.expect_state not in {"completed", "failed"}:
         raise HarnessError("expected state must be completed or failed")
 
@@ -158,14 +160,16 @@ def run(args) -> dict:
     }
 
     if state == "completed":
-        if latest.get("expected_participants") != 2 or latest.get("consented_participants") != 2:
-            raise HarnessError("completed session did not prove consent from both expected participants")
+        if (latest.get("expected_participants") != 2
+                or latest.get("consented_participants") != 2
+                or latest.get("joined_participants") != 2):
+            raise HarnessError("completed session did not prove two-party consent and Conference join")
         media = _json_request(
             base_url, token, "GET", f"/v1/bridge-sessions/{session_id}/media"
         )
         url = media.get("download_url")
-        if not isinstance(url, str):
-            raise HarnessError("verified media response did not include a download URL")
+        if not isinstance(url, str) or media.get("channel_count") != 2:
+            raise HarnessError("verified media response did not include a two-channel download")
         with tempfile.NamedTemporaryFile(prefix="twilio-live-", suffix=".wav", delete=False) as handle:
             media_path = handle.name
         try:
@@ -184,6 +188,15 @@ def run(args) -> dict:
             "media_downloaded_and_verified": True,
             "retention_cleanup": "pending retention worker; verify Twilio and S3 deletion separately",
         })
+    else:
+        try:
+            _json_request(base_url, token, "GET", f"/v1/bridge-sessions/{session_id}/media")
+        except HarnessError as exc:
+            if "HTTP 404" not in str(exc):
+                raise
+            evidence["media_not_available"] = True
+        else:
+            raise HarnessError("failed session unexpectedly exposed a verified media download")
     return evidence
 
 
