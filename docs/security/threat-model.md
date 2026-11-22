@@ -1,6 +1,6 @@
 # Backend and companion threat model
 
-**Review status:** engineering threat-model pass updated 2026-11-20. This is not a penetration test, legal opinion, DPIA or release approval. The Twilio code path has not been exercised against a live account and AWS Terraform has not been applied.
+**Review status:** engineering threat-model pass updated 2026-11-22. This is not a penetration test, legal opinion, DPIA or release approval. The Twilio code path has not been exercised against a live account and AWS Terraform has not been applied.
 
 ## Scope and trust boundaries
 
@@ -34,7 +34,7 @@ Trust boundaries:
 | ID | Threat / abuse case | Required control | Current implementation / residual |
 |---|---|---|---|
 | T01 | Cross-tenant session enumeration or mutation | Tenant-scoped SQL predicates, opaque IDs, no existence disclosure | Tenant-scoped session reads/cancel and address/media access queries; PostgreSQL integration tests |
-| T02 | Bearer token theft/replay | High-entropy tokens, digest-only configuration, TLS, rotation, rate limiting, audit | SHA-256 token digest lookup and no-store responses; TLS is in AWS ALB Terraform, but no cloud is deployed; rate limiting and rotation automation remain open |
+| T02 | Bearer token theft/replay | High-entropy tokens, digest-only configuration, TLS, rotation, rate limiting, audit | SHA-256 token digest lookup and no-store responses; PostgreSQL tenant-scoped API token bucket is merged; automated token rotation and deployed cloud controls remain open |
 | T03 | Malicious participant reference or phone-number injection | Accept only opaque bounded references; resolve addresses in protected vault; never persist addresses in outbox/logs | AES-256-GCM tenant-scoped address vault, E.164 validation, authenticated provisioning/deletion API and metadata-only audit table |
 | T04 | Forged/replayed webhook changes consent or starts recording | Provider-native signature verification over exact raw request; event ID uniqueness; payload digest; account binding; timestamp policy; bounded provider-account admission and edge abuse controls | Twilio signed ASGI ingress, exact canonical URL/body, duplicate field rejection, Account SID binding, account-scoped resolver and durable event deduplication; PostgreSQL account-scoped token bucket runs after signature verification and before decoding; no live provider replay test or deployed ALB/WAF rate rule |
 | T05 | Consent bypass by initiator or merged carrier leg | Consent from every expected human before recording-enabled join; fail closed on unknown identity/topology | DTMF 1 consent, empty/other digit/terminal call decline, consent evidence, cancellation of other calls and session guard; disclosure requires counsel approval; native SIM-party identity and carrier merge remain unproven |
