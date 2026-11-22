@@ -106,15 +106,21 @@ class TwilioWebhookEventDecoder:
                 event_type = EventType.PARTICIPANT_CONSENTED
                 consent_method = "dtmf_1"
                 policy_version = self._consent_policy_version
-            else:
+            elif fields.get("Digits"):
                 event_type = EventType.PARTICIPANT_DECLINED
+            else:
+                # An empty Gather result means no affirmative response, not an
+                # explicit refusal. Keep the evidence semantics distinct.
+                event_type = EventType.PARTICIPANT_UNAVAILABLE
         elif route == "call-status":
             status = fields.get("CallStatus", "")
-            if status in {"busy", "no-answer", "failed", "canceled", "completed"}:
+            if status in {"busy", "no-answer", "failed", "canceled"}:
                 if participant_ref is None:
                     raise TwilioEventDecodeError("terminal call callback has no mapped participant")
-                event_type = EventType.PARTICIPANT_DECLINED
-            elif status in {"in-progress", "ringing", "queued", "initiated"}:
+                event_type = EventType.PARTICIPANT_UNAVAILABLE
+            elif status in {"in-progress", "ringing", "queued", "initiated", "completed"}:
+                # A completed call-status callback can race with the Gather
+                # action callback; it is not itself proof of refusal or timeout.
                 event_type = EventType.PROVIDER_STATUS
             else:
                 raise TwilioEventDecodeError("unsupported Twilio call status")
@@ -172,7 +178,7 @@ class TwilioWebhookEventDecoder:
             occurred_at=occurred_at,
             participant_ref=participant_ref if event_type in {
                 EventType.PARTICIPANT_JOINED, EventType.PARTICIPANT_CONSENTED,
-                EventType.PARTICIPANT_DECLINED,
+                EventType.PARTICIPANT_DECLINED, EventType.PARTICIPANT_UNAVAILABLE,
             } else None,
             payload_digest=payload_digest,
             consent_policy_version=policy_version,
