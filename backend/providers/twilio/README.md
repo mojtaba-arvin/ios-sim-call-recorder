@@ -30,7 +30,7 @@ Use an API Key/Secret pair if the deployment has one; otherwise the SDK client f
 All callbacks are POST form-encoded and pass through the official Twilio signature validator before decoding:
 
 - /v1/twilio/consent — Gather result; returns Hangup TwiML after durable processing.
-- /v1/twilio/call-status — terminal consent-call status; completed without persisted consent fails closed.
+- /v1/twilio/call-status — busy/no-answer/failed/canceled outcomes mark the participant unavailable; generic completed status is informational because the Gather action is authoritative for consent.
 - /v1/twilio/conference — Conference start/end and participant join/leave callbacks.
 - /v1/twilio/recording — recording in-progress/completed/failed/absent lifecycle callbacks.
 
