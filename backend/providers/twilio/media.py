@@ -21,6 +21,7 @@ import wave
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bridge_core.object_storage import S3MediaObjectStore
@@ -32,6 +33,71 @@ from providers.twilio.events import TwilioEventDecodeError
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
 _ACCOUNT_SID = re.compile(r"^AC[0-9a-fA-F]{32}$")
 _MAX_MEDIA_BYTES = 500 * 1024 * 1024
+
+
+def _validate_s3_redirect_url(url: str) -> None:
+    """Allow only HTTPS S3 media redirects, never arbitrary redirect targets."""
+    try:
+        parsed = urlsplit(url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError:
+        raise MediaRejected("media_redirect_url_invalid") from None
+
+    suffix = ".amazonaws.com.cn" if hostname.endswith(".amazonaws.com.cn") else ".amazonaws.com"
+    aws_suffix = hostname.endswith(suffix) and hostname != suffix.lstrip(".")
+    prefix = hostname[:-len(suffix)].rstrip(".") if aws_suffix else ""
+    labels = prefix.split(".") if prefix else []
+
+    def valid_region(value: str) -> bool:
+        return re.fullmatch(r"[a-z]{2,3}(?:-[a-z]+)*-[0-9]+", value) is not None
+
+    s3_endpoint = False
+    for index, label in enumerate(labels):
+        tail = labels[index + 1:]
+        if label == "s3":
+            valid_tail = (
+                tail == []
+                or (len(tail) == 1 and valid_region(tail[0]))
+                or (len(tail) == 2 and tail[0] == "dualstack" and valid_region(tail[1]))
+            )
+        elif label.startswith("s3-"):
+            endpoint = label[3:]
+            valid_tail = (
+                (valid_region(endpoint) and tail == [])
+                or (endpoint == "accelerate" and tail in ([], ["dualstack"]))
+            )
+        else:
+            continue
+        if valid_tail:
+            s3_endpoint = True
+            break
+
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or not aws_suffix
+        or not s3_endpoint
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or port not in (None, 443)
+    ):
+        raise MediaRejected("media_redirect_target_not_allowed")
+
+
+class _TwilioS3RedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Constrain Twilio's media redirect and never forward Twilio credentials."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_s3_redirect_url(newurl)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            redirected.remove_header("Authorization")
+            redirected.remove_header("Proxy-Authorization")
+            redirected.unredirected_hdrs.pop("Authorization", None)
+            redirected.unredirected_hdrs.pop("Proxy-Authorization", None)
+        return redirected
 
 
 class MediaRejected(ValueError):
@@ -218,7 +284,8 @@ class TwilioRecordingMediaIngestor:
         os.close(fd)
         path = Path(filename)
         try:
-            with urllib.request.urlopen(request, timeout=20) as response, path.open("wb") as output:
+            opener = urllib.request.build_opener(_TwilioS3RedirectHandler())
+            with opener.open(request, timeout=20) as response, path.open("wb") as output:
                 if response.status != 200:
                     raise RuntimeError("Twilio media download failed")
                 total = 0
