@@ -1,25 +1,13 @@
 name: Repository policy checks
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - ".agents/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/pull_request_template.md"
-      - ".github/workflows/**"
-      - "AGENTS.md"
-      - "README.md"
-      - "docs/**"
-      - "CONTRIBUTING.md"
-      - "scripts/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: policy-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: policy-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
