@@ -1,7 +1,9 @@
 # Executable Product Roadmap
 
-**Snapshot:** 2026-11-20  
+**Snapshot:** 2026-11-22  
 **Purpose:** turn the repository's research and implementation into a sequenced, evidence-gated delivery plan. This is a living execution document, not a claim that hardware, carrier or production work has passed.
+
+> **Execution update (2026-11-22):** PR #52 is merged and is the current software baseline. Its six CI workflows passed on commit `225e63bb0bef38dfb73dbf5a7a9f7560bc1f4212`. This does not establish live Twilio, physical SIM/carrier, AWS staging, legal or App Store acceptance. PR #53 is closed but not merged and must not be counted as part of `main`. The detailed post-PR #52 release blockers, owners, acceptance criteria and batch plan are tracked in [Next execution roadmap](../release/next-execution-roadmap.md). PR #54 adds the unified release preflight; its CI must pass on the final PR head before merge.
 
 ## Product boundary and release definition
 
@@ -60,8 +62,8 @@ The detailed evidence, customer-discovery protocol, segment hypotheses, competit
 - [x] Merge the import payload hardening; PR #40 is on main and its simulator/core checks passed.
 - [x] Resolve the stale stacked import PR; PR #32 was closed after the clean mainline implementation in PR #40.
 - [x] Consolidate governance/agent-tooling in PR #42 without reverting CI path filters, permissions, action pins or cache improvements.
-- [x] Make backend, iOS Simulator, Swift, audio analyzer and repository-policy workflows run on every PR so they can be required without path-filtered pending checks; [ ] apply the required-check/PR rules to the existing `protect main` ruleset using `scripts/configure-main-ruleset.sh` (the connected GitHub interface exposes ruleset reads only).
-- [ ] Publish one dependency map and prune superseded branches; five obsolete branches are identified, but branch deletion is not available through the connected GitHub operations.
+- [ ] Merge and verify PR #54's all-PR `release-preflight.yml` (seven stable jobs); the existing individual workflows remain path-filtered and are not, by themselves, a complete required-check set. [ ] Apply and read back the required PR/status-check/linear-history/force-push rules on `protect main`; current Ruleset ID 27591151 contains only `deletion` and `non_fast_forward`.
+- [x] Publish the post-PR #52 dependency/workstream map in [Next execution roadmap](../release/next-execution-roadmap.md). [ ] Reconcile branch hygiene against the live GitHub inventory: only `main` and `chore/cross-repo-engineering-baseline` were present before PR #54; PR #53 is closed/unmerged and its branch is a deletion candidate after unique-commit/open-PR checks. Do not act on the historical five-branch count without fresh branch evidence.
 
 **Exit gate:** clean mainline; all required checks green; no duplicate stacked PRs; one source of truth for project scope, evidence and release gates.
 
