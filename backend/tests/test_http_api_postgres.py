@@ -26,7 +26,7 @@ class PostgresHTTPAPITests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         with self.connect() as conn:
-            conn.execute('TRUNCATE outbox_commands, provider_event_receipts, bridge_sessions CASCADE')
+            conn.execute('TRUNCATE tenant_api_rate_limits, outbox_commands, provider_event_receipts, bridge_sessions CASCADE')
         self.token='integration-token-' + 'x'*40
         self.repo=PostgresBridgeRepository(self.connect)
         self.app=BridgeSessionsASGI(repository=self.repo,authenticator=BearerTokenAuthenticator({hashlib.sha256(self.token.encode()).hexdigest():'tenant-integration'}))
