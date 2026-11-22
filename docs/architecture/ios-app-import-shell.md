@@ -14,7 +14,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 
 ## Import flow
 
-1. The user explicitly selects an audio file through SwiftUI's system document importer.
+1. The user explicitly selects one or more audio files through SwiftUI's system document importer. Selected files are processed sequentially so each file gets an independent security-scoped access and validation lifecycle; one invalid file does not discard successful imports from the same batch.
 2. The adapter starts security-scoped access where required and always stops it after the copy/probe flow. NSFileCoordinator coordinates the external document read.
 3. The source size is checked against the core 500 MiB limit before copying, preventing oversized files from consuming app staging storage.
 4. A lightweight container signature probe checks RIFF/WAVE, AIFF/AIFC, CAF, MP3 and ISO-BMFF/MP4-family headers. The filename extension is checked independently by the core validator.
@@ -22,7 +22,7 @@ xcodebuild -project CallRecorder.xcodeproj -scheme CallRecorderApp -sdk iphonesi
 6. AVAudioFile must successfully open the staged file. Duration, sample rate and channel count are read from decoded media, not guessed from its filename. WAV files additionally have their RIFF and chunk-declared lengths checked against the physical file size because AVAudioFile can synthesize silence for missing PCM data in a truncated WAV. After metadata limits pass, the decoded frame range is read in bounded 65,536-frame chunks; a decoder error, zero-progress read or inconsistent frame position is rejected without loading the full recording into memory.
 7. The core validator enforces the existing size, duration, sample-rate, channel-count and extension/container rules.
 8. A validated file is moved into app-private recording storage under a new opaque UUID filename.
-9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration and import timestamp. The original filename is not persisted. App-managed directories use complete file protection and are excluded from device backups. Final media and catalog files are explicitly assigned complete protection after move/atomic writes, so their protection does not depend only on parent-directory inheritance.
+9. A small atomic JSON catalog stores only the opaque ID, container, byte count, duration, import timestamp and SHA-256 content digest. The original filename is not persisted. The digest is calculated incrementally from the staged file, so large recordings are not loaded into memory. Before committing a new item, the importer compares its digest with existing entries and rejects byte-identical content even when the source filename differs. Catalog entries created by older app versions are backfilled lazily on the next import; the optional digest field keeps old catalog files decodable. App-managed directories use complete file protection and are excluded from device backups. Final media and catalog files are explicitly assigned complete protection after move/atomic writes, so their protection does not depend only on parent-directory inheritance.
 10. The library lists catalog entries and lets the user delete an imported recording; missing media files are pruned from the catalog when the library loads. A failed import removes its staged copy.
 
 ## Playback and export

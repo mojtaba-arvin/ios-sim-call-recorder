@@ -50,6 +50,51 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertEqual(storedFiles[0].deletingPathExtension().lastPathComponent, imported.id.uuidString)
     }
 
+    func testIdenticalAudioIsNotImportedTwiceEvenWhenFilenameDiffers() async throws {
+        let firstURL = temporaryRoot.appendingPathComponent("first-copy.wav")
+        let secondURL = temporaryRoot.appendingPathComponent("renamed-copy.wav")
+        try writeValidWAV(to: firstURL)
+        try FileManager.default.copyItem(at: firstURL, to: secondURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        let first = try await service.importRecording(from: firstURL, source: .filesApp)
+        XCTAssertEqual(first.contentSHA256?.count, 64)
+
+        // Simulate a catalog written by the previous app version, before
+        // content hashes existed. The next import must backfill it safely.
+        let catalogURL = catalogDirectory.appendingPathComponent("recordings.json")
+        var legacyCatalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL)) as? [[String: Any]]
+        )
+        legacyCatalog[0].removeValue(forKey: "contentSHA256")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyCatalog)
+        try legacyData.write(to: catalogURL, options: .atomic)
+
+        do {
+            _ = try await service.importRecording(from: secondURL, source: .filesApp)
+            XCTFail("Identical audio content must not create a second library item")
+        } catch let error as RecordingImportServiceError {
+            guard case .duplicateRecording = error else {
+                return XCTFail("Expected duplicateRecording, got \(error)")
+            }
+        }
+
+        let library = try await service.recordings()
+        XCTAssertEqual(library.count, 1)
+        XCTAssertEqual(library.first?.id, first.id)
+        XCTAssertEqual(library.first?.contentSHA256?.count, 64)
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(storedFiles.count, 1)
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(stagedFiles.isEmpty)
+    }
+
     func testTruncatedAudioPayloadIsRejectedAndStagingIsCleaned() async throws {
         let validURL = temporaryRoot.appendingPathComponent("valid.wav")
         try writeValidWAV(to: validURL)
@@ -295,7 +340,8 @@ final class RecordingImportServiceTests: XCTestCase {
             fileExtension: "../../outside",
             byteCount: 5,
             durationSeconds: 1,
-            importedAt: Date()
+            importedAt: Date(),
+            contentSHA256: nil
         )
         try writeCatalog([entry], named: "recordings.json")
         let service = RecordingImportService(storageRootURL: temporaryRoot)
@@ -387,7 +433,8 @@ final class RecordingImportServiceTests: XCTestCase {
             fileExtension: "m4a",
             byteCount: 5,
             durationSeconds: 1,
-            importedAt: importedAt
+            importedAt: importedAt,
+            contentSHA256: nil
         )
     }
 
