@@ -60,6 +60,16 @@ final class RecordingImportServiceTests: XCTestCase {
         let first = try await service.importRecording(from: firstURL, source: .filesApp)
         XCTAssertEqual(first.contentSHA256?.count, 64)
 
+        // Simulate a catalog written by the previous app version, before
+        // content hashes existed. The next import must backfill it safely.
+        let catalogURL = catalogDirectory.appendingPathComponent("recordings.json")
+        var legacyCatalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL)) as? [[String: Any]]
+        )
+        legacyCatalog[0].removeValue(forKey: "contentSHA256")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyCatalog)
+        try legacyData.write(to: catalogURL, options: .atomic)
+
         do {
             _ = try await service.importRecording(from: secondURL, source: .filesApp)
             XCTFail("Identical audio content must not create a second library item")
@@ -72,6 +82,7 @@ final class RecordingImportServiceTests: XCTestCase {
         let library = try await service.recordings()
         XCTAssertEqual(library.count, 1)
         XCTAssertEqual(library.first?.id, first.id)
+        XCTAssertEqual(library.first?.contentSHA256?.count, 64)
         let storedFiles = try FileManager.default.contentsOfDirectory(
             at: recordingsDirectory,
             includingPropertiesForKeys: nil
