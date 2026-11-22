@@ -81,3 +81,25 @@ Terraform and deployment automation are source artifacts only. No AWS account,
 VPC, certificate, DNS, Secrets Manager secret or cloud resources were provisioned
 from this session; no spend was incurred. The stack must pass `terraform
 validate` and an operator-reviewed plan before deployment.
+
+
+## ALB edge protection
+
+The API ALB is associated with a regional AWS WAF web ACL. The ACL applies
+AWS-managed Common Rule Set and Known Bad Inputs protections and a per-source-IP
+rate rule over a five-minute evaluation window. The default threshold is 2,000
+requests per IP per window and can be adjusted with
+`waf_rate_limit_per_ip` (100–20,000).
+
+This is defense in depth, not a replacement for bearer authentication,
+tenant-scoped PostgreSQL limits, or Twilio signature verification. The WAF
+rate rule runs before application signature verification and therefore uses
+only the network source IP; it does not trust caller-supplied forwarding headers
+or payload identity. The threshold is deliberately conservative to reduce the
+risk of blocking legitimate provider callback bursts, but must be observed and
+tuned against real traffic before production use. Managed-rule false positives
+must be handled with narrowly scoped exclusions, not by disabling the ACL.
+
+WAF sampled requests and WAF logging are disabled in this baseline to avoid
+retaining request metadata by default. CloudWatch aggregate rule metrics remain
+enabled. AWS WAF incurs additional usage charges; review pricing before apply.

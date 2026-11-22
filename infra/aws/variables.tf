@@ -97,3 +97,14 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+
+variable "waf_rate_limit_per_ip" {
+  type        = number
+  default     = 2000
+  description = "Maximum requests per source IP in a rolling five-minute WAF window before blocking."
+  validation {
+    condition     = var.waf_rate_limit_per_ip >= 100 && var.waf_rate_limit_per_ip <= 20000 && var.waf_rate_limit_per_ip == floor(var.waf_rate_limit_per_ip)
+    error_message = "waf_rate_limit_per_ip must be between 100 and 20000."
+  }
+}
