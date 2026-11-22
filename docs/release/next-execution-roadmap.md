@@ -57,7 +57,7 @@ Workflow: `.github/workflows/release-preflight.yml`
 | `repository-policy` | Policy tests, workflow/agent/docs validators | Job log |
 
 Execution controls:
-- `pull_request` to `main`, `push` to `release/**`, and `workflow_dispatch`.
+- `pull_request` to `main`, `push` to `main` and `release/**`, and `workflow_dispatch`. The `main` push trigger is proposed in PR #60 and becomes active only after merge.
 - Concurrency group per PR/ref with `cancel-in-progress: true`.
 - Bounded job timeouts and fail-fast matrices.
 - Independent jobs run in parallel; XCTest alone depends on `ios-sim-build`.
