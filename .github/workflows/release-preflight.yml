@@ -93,7 +93,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     strategy:
-      fail-fast: true
+      # Keep both simulator targets observable when a hosted image is missing a runtime.
+      fail-fast: false
       matrix:
         device: ["iPhone 16", "iPhone 16 Pro"]
     steps:
@@ -104,6 +105,16 @@ jobs:
         run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Install iOS Simulator runtime and report available devices
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devices available
+          xcodebuild -downloadPlatform iOS
+          xcrun simctl list runtimes
+          xcrun simctl list devices available
       - name: Run XCTest on simulator
         shell: bash
         run: |
