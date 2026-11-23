@@ -61,3 +61,41 @@
 ## Release gate
 
 Do not mark release-ready until: (1) ruleset is read back with all required rules and eight check identities, (2) real Twilio staging acceptance includes consent, callbacks, verified two-channel media and deletion, (3) exact physical iPhone/SIM/carrier tuples pass repeatable two-way tests, (4) AWS staging is explicitly approved, deployed, health-checked and rollback-tested, and (5) jurisdiction-specific legal/privacy review is written and approved.
+
+
+## Session progress — 2026-11-23
+
+**Current main tip:** `048b54d71da483eaa5800e89ba2563627ccf2d7a`. A GitHub compare against the baseline `63ca46ed04dc519f6965a2759d1fbc42190a57eb` reports four commits ahead and **zero changed files**. Two temporary documentation commits were inadvertently written to main during branch creation, then immediately removed by revert commits; the tree is restored, but the add/revert commits remain in history. No force-push or history rewrite was used. This is recorded for audit transparency.
+
+### Independent PRs opened
+
+| Workstream | PR | Scope | Exact head | CI at last check |
+|---|---|---|---|---|
+| Plan / decisions | [#78](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/78) | Execution plan and conservative defaults | `72cd14c1fffe79c4f52a31fd925c03dae1d4ae80` | Queued |
+| A1–A7 | [#79](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/79) | Ruleset JSON patch and admin read-back runbook | `e0ceba319a0215075bf6437d8cdb1d0b6de9097b` | Queued |
+| B1 | [#80](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/80) | Concurrent duplicate import regression test | `3f5cd0a4b30a967d36ef2e18652150cdf5daf829` | Latest head pending; earlier head still running and is superseded |
+| D1 | [#81](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/81) | Physical iPhone/SIM tuple and per-run evidence matrix | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | Queued |
+| G1 | [#82](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/82) | Sourced competitor/substitute matrix | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | Queued |
+| C1 | [#83](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/83) | Twilio adapter static review and live gates | `dd0cf63daf81cd8d40a47d327404d8f40547e54d` | Queued |
+| E1 | [#84](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/84) | Guarded Terraform plan-only script and checklist | `f57dc733f52fd2c6419f90a38de8b43dc57994b6` | Latest head queued; prior head run cancelled after update |
+| H1 | [#85](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/85) | Single-command worker default, cycle duration and runbook | `adc6e48c5f9e38957fb8f8e7f497939abe745f5a` | Queued |
+| F1 | [#86](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/86) | Privacy/security release checklist | `fb8e77aa2b9f7107b2fa6f41a2bfbd3de0448bab` | No run visible at last check |
+
+All listed PRs remain open and unmerged. CI is asynchronous; no PR is considered passed until the latest exact head has a completed successful Release Preflight.
+
+### Updated evidence matrix
+
+| Workstream | Done this session | PR | Blocked / next |
+|---|---|---|---|
+| A1–A7 | JSON patch and mandatory read-back runbook prepared | #79 | BLOCKED-ACCESS: connector supports Ruleset GET only; admin must apply and read back |
+| B1 | Concurrent same-content import regression added; existing importer tests already cover corruption, truncation, storage reserve, recovery and duplicate backfill | #80 | Await XCTest exact-head result |
+| C1 | Static review documented; consent, SID mapping, reconciliation and retry boundaries inspected | #83 | BLOCKED-ACCESS: live Twilio subaccount, two consenting test numbers, approved disclosure and spend cap |
+| D1 | Tuple/run matrix created; all cells marked NOT RUN | #81 | BLOCKED-HARDWARE: physical iPhones, authorized SIMs and consenting participants |
+| E1 | Account-guarded plan-only script and checklist created; no apply path | #84 | BLOCKED-ACCESS: approved AWS account ID, read-only credentials, network/certificate/DNS/secret/OIDC inputs |
+| F1 | Privacy/security control-to-evidence checklist created | #86 | BLOCKED-EXTERNAL: independent security review, counsel/DPIA and physical/deployed evidence |
+| G1 | Interview guide already exists; sourced competitor matrix added | #82 | BLOCKED-EXTERNAL: 15–20 interviews, 10 observed prototype tests, 5 qualified paid commitments |
+| H1 | Default batch reduced to one command to reduce sequential lease starvation; cycle duration added to sanitized worker logs | #85 | No lease renewal or deployed metrics/alerts yet; await backend CI |
+
+### New operational decision
+
+The production worker now defaults to `WORKER_BATCH_SIZE=1` because dispatch is sequential while the lease starts at claim time. This reduces the risk that later commands in a large batch expire before execution. It is not a substitute for lease renewal and does not prove exactly-once provider execution.
