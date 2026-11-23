@@ -38,8 +38,8 @@ class SupervisedOutboxWorker:
             try:
                 cycle = self.run_once()
                 if cycle.claimed:
-                    LOGGER.info('worker_cycle worker_id=%s claimed=%d acknowledged=%d deferred=%d',
-                                self.worker_id, cycle.claimed, cycle.acknowledged, cycle.deferred)
+                    LOGGER.info('worker_cycle worker_id=%s claimed=%d acknowledged=%d deferred=%d duration_ms=%d',
+                                self.worker_id, cycle.claimed, cycle.acknowledged, cycle.deferred, cycle.duration_ms)
             except Exception:
                 # Do not emit exception text: adapters may accidentally include
                 # provider request values in exceptions.
