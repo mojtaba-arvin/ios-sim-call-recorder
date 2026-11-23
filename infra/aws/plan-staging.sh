@@ -20,6 +20,7 @@ fi
 
 export TF_IN_AUTOMATION=true
 export AWS_PAGER=""
+export AWS_DEFAULT_REGION="$AWS_REGION"
 
 PLAN_FILE="$(mktemp "${TMPDIR:-/tmp}/ios-sim-call-recorder-staging-plan.XXXXXX")"
 cleanup() { rm -f "$PLAN_FILE"; }
@@ -32,6 +33,7 @@ terraform -chdir=infra/aws plan \
   -input=false \
   -lock-timeout=60s \
   -var-file=terraform.tfvars \
+  -var="region=$AWS_REGION" \
   -out="$PLAN_FILE"
 terraform -chdir=infra/aws show -no-color "$PLAN_FILE"
 
