@@ -56,7 +56,7 @@ def main():
     worker = SupervisedOutboxWorker(
         dispatcher=dispatcher, worker_id=os.environ.get("WORKER_ID", socket.gethostname()),
         poll_interval_seconds=float(os.environ.get("WORKER_POLL_SECONDS", "1")),
-        batch_size=int(os.environ.get("WORKER_BATCH_SIZE", "10")),
+        batch_size=int(os.environ.get("WORKER_BATCH_SIZE", "1")),
     )
     try:
         worker.run_forever()
