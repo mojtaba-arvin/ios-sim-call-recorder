@@ -28,7 +28,7 @@ export AWS_REGION=eu-central-1
 bash infra/aws/plan-staging.sh
 ```
 
-Replace the example account ID only with the separately approved staging account. The script calls `aws sts get-caller-identity` and refuses to continue on a mismatch.
+Replace the example account ID only with the separately approved staging account. The script calls `aws sts get-caller-identity`, refuses to continue on an account mismatch, and passes `AWS_REGION` explicitly as Terraform's `region` variable (it does not rely on the Terraform default).
 
 ## Review the plan
 
