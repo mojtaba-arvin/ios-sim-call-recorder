@@ -76,6 +76,13 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(cycle.deferred, 0)
         self.assertGreaterEqual(cycle.duration_ms, 0)
 
+    def test_default_batch_size_is_single_command(self):
+        worker = SupervisedOutboxWorker(
+            dispatcher=FakeDispatcher(),
+            worker_id="worker-test",
+        )
+        self.assertEqual(worker.batch_size, 1)
+
     def test_batch_size_is_bounded(self):
         for invalid in (0, 101):
             with self.subTest(batch_size=invalid):
