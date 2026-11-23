@@ -77,8 +77,8 @@ Do not mark release-ready until: (1) ruleset is read back with all required rule
 | D1 | [#81](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/81) | Physical iPhone/SIM tuple and per-run evidence matrix | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | Queued |
 | G1 | [#82](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/82) | Sourced competitor/substitute matrix | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | Queued |
 | C1 | [#83](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/83) | Twilio adapter static review and live gates | `dd0cf63daf81cd8d40a47d327404d8f40547e54d` | Queued |
-| E1 | [#84](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/84) | Guarded Terraform plan-only script and checklist | `f034841c8c330abeec47beb384fb3dacf2b6df8a` | Latest head pending; earlier heads cancelled after updates |
-| H1 | [#85](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/85) | Single-command worker default, cycle duration and runbook | `644ce009ca4bf7551bcdc1c6fedf8168a2efc14e` | Pending |
+| E1 | [#84](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/84) | Guarded Terraform plan-only script and checklist | `27d409312113e12fc3b28dce094a4cdc1b3d64ee` | Latest head pending; earlier heads cancelled after updates |
+| H1 | [#85](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/85) | Single-command worker default, cycle duration and runbook | `938fa24b430e4c6c44a0b6a140d34c6840233ded` | Pending |
 | F1 | [#86](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/86) | Privacy/security release checklist | `fb8e77aa2b9f7107b2fa6f41a2bfbd3de0448bab` | Queued |
 
 All listed PRs remain open and unmerged. CI is asynchronous; no PR is considered passed until the latest exact head has a completed successful Release Preflight.
