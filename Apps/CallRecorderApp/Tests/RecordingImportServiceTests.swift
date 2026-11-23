@@ -401,37 +401,37 @@ final class RecordingImportServiceTests: XCTestCase {
         try FileManager.default.copyItem(at: firstURL, to: secondURL)
 
         let service = RecordingImportService(storageRootURL: temporaryRoot)
-        let outcomes = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+        let outcomes = await withTaskGroup(of: String.self, returning: [String].self) { group in
             group.addTask {
                 do {
                     _ = try await service.importRecording(from: firstURL, source: .filesApp)
-                    return true
+                    return "imported"
                 } catch RecordingImportServiceError.duplicateRecording {
-                    return false
+                    return "duplicate"
                 } catch {
-                    XCTFail("Unexpected first concurrent import error: \\(error)")
-                    return false
+                    return "error: \\(error)"
                 }
             }
             group.addTask {
                 do {
                     _ = try await service.importRecording(from: secondURL, source: .filesApp)
-                    return true
+                    return "imported"
                 } catch RecordingImportServiceError.duplicateRecording {
-                    return false
+                    return "duplicate"
                 } catch {
-                    XCTFail("Unexpected second concurrent import error: \\(error)")
-                    return false
+                    return "error: \\(error)"
                 }
             }
 
-            var values: [Bool] = []
+            var values: [String] = []
             for await value in group { values.append(value) }
             return values
         }
 
-        XCTAssertEqual(outcomes.filter { $0 }.count, 1)
-        XCTAssertEqual(outcomes.filter { !$0 }.count, 1)
+        XCTAssertEqual(outcomes.filter { $0 == "imported" }.count, 1, outcomes.joined(separator: ", "))
+        XCTAssertEqual(outcomes.filter { $0 == "duplicate" }.count, 1, outcomes.joined(separator: ", "))
+        XCTAssertFalse(outcomes.contains { $0.hasPrefix("error:") }, outcomes.joined(separator: ", "))
+
         let library = try await service.recordings()
         XCTAssertEqual(library.count, 1)
         XCTAssertEqual(library.first?.contentSHA256?.count, 64)
