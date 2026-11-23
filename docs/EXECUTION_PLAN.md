@@ -72,7 +72,7 @@ Do not mark release-ready until: (1) ruleset is read back with all required rule
 | Workstream | PR | Scope | Exact head | CI at last check |
 |---|---|---|---|---|
 | Plan / decisions | [#78](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/78) | Execution plan and conservative defaults | `72cd14c1fffe79c4f52a31fd925c03dae1d4ae80` | Queued |
-| A1–A7 | [#79](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/79) | Ruleset JSON patch and admin read-back runbook | `e0ceba319a0215075bf6437d8cdb1d0b6de9097b` | Queued |
+| A1–A7 | [#79](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/79) | Ruleset JSON patch and admin read-back runbook | `f9d3a48f9d7b45f19c840202ed86e5679ce71f5d` | Queued |
 | B1 | [#80](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/80) | Concurrent duplicate import regression test | `3f5cd0a4b30a967d36ef2e18652150cdf5daf829` | Latest head pending; earlier head still running and is superseded |
 | D1 | [#81](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/81) | Physical iPhone/SIM tuple and per-run evidence matrix | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | Queued |
 | G1 | [#82](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/82) | Sourced competitor/substitute matrix | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | Queued |
