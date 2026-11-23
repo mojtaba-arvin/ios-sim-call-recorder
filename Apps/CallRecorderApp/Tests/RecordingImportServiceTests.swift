@@ -394,6 +394,60 @@ final class RecordingImportServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
     }
 
+    func testConcurrentImportsOfIdenticalAudioCommitExactlyOneItem() async throws {
+        let firstURL = temporaryRoot.appendingPathComponent("concurrent-first.wav")
+        let secondURL = temporaryRoot.appendingPathComponent("concurrent-second.wav")
+        try writeValidWAV(to: firstURL)
+        try FileManager.default.copyItem(at: firstURL, to: secondURL)
+
+        let service = RecordingImportService(storageRootURL: temporaryRoot)
+        let outcomes = await withTaskGroup(of: Bool.self, returning: [Bool].self) { group in
+            group.addTask {
+                do {
+                    _ = try await service.importRecording(from: firstURL, source: .filesApp)
+                    return true
+                } catch RecordingImportServiceError.duplicateRecording {
+                    return false
+                } catch {
+                    XCTFail("Unexpected first concurrent import error: \\(error)")
+                    return false
+                }
+            }
+            group.addTask {
+                do {
+                    _ = try await service.importRecording(from: secondURL, source: .filesApp)
+                    return true
+                } catch RecordingImportServiceError.duplicateRecording {
+                    return false
+                } catch {
+                    XCTFail("Unexpected second concurrent import error: \\(error)")
+                    return false
+                }
+            }
+
+            var values: [Bool] = []
+            for await value in group { values.append(value) }
+            return values
+        }
+
+        XCTAssertEqual(outcomes.filter { $0 }.count, 1)
+        XCTAssertEqual(outcomes.filter { !$0 }.count, 1)
+        let library = try await service.recordings()
+        XCTAssertEqual(library.count, 1)
+        XCTAssertEqual(library.first?.contentSHA256?.count, 64)
+
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: recordingsDirectory,
+            includingPropertiesForKeys: nil
+        )
+        let stagedFiles = try FileManager.default.contentsOfDirectory(
+            at: stagingDirectory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(storedFiles.count, 1)
+        XCTAssertTrue(stagedFiles.isEmpty)
+    }
+
     private func writeValidWAV(to url: URL, durationSeconds: Int = 1) throws {
         let format = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
