@@ -24,7 +24,7 @@ class SupervisedOutboxWorker:
         dispatcher,
         worker_id: str,
         poll_interval_seconds: float = 1.0,
-        batch_size: int = 10,
+        batch_size: int = 1,
     ):
         if not worker_id or not worker_id.strip():
             raise ValueError("worker_id is required")
