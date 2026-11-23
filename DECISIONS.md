@@ -21,3 +21,14 @@ These are conservative, reversible execution defaults for the 2026-11-23 enginee
 **Decision:** Label source review, unit/integration, simulator, physical-device, carrier and live-provider evidence separately. Never infer exactly-once remote execution from database idempotency.  
 **Reason:** Provider side effects and physical carrier topology are external systems.  
 **Revisit:** Per capability, with evidence attached to the exact commit/configuration.
+
+
+## D-EXEC-005 — Use single-command outbox batches by default
+**Decision:** Default the production worker to `WORKER_BATCH_SIZE=1` while each claimed command has a 60-second lease and dispatch is sequential. Emit sanitized cycle duration with aggregate counts.  
+**Reason:** A large claimed batch can spend part of each later command's lease waiting for earlier provider operations.  
+**Limit:** This reduces lease starvation but does not implement lease renewal or exactly-once remote execution. Increase batch size only after a measured worst-case bound with margin or lease renewal is proven.
+
+## D-EXEC-006 — Preserve audit trail after reverted mainline mistakes
+**Decision:** Do not force-push or rewrite main to remove the temporary add/revert commits created during this session.  
+**Reason:** The current main tree compares equal to the original baseline (zero changed files); the history retains the add/revert audit trail.  
+**Follow-up:** All further work remains on task branches; verify the branch argument before every GitHub contents write.
