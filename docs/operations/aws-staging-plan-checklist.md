@@ -25,7 +25,7 @@ cp infra/aws/terraform.tfvars.example infra/aws/terraform.tfvars
 # Fill reviewed infrastructure identifiers locally; do not commit terraform.tfvars.
 export EXPECTED_AWS_ACCOUNT_ID=123456789012
 export AWS_REGION=eu-central-1
-./infra/aws/plan-staging.sh
+bash infra/aws/plan-staging.sh
 ```
 
 Replace the example account ID only with the separately approved staging account. The script calls `aws sts get-caller-identity` and refuses to continue on a mismatch.
