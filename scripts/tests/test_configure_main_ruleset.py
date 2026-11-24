@@ -22,11 +22,12 @@ REQUIRED_CHECKS = {
 
 
 class MainRulesetScriptTests(unittest.TestCase):
-    def test_requires_exact_canonical_release_preflight_checks(self) -> None:
+    def test_script_uses_canonical_payload_file(self) -> None:
         script = SCRIPT.read_text(encoding="utf-8")
-        for check in REQUIRED_CHECKS:
-            with self.subTest(check=check):
-                self.assertIn(f'"context": "{check}"', script)
+        self.assertIn('PAYLOAD="${PAYLOAD:-docs/governance/main-ruleset-payload.json}"', script)
+        self.assertIn('test -f "$PAYLOAD"', script)
+        self.assertIn('--input "$PAYLOAD"', script)
+        self.assertIn('gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}"', script)
 
     def test_canonical_payload_matches_main_protection_contract(self) -> None:
         payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
@@ -69,19 +70,18 @@ class MainRulesetScriptTests(unittest.TestCase):
             with self.subTest(legacy=legacy):
                 self.assertNotIn(legacy, script)
 
-    def test_preserves_branch_safety_and_empty_bypass(self) -> None:
-        script = SCRIPT.read_text(encoding="utf-8")
-        for required in (
-            '"bypass_actors": []',
-            '"type": "deletion"',
-            '"type": "non_fast_forward"',
-            '"type": "required_linear_history"',
-            '"type": "pull_request"',
-            '"type": "required_conversation_resolution"',
-            '"type": "required_status_checks"',
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, script)
+    def test_payload_preserves_branch_safety_and_empty_bypass(self) -> None:
+        payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+        self.assertEqual(payload["bypass_actors"], [])
+        rules = {rule["type"] for rule in payload["rules"]}
+        self.assertTrue({
+            "deletion",
+            "non_fast_forward",
+            "required_linear_history",
+            "pull_request",
+            "required_conversation_resolution",
+            "required_status_checks",
+        }.issubset(rules))
 
 
 if __name__ == "__main__":
