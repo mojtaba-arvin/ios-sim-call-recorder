@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "configure-main-ruleset.sh"
+PAYLOAD = ROOT / "docs" / "governance" / "main-ruleset-payload.json"
 
 REQUIRED_CHECKS = {
     "backend-postgres (PostgreSQL 16)",
@@ -18,13 +20,43 @@ REQUIRED_CHECKS = {
     "repository-policy",
 }
 
+REQUIRED_RULE_TYPES = {
+    "deletion",
+    "non_fast_forward",
+    "required_linear_history",
+    "pull_request",
+    "required_status_checks",
+}
+
 
 class MainRulesetScriptTests(unittest.TestCase):
-    def test_requires_exact_canonical_release_preflight_checks(self) -> None:
+    def test_script_uses_canonical_payload_file(self) -> None:
         script = SCRIPT.read_text(encoding="utf-8")
-        for check in REQUIRED_CHECKS:
-            with self.subTest(check=check):
-                self.assertIn(f'"context": "{check}"', script)
+        self.assertIn('PAYLOAD="${PAYLOAD:-docs/governance/main-ruleset-payload.json}"', script)
+        self.assertIn('test -f "$PAYLOAD"', script)
+        self.assertIn('--input "$PAYLOAD"', script)
+        self.assertIn('gh api --method PUT "repos/${REPOSITORY}/rulesets/${RULESET_ID}"', script)
+
+    def test_canonical_payload_matches_main_protection_contract(self) -> None:
+        payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+        self.assertEqual(payload["name"], "protect main")
+        self.assertEqual(payload["target"], "branch")
+        self.assertEqual(payload["enforcement"], "active")
+        self.assertEqual(payload["bypass_actors"], [])
+        self.assertEqual(payload["conditions"]["ref_name"]["include"], ["refs/heads/main"])
+        rules = {rule["type"]: rule for rule in payload["rules"]}
+        self.assertEqual(set(rules), REQUIRED_RULE_TYPES)
+        self.assertTrue(rules["pull_request"]["parameters"]["required_review_thread_resolution"])
+        self.assertEqual(
+            {
+                item["context"]
+                for item in rules["required_status_checks"]["parameters"]["required_status_checks"]
+            },
+            REQUIRED_CHECKS,
+        )
+        self.assertTrue(
+            rules["required_status_checks"]["parameters"]["strict_required_status_checks_policy"]
+        )
 
     def test_rejects_legacy_check_names(self) -> None:
         script = SCRIPT.read_text(encoding="utf-8")
@@ -39,19 +71,10 @@ class MainRulesetScriptTests(unittest.TestCase):
             with self.subTest(legacy=legacy):
                 self.assertNotIn(legacy, script)
 
-    def test_preserves_branch_safety_and_empty_bypass(self) -> None:
-        script = SCRIPT.read_text(encoding="utf-8")
-        for required in (
-            '"bypass_actors": []',
-            '"type": "deletion"',
-            '"type": "non_fast_forward"',
-            '"type": "required_linear_history"',
-            '"type": "pull_request"',
-            '"type": "required_conversation_resolution"',
-            '"type": "required_status_checks"',
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, script)
+    def test_payload_preserves_branch_safety_and_empty_bypass(self) -> None:
+        payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+        self.assertEqual(payload["bypass_actors"], [])
+        self.assertEqual({rule["type"] for rule in payload["rules"]}, REQUIRED_RULE_TYPES)
 
 
 if __name__ == "__main__":
