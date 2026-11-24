@@ -50,10 +50,13 @@ class SupervisedOutboxWorker:
         return WorkerCycle(len(results), acknowledged, deferred, duration_ms)
 
     def run_forever(self) -> None:
+        heartbeat_interval_ns = 30_000_000_000
+        last_heartbeat_ns = monotonic_ns()
         LOGGER.info("worker_started worker_id=%s", self.worker_id)
         while not self._stop.is_set():
             try:
                 cycle = self.run_once()
+                now_ns = monotonic_ns()
                 if cycle.claimed:
                     LOGGER.info(
                         "worker_cycle worker_id=%s claimed=%d acknowledged=%d deferred=%d duration_ms=%d",
@@ -63,6 +66,16 @@ class SupervisedOutboxWorker:
                         cycle.deferred,
                         cycle.duration_ms,
                     )
+                    last_heartbeat_ns = now_ns
+                elif now_ns - last_heartbeat_ns >= heartbeat_interval_ns:
+                    # Empty queues are healthy, but without an idle heartbeat an
+                    # operator cannot distinguish an idle worker from a dead one.
+                    LOGGER.info(
+                        "worker_heartbeat worker_id=%s idle=true duration_ms=%d",
+                        self.worker_id,
+                        cycle.duration_ms,
+                    )
+                    last_heartbeat_ns = now_ns
             except Exception:
                 # Do not emit exception text: adapters may accidentally include
                 # provider request values in exceptions.
