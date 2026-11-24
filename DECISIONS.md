@@ -39,3 +39,12 @@ These are conservative, reversible execution defaults for the 2026-11-23 enginee
 **Observed state:** Ruleset 27591151 is active but currently exposes only `deletion` and `non_fast_forward`. The prepared JSON and passing CI do not change this live state.  
 **Reason:** The user requires merge only after real CI evidence and Ruleset compliance; treating a prepared payload as an applied ruleset would be false evidence.  
 **Revisit:** After an authorized administrator applies the reviewed payload and the live GET read-back verifies every intended rule and required check identity.
+
+
+## D-EXEC-008 — Governance verified; merge only on exact-head evidence
+
+**Decision:** The prior D-EXEC-007 hold is superseded. The live Ruleset 27591151 read-back now verifies active main protection, no bypass actors, required PR/thread-resolution controls, linear history, and all eight strict required status checks. Merge each PR only after its updated exact head passes every required check and has no unresolved review threads or merge conflicts.
+
+**Evidence:** PR #79 was squash-merged to main as `c2d3b23ccdb84aec8585b3a296b05eec3c241524`; the live Ruleset was read back after the change. PR branches #78 and #80–#87 were updated to include that main commit and new exact-head CI was triggered.
+
+**Limits:** This does not authorize AWS apply/deploy, paid Twilio traffic, physical SIM testing, production release, or legal/customer claims. Those remain independently blocked until external evidence and approvals exist.
