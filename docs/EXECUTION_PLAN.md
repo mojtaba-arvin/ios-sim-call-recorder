@@ -99,3 +99,47 @@ All listed PRs remain open and unmerged. CI is asynchronous; no PR is considered
 ### New operational decision
 
 The production worker now defaults to `WORKER_BATCH_SIZE=1` because dispatch is sequential while the lease starts at claim time. This reduces the risk that later commands in a large batch expire before execution. It is not a substitute for lease renewal and does not prove exactly-once provider execution.
+
+
+## Follow-up verification — 2026-11-24
+
+**Main snapshot:** `048b54d71da483eaa5800e89ba2563627ccf2d7a`. All nine work branches are present on the GitHub remote and all nine PRs are retargeted to `main` at this base. No local-only branch or unpushed commit is being represented.
+
+### PR and exact-head CI evidence
+
+| PR | Remote branch | Current head | Release Preflight evidence |
+|---|---|---|---|
+| [#78](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/78) | `docs/execution-plan-20261123` | `407a704dea99747044ff1c4f4000104b580a8424` | [Run 108](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45103210028) passed; this follow-up changes the branch and requires a fresh run |
+| [#79](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/79) | `docs/main-ruleset-admin-patch-20261123` | `f9d3a48f9d7b45f19c840202ed86e5679ce71f5d` | [Run 104](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45103115439) passed |
+| [#80](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/80) | `test/ios-import-concurrency-20261123` | `3f5cd0a4b30a967d36ef2e18652150cdf5daf829` | [Run 98](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102947089) passed |
+| [#81](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/81) | `docs/physical-device-matrix-20261123` | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | [Run 90](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102770645) passed |
+| [#82](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/82) | `research/competitor-matrix-20261123` | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | [Run 91](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102794822) passed |
+| [#83](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/83) | `docs/twilio-adapter-review-20261123` | `dd0cf63daf81cd8d40a47d327404d8f40547e54d` | [Run 94](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102829556) passed |
+| [#84](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/84) | `chore/terraform-plan-only-guard-20261123` | `27d409312113e12fc3b28dce094a4cdc1b3d64ee` | [Run 106](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45103171907) passed |
+| [#85](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/85) | `fix/outbox-worker-lease-safety-20261123` | `a504cdb51f9c6ace8fcb44d98b5e8ad637d70c3c` | New exact-head Release Preflight [Run 109](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45323789850) queued; previous head's green run does not certify this correction |
+| [#86](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/86) | `docs/privacy-security-checklist-20261123` | `fb8e77aa2b9f7107b2fa6f41a2bfbd3de0448bab` | [Run 99](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102962739) passed |
+
+The completed Release Preflight runs each reported successful jobs for the relevant workflow, including repository policy, Swift core, XCTest simulator targets, PostgreSQL 16/17, audio analyzer and Terraform validate where present. These are CI/simulator/source validations, not physical SIM or live provider tests.
+
+### Follow-up correction in H1
+
+The worker test fake now respects the dispatcher's requested `limit`. The prior fake returned three outcomes when called with `limit=1`, making the assertion inconsistent with the dispatch contract. The corrected test slices outcomes to the requested limit and asserts one claimed/acknowledged command. Commit: `a504cdb51f9c6ace8fcb44d98b5e8ad637d70c3c`. Its exact-head CI is pending as noted above.
+
+### Live governance read-back
+
+Ruleset ID `27591151` is active, but the actual GET read-back still contains only `deletion` and `non_fast_forward`. It does **not** yet contain required PR reviews, required status checks, linear history or conversation resolution. The prepared JSON is not proof of an applied ruleset. Do not mark A1–A7 complete and do not merge these PRs until an authorized administrator applies the payload and the live GET confirms the intended rules.
+
+### Current evidence matrix
+
+| Workstream | Status | PR | Exact-head CI | Remaining external gate |
+|---|---|---|---|---|
+| A1–A7 | PATCH PREPARED; live config incomplete | #79 | PASS | BLOCKED-ACCESS: admin apply + GET read-back |
+| B1 | Regression test added | #80 | PASS | Physical file-provider/device coverage remains separate |
+| C1 | Static adapter review complete | #83 | PASS | BLOCKED-ACCESS: live Twilio account, two consenting numbers, approved disclosure and spend cap |
+| D1 | Test matrix/protocol prepared; all results NOT RUN | #81 | PASS (docs only) | BLOCKED-HARDWARE: physical iPhones, SIMs, carriers and participants |
+| E1 | Guarded plan-only script + tests prepared | #84 | PASS | BLOCKED-ACCESS: approved AWS account/role and non-secret staging inputs; no plan run performed |
+| F1 | Privacy/security checklist prepared | #86 | PASS (docs only) | BLOCKED-EXTERNAL: counsel, DPIA, independent security review and deployed evidence |
+| G1 | Competitor research and interview kit prepared | #82 | PASS (docs only) | BLOCKED-EXTERNAL: actual interviews, observed tests and qualified commitments |
+| H1 | Batch default + sanitized cycle timing + corrected limit test | #85 | PENDING on current head | Lease renewal, durable metrics/alerts and live provider crash-window evidence |
+
+**Merge policy:** PRs remain open and unmerged. The latest exact-head CI must pass and the live governance configuration must be verified before merge. No PR merge is implied by a green CI run.
