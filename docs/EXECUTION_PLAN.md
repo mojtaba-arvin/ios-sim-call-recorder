@@ -143,3 +143,26 @@ Ruleset ID `27591151` is active, but the actual GET read-back still contains onl
 | H1 | Batch default + sanitized cycle timing + corrected limit test | #85 | PENDING on current head | Lease renewal, durable metrics/alerts and live provider crash-window evidence |
 
 **Merge policy:** PRs remain open and unmerged. The latest exact-head CI must pass and the live governance configuration must be verified before merge. No PR merge is implied by a green CI run.
+
+
+## Final branch and CI snapshot — 2026-11-24 08:10 +04:00
+
+All nine PRs are open, all target `main`, and all heads are pushed to the GitHub remote. The current main/base SHA is `048b54d71da483eaa5800e89ba2563627ccf2d7a`. PR #78 contains this evidence update; use its current GitHub head SHA rather than a copied prior snapshot.
+
+| PR | Current head SHA | Current CI evidence |
+|---|---|---|
+| #79 | `4d08819d4930f67dc1c2e41f16692e0a2eec4e60` | Release Preflight pending/in progress on this exact head; prior head passed but does not certify the payload-file refactor |
+| #80 | `3f5cd0a4b30a967d36ef2e18652150cdf5daf829` | PASS — [Run 98](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102947089) |
+| #81 | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | PASS — [Run 90](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102770645) |
+| #82 | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | PASS — [Run 91](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102794822) |
+| #83 | `89bc3f498f2df890d3fec810858bbcf706c1099b` | Backend staging integration PASS — [Run 45324147457](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324147457); Release Preflight in progress — [Run 45324147613](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324147613) |
+| #84 | `27d409312113e12fc3b28dce094a4cdc1b3d64ee` | PASS — [Run 106](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45103171907) |
+| #85 | `4bb1f8459f9849fc2eb00874b5caea3670f0e760` | Backend staging integration in progress — [Run 45324235480](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324235480); Release Preflight pending — [Run 45324235224](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324235224) |
+| #86 | `fb8e77aa2b9f7107b2fa6f41a2bfbd3de0448bab` | PASS — [Run 99](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102962739) |
+
+### Latest code refinements
+- **C1 / PR #83:** the unused adapter timeout option was removed. Both ASGI and worker composition roots now apply bounded `TWILIO_REQUEST_TIMEOUT_SECONDS` (default 10 seconds, range 1–12) to the actual Twilio SDK client. `backend/tests/test_config.py` covers default, override, malformed and out-of-range values. The worker batch default remains one command.
+- **H1 / PR #85:** the production worker entry point explicitly defaults `WORKER_BATCH_SIZE` to one. The fake dispatcher in tests now respects the requested `limit`, and a regression assertion checks the production entry-point default. Exact-head Release Preflight is pending.
+
+### Live governance re-check
+Ruleset `27591151` remains active on `~DEFAULT_BRANCH`, with empty bypass actors, but its live rules are still only `deletion` and `non_fast_forward`. The prepared six-rule payload has not been applied. PRs remain open and unmerged; do not treat CI success or a prepared JSON payload as governance approval.
