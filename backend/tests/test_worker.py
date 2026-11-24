@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bridge_core.worker import SupervisedOutboxWorker
 
@@ -34,6 +35,24 @@ class WorkerTests(unittest.TestCase):
         )
         dispatcher.worker = worker
         worker.run_forever()
+        self.assertEqual(dispatcher.calls, 2)
+
+    def test_idle_worker_emits_periodic_heartbeat(self):
+        dispatcher = FakeDispatcher()
+        worker = SupervisedOutboxWorker(
+            dispatcher=dispatcher,
+            worker_id="worker-test",
+            poll_interval_seconds=0.1,
+        )
+        dispatcher.worker = worker
+        # Initial heartbeat timestamp, first cycle start/end, second cycle start/end,
+        # and the second cycle's post-dispatch heartbeat check.
+        clock = iter((0, 1, 2, 30_000_000_001, 30_000_000_002, 30_000_000_003))
+        with patch("bridge_core.worker.monotonic_ns", side_effect=lambda: next(clock)):
+            with self.assertLogs("bridge.worker", level="INFO") as captured:
+                worker.run_forever()
+        self.assertTrue(any("worker_heartbeat worker_id=worker-test idle=true" in line
+                            for line in captured.output))
         self.assertEqual(dispatcher.calls, 2)
 
     def test_invalid_poll_interval_is_rejected(self):
