@@ -166,3 +166,41 @@ All nine PRs are open, all target `main`, and all heads are pushed to the GitHub
 
 ### Live governance re-check
 Ruleset `27591151` remains active on `~DEFAULT_BRANCH`, with empty bypass actors, but its live rules are still only `deletion` and `non_fast_forward`. The prepared six-rule payload has not been applied. PRs remain open and unmerged; do not treat CI success or a prepared JSON payload as governance approval.
+
+
+## Final verification and disposition — 2026-11-24 09:20 +04:00
+
+All nine open workstream PRs target `main`; their current head SHAs are pushed and their latest exact-head Release Preflight runs have completed successfully. This supersedes the pending/in-progress statuses in earlier session snapshots.
+
+| PR | Head SHA | Latest exact-head Release Preflight |
+|---|---|---|
+| [#78](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/78) | `f6d44cf4e7352f88e6712e54f5c7a75041bd2f33` | [45324396668](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324396668) — PASS |
+| [#79](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/79) | `4d08819d4930f67dc1c2e41f16692e0a2eec4e60` | [45323914351](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45323914351) — PASS |
+| [#80](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/80) | `3f5cd0a4b30a967d36ef2e18652150cdf5daf829` | [45102947089](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102947089) — PASS |
+| [#81](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/81) | `99de9c6150e91e905e09ee14a7941eb2ed29bce7` | [45102770645](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102770645) — PASS |
+| [#82](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/82) | `ba4bdaff02c4cc63ab2f1b688a6adf841e1131e4` | [45102794822](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102794822) — PASS |
+| [#83](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/83) | `89bc3f498f2df890d3fec810858bbcf706c1099b` | [45324147613](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324147613) — PASS |
+| [#84](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/84) | `27d409312113e12fc3b28dce094a4cdc1b3d64ee` | [45103171907](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45103171907) — PASS |
+| [#85](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/85) | `4bb1f8459f9849fc2eb00874b5caea3670f0e760` | [45324235224](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45324235224) — PASS |
+| [#86](https://github.com/mojtaba-arvin/ios-sim-call-recorder/pull/86) | `fb8e77aa2b9f7107b2fa6f41a2bfbd3de0448bab` | [45102962739](https://github.com/mojtaba-arvin/ios-sim-call-recorder/actions/runs/45102962739) — PASS |
+
+For runs #78, #79, #83 and #85, the job-level read-back confirms successful completion of both iPhone 16 and iPhone 16 Pro XCTest simulator jobs, Swift core, audio analyzer, PostgreSQL 16 and 17, Terraform validate, and repository-policy jobs. The other five exact-head runs also completed successfully. These remain hosted simulator and CI results, not physical SIM, real carrier, live Twilio, AWS deployment or legal acceptance.
+
+### Merge and governance decision
+
+The live GET of repository Ruleset `27591151` was repeated at this checkpoint. It remains active and targets `~DEFAULT_BRANCH`, but the only configured rules are `deletion` and `non_fast_forward`. There are no required pull-request approvals, no required status-check rules, no linear-history rule, and no conversation-resolution rule. The bypass actor list is empty. The GitHub connection available to this execution can read rulesets but has no ruleset mutation action. The prepared payload in PR #79 is therefore still unapplied.
+
+**Decision: do not merge the nine PRs yet.** All nine latest exact-head CI runs are green, but the governance gate explicitly requires an administrator to apply the canonical ruleset payload and verify the resulting live GET. No review submissions exist on these PRs. Do not bypass the missing governance gate merely because the current GitHub configuration would permit a merge.
+
+### Remaining dispositions
+
+| Area | Disposition | What closes it |
+|---|---|---|
+| Ruleset / governance | BLOCKED-ACCESS | Repository administrator applies `docs/governance/main-ruleset-payload.json` through an authorized GitHub Administration write path, then verifies exact rules and check names by GET |
+| Twilio | BLOCKED-ACCESS / external acceptance | Authorized staging subaccount, two consenting test numbers, approved disclosure and jurisdiction, spend cap; execute the documented harness and retain sanitized callback/media/deletion evidence |
+| SIM call capture and HFP | BLOCKED-HARDWARE | Physical iPhones, SIMs/carriers, accessory and consenting participants; record exact device/iOS/carrier tuple and two-way channel evidence |
+| AWS | BLOCKED-ACCESS | Approved account/role and complete non-secret staging inputs; run plan-only review first. No apply without a separate explicit deployment approval |
+| Legal/privacy | BLOCKED-EXTERNAL | Written jurisdiction-specific counsel review and retention/disclosure approval |
+| Customer discovery | BLOCKED-EXTERNAL | Actual interviews, observed prototype tests and qualified paid-pilot evidence; no inferred demand |
+
+No paid Twilio calls, AWS resources, production deployments, fabricated physical-device results or legal approvals were created or claimed. Release remains BLOCKED until all release gates above are independently evidenced.
