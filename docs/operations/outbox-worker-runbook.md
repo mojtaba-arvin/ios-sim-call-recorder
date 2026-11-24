@@ -24,7 +24,7 @@
 
 ## Operational observability
 
-The worker emits sanitized cycle logs with worker ID, claimed count, acknowledged count, deferred count and cycle duration in milliseconds. It emits a generic cycle-failed event without exception text.
+The worker emits sanitized cycle logs with worker ID, claimed count, acknowledged count, deferred count and cycle duration in milliseconds. When the queue remains empty, it emits an idle heartbeat every 30 seconds so operators can distinguish a healthy idle process from a stopped worker. It emits a generic cycle-failed event without exception text.
 
 Never log command payloads, participant addresses, phone numbers, Twilio credentials, Call/Conference/Recording SIDs, callback bodies or signed media URLs.
 
