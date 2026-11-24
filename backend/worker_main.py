@@ -33,7 +33,13 @@ def main():
     provider_account_id = required("TWILIO_PROVIDER_ACCOUNT_ID")
     api_username = os.environ.get("TWILIO_API_KEY", "").strip() or account_sid
     api_password = os.environ.get("TWILIO_API_SECRET", "").strip() or auth_token
-    request_timeout_seconds = bounded_float_from_env(\n        "TWILIO_REQUEST_TIMEOUT_SECONDS", 10.0, minimum=1.0, maximum=12.0,\n    )\n    client = Client(\n        api_username, api_password, account_sid=account_sid,\n        http_timeout=request_timeout_seconds,\n    )
+    request_timeout_seconds = bounded_float_from_env(
+        "TWILIO_REQUEST_TIMEOUT_SECONDS", 10.0, minimum=1.0, maximum=12.0,
+    )
+    client = Client(
+        api_username, api_password, account_sid=account_sid,
+        http_timeout=request_timeout_seconds,
+    )
     codec = EncryptedParticipantAddressCodec(bytes.fromhex(required("PARTICIPANT_ADDRESS_KEY_HEX")))
     vault = PostgresParticipantAddressResolver(connect=connect, codec=codec)
     resolver = PostgresTwilioResourceResolver(connect=connect, provider_account_id=provider_account_id)
