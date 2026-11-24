@@ -204,3 +204,13 @@ The live GET of repository Ruleset `27591151` was repeated at this checkpoint. I
 | Customer discovery | BLOCKED-EXTERNAL | Actual interviews, observed prototype tests and qualified paid-pilot evidence; no inferred demand |
 
 No paid Twilio calls, AWS resources, production deployments, fabricated physical-device results or legal approvals were created or claimed. Release remains BLOCKED until all release gates above are independently evidenced.
+
+
+## Current verified state — 2026-11-24 14:20 +04:00 (supersedes stale snapshots above)
+
+- Current `main`: `c2d3b23ccdb84aec8585b3a296b05eec3c241524`; PR #79 was squash-merged after all eight required Release Preflight checks passed on its exact head.
+- Ruleset `27591151` was read back after the administrator's update: active on `refs/heads/main`, no bypass actors, five supported rule types (`deletion`, `non_fast_forward`, `required_linear_history`, `pull_request` with review-thread resolution, and strict `required_status_checks`) and the exact eight required contexts. Governance is VERIFIED; earlier statements that only two rules were present are historical and superseded.
+- PR #78 and #80–#87 remain open. Their branches have been updated to include current main via merge commits; compare against current main reports zero commits behind and each PR reports mergeable. Fresh Release Preflight runs are in progress/queued on the updated heads. Do not merge until all eight required checks succeed on the exact current head.
+- PR #83 and #85 both modify `backend/worker_main.py`. Their current branch changes are independently testable, but the later merge must reconcile bounded Twilio HTTP timeout configuration with the one-command worker batch default; do not discard either behavior.
+- Release remains BLOCKED for external evidence: physical iPhone/SIM/carrier validation, live Twilio acceptance, AWS staging authorization/deployment, customer discovery, and jurisdiction-specific legal/privacy approval. Simulator CI is not evidence for physical SIM capture or carrier capability.
+- No AWS resources, paid Twilio calls, production deployment, physical-device tests, customer interviews, or legal approvals are claimed.
