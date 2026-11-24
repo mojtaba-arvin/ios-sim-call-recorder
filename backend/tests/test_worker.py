@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from bridge_core.worker import SupervisedOutboxWorker
 
@@ -75,6 +76,11 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(cycle.acknowledged, 0)
         self.assertEqual(cycle.deferred, 0)
         self.assertGreaterEqual(cycle.duration_ms, 0)
+
+    def test_production_entrypoint_defaults_batch_size_to_one(self):
+        entrypoint = Path(__file__).resolve().parents[1] / "worker_main.py"
+        source = entrypoint.read_text(encoding="utf-8")
+        self.assertIn('os.environ.get("WORKER_BATCH_SIZE", "1")', source)
 
     def test_default_batch_size_is_single_command(self):
         worker = SupervisedOutboxWorker(
