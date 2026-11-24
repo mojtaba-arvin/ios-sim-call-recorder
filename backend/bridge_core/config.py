@@ -20,3 +20,24 @@ def database_url_from_env() -> str:
         f"{values['DATABASE_HOST']}:{values['DATABASE_PORT']}/"
         f"{quote(values['DATABASE_NAME'], safe='')}?sslmode=require"
     )
+
+
+def bounded_float_from_env(
+    name: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Read a bounded numeric runtime setting without leaking its value."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        value = default
+    else:
+        try:
+            value = float(raw)
+        except ValueError:
+            raise RuntimeError(f"{name} must be numeric") from None
+    if not minimum <= value <= maximum:
+        raise RuntimeError(f"{name} must be between {minimum:g} and {maximum:g}")
+    return value
