@@ -45,9 +45,10 @@ class WorkerTests(unittest.TestCase):
             poll_interval_seconds=0.1,
         )
         dispatcher.worker = worker
-        # Initial heartbeat timestamp, first cycle start/end, second cycle start/end,
-        # and the second cycle's post-dispatch heartbeat check.
-        clock = iter((0, 1, 2, 30_000_000_001, 30_000_000_002, 30_000_000_003))
+        # Initial timestamp, first cycle start/end/check, then second cycle
+        # start/end/check. The first post-cycle check crosses the 30s interval.
+        clock = iter((0, 1, 2, 30_000_000_001, 30_000_000_002,
+                      30_000_000_003, 30_000_000_004))
         with patch("bridge_core.worker.monotonic_ns", side_effect=lambda: next(clock)):
             with self.assertLogs("bridge.worker", level="INFO") as captured:
                 worker.run_forever()
