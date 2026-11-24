@@ -15,7 +15,7 @@ No source-level reason was found to claim a live provider acceptance pass. Issue
 2. **Opaque participant identity:** adapter resolves an opaque participant reference to E.164 only at the provider side-effect boundary; malformed refs and addresses are rejected.
 3. **Account/resource boundaries:** Account SID and returned Call/Conference SID shapes are checked; provider mappings are scoped by provider account and session; consent-call SIDs are stored separately from Conference participant Call SIDs.
 4. **No blind replay:** dispatcher reconciles before executing. The adapter returns UNKNOWN after ambiguous later attempts when a resource cannot be proven; the dispatcher defers instead of acknowledging or blindly retrying.
-5. **Provider timeout:** the production worker constructs the Twilio SDK client with `http_timeout=10`. Provider 429/5xx are retryable; ordinary 4xx responses are treated as non-retryable. Error text is sanitized before persistence/logging.
+5. **Provider timeout:** ASGI and worker composition roots now configure the actual Twilio SDK client from bounded `TWILIO_REQUEST_TIMEOUT_SECONDS` (default 10s, accepted range 1–12s). The adapter no longer exposes a misleading timeout parameter that it cannot enforce. Provider 429/5xx are retryable; ordinary 4xx responses are treated as non-retryable. Error text is sanitized before persistence/logging.
 6. **Recording semantics:** Conference joins request `record-from-start` and dual-channel mode. Media retrieval separately requests two channels and validates actual WAV channel activity; the provider README correctly warns that channel 2 represents all participants other than the first, not speaker diarization.
 7. **Privacy:** provider credentials remain server-side; phone addresses are resolved from the encrypted vault; callback payloads, signed URLs and audio are not intended for ordinary logs/outbox records.
 
@@ -25,7 +25,7 @@ No source-level reason was found to claim a live provider acceptance pass. Issue
 |---|---|---|---|
 | C1-01 | External blocker | No real Twilio staging account acceptance is evidenced. Fake SDK resources cannot validate account settings, callback order, carrier behavior, actual media retrieval or deletion. | Run the opt-in harness only after authorized account, two consenting test numbers, approved disclosure, spending cap and staging deployment are available. |
 | C1-02 | External blocker | Account-level dual-channel recording and actual channel semantics are not proven by local tests. | Confirm account preflight, download actual WAV, inspect both channels independently, then verify provider and S3 deletion separately. |
-| C1-03 | P2 | `TwilioConferenceCommandAdapter.request_timeout_seconds` is validated and stored but not used to configure the SDK client. The current production entry point independently configures `Client(..., http_timeout=10)`; the adapter parameter therefore is not an effective runtime control. | Remove the unused parameter or make the timeout contract explicit in a follow-up code PR. Do not rely on it as a timeout setting. |
+| C1-03 | RESOLVED IN PR | The adapter's unused timeout parameter was removed. Both ASGI and worker composition roots now apply the bounded `TWILIO_REQUEST_TIMEOUT_SECONDS` setting to the SDK client's `http_timeout`; tests cover default, valid override, malformed and out-of-range values. | Keep the runtime value within the 1–12 second bound and verify deployment environment configuration before staging. |
 | C1-04 | External blocker | Reconciliation by stable Conference friendly name and opaque participant label is covered with fakes, but its behavior against the selected Twilio account/API configuration is unverified. | Verify create-timeout-after-acceptance and participant lookup against staging, without introducing duplicate PSTN side effects. |
 | C1-05 | External blocker | Consent disclosure text and jurisdiction are configuration inputs, not legal approval. | Obtain written counsel approval of exact wording, jurisdiction, retention and deletion flow before enabling live Twilio. |
 
@@ -35,7 +35,7 @@ No source-level reason was found to claim a live provider acceptance pass. Issue
 - Conference creation uses a stable session-derived friendly name and participant label for reconciliation. Multiple matching active Conferences or ambiguous participant lookup fail closed.
 - Resource mappings are persisted before outbox acknowledgement.
 - Database idempotency protects session creation and the initial outbox write; it does not guarantee exactly-once remote provider execution.
-- The worker uses a 60-second lease and the runtime currently defaults to a batch of 10 commands. Because provider reconciliation and execution are sequential network operations, see the separate outbox-worker reliability follow-up; do not increase batch size without a lease-duration bound or renewal.
+- The worker uses a 60-second lease and the production runtime now defaults to a batch of one command. This reduces lease starvation from sequential provider operations but does not replace lease renewal or prove exactly-once provider execution.
 
 ## Required live acceptance sequence
 
