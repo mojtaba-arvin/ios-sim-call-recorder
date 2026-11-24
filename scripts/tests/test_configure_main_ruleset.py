@@ -20,6 +20,14 @@ REQUIRED_CHECKS = {
     "repository-policy",
 }
 
+REQUIRED_RULE_TYPES = {
+    "deletion",
+    "non_fast_forward",
+    "required_linear_history",
+    "pull_request",
+    "required_status_checks",
+}
+
 
 class MainRulesetScriptTests(unittest.TestCase):
     def test_script_uses_canonical_payload_file(self) -> None:
@@ -35,24 +43,17 @@ class MainRulesetScriptTests(unittest.TestCase):
         self.assertEqual(payload["target"], "branch")
         self.assertEqual(payload["enforcement"], "active")
         self.assertEqual(payload["bypass_actors"], [])
-        self.assertEqual(
-            payload["conditions"]["ref_name"]["include"],
-            ["refs/heads/main"],
-        )
+        self.assertEqual(payload["conditions"]["ref_name"]["include"], ["refs/heads/main"])
         rules = {rule["type"]: rule for rule in payload["rules"]}
-        self.assertTrue({
-            "deletion",
-            "non_fast_forward",
-            "required_linear_history",
-            "pull_request",
-            "required_conversation_resolution",
-            "required_status_checks",
-        }.issubset(rules))
-        contexts = {
-            item["context"]
-            for item in rules["required_status_checks"]["parameters"]["required_status_checks"]
-        }
-        self.assertEqual(contexts, REQUIRED_CHECKS)
+        self.assertEqual(set(rules), REQUIRED_RULE_TYPES)
+        self.assertTrue(rules["pull_request"]["parameters"]["required_review_thread_resolution"])
+        self.assertEqual(
+            {
+                item["context"]
+                for item in rules["required_status_checks"]["parameters"]["required_status_checks"]
+            },
+            REQUIRED_CHECKS,
+        )
         self.assertTrue(
             rules["required_status_checks"]["parameters"]["strict_required_status_checks_policy"]
         )
@@ -73,15 +74,7 @@ class MainRulesetScriptTests(unittest.TestCase):
     def test_payload_preserves_branch_safety_and_empty_bypass(self) -> None:
         payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
         self.assertEqual(payload["bypass_actors"], [])
-        rules = {rule["type"] for rule in payload["rules"]}
-        self.assertTrue({
-            "deletion",
-            "non_fast_forward",
-            "required_linear_history",
-            "pull_request",
-            "required_conversation_resolution",
-            "required_status_checks",
-        }.issubset(rules))
+        self.assertEqual({rule["type"] for rule in payload["rules"]}, REQUIRED_RULE_TYPES)
 
 
 if __name__ == "__main__":
