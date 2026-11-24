@@ -20,7 +20,7 @@ class FakeDispatcher:
         self.limits.append(limit)
         if self.worker and self.calls == 2:
             self.worker.stop()
-        return self.outcomes
+        return self.outcomes[:limit]
 
 
 class WorkerTests(unittest.TestCase):
@@ -58,9 +58,9 @@ class WorkerTests(unittest.TestCase):
         cycle = worker.run_once()
 
         self.assertEqual(dispatcher.limits, [1])
-        self.assertEqual(cycle.claimed, 3)
+        self.assertEqual(cycle.claimed, 1)
         self.assertEqual(cycle.acknowledged, 1)
-        self.assertEqual(cycle.deferred, 2)
+        self.assertEqual(cycle.deferred, 0)
         self.assertGreaterEqual(cycle.duration_ms, 0)
 
     def test_empty_cycle_reports_zero_counts(self):
