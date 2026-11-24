@@ -51,3 +51,6 @@ If the live read-back ever differs from the assertions above, stop merges and re
 ## Evidence and release boundary
 
 The Ruleset read-back proves repository governance only. It does not prove physical iPhone/SIM/carrier behavior, live Twilio acceptance, AWS deployment, customer validation, or legal/privacy approval. Those remain separate release gates.
+
+
+**Freshness rule:** Treat the read-back above as a dated snapshot; re-read the live Ruleset before any future governance change or merge campaign.
