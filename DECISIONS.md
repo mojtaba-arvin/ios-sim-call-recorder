@@ -32,3 +32,10 @@ These are conservative, reversible execution defaults for the 2026-11-23 enginee
 **Decision:** Do not force-push or rewrite main to remove the temporary add/revert commits created during this session.  
 **Reason:** The current main tree compares equal to the original baseline (zero changed files); the history retains the add/revert audit trail.  
 **Follow-up:** All further work remains on task branches; verify the branch argument before every GitHub contents write.
+
+
+## D-EXEC-007 — Do not merge while live main governance is incomplete
+**Decision:** Keep the nine execution PRs open and unmerged until the current main Ruleset GET confirms the intended PR review, required status checks, linear history and conversation-resolution controls.  
+**Observed state:** Ruleset 27591151 is active but currently exposes only `deletion` and `non_fast_forward`. The prepared JSON and passing CI do not change this live state.  
+**Reason:** The user requires merge only after real CI evidence and Ruleset compliance; treating a prepared payload as an applied ruleset would be false evidence.  
+**Revisit:** After an authorized administrator applies the reviewed payload and the live GET read-back verifies every intended rule and required check identity.
