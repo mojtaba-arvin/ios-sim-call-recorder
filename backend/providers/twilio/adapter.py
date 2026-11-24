@@ -41,7 +41,6 @@ class TwilioConferenceCommandAdapter:
         consent_disclosure: str,
         address_resolver: Callable[[str, str], str],
         session_guard: Callable[[str], None] | None = None,
-        request_timeout_seconds: float = 10.0,
     ) -> None:
         if not _SID["AC"].fullmatch(account_sid):
             raise ValueError("valid Twilio Account SID is required")
@@ -51,8 +50,6 @@ class TwilioConferenceCommandAdapter:
             raise ValueError("public_origin must be an HTTPS origin without trailing slash")
         if not consent_disclosure.strip() or len(consent_disclosure) > 4000:
             raise ValueError("a reviewed consent disclosure is required")
-        if not 1 <= request_timeout_seconds <= 12:
-            raise ValueError("Twilio request timeout must be between 1 and 12 seconds")
         self.client = client
         self.account_sid = account_sid
         self.from_number = from_number
@@ -60,7 +57,6 @@ class TwilioConferenceCommandAdapter:
         self.consent_disclosure = consent_disclosure
         self.address_resolver = address_resolver
         self.session_guard = session_guard
-        self.request_timeout_seconds = request_timeout_seconds
 
     @staticmethod
     def conference_name(session_id: str) -> str:
