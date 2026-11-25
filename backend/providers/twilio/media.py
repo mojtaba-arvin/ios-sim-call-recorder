@@ -606,48 +606,136 @@ class TwilioRecordingMediaIngestor:
 
 
 class TwilioMediaRetentionWorker:
-    """Retryable two-phase deletion across Twilio and private object storage."""
+    """Fenced, retryable two-phase deletion across Twilio and private object storage.
+
+    Each asset is claimed separately so a batch never consumes another asset's
+    lease while earlier provider operations are running. External deletes are
+    idempotently retried after crashes; database progress is token- and
+    expiry-fenced so an expired worker cannot finalize a newer claim.
+    """
+
+    _LEASE_MINUTES = 5
 
     def __init__(self, *, connect, client, object_store: S3MediaObjectStore):
         self.connect, self.client, self.object_store = connect, client, object_store
 
-    def run_once(self, *, limit: int = 50) -> int:
-        if not 1 <= limit <= 200:
-            raise ValueError("retention batch limit is invalid")
+    def _claim_one(self):
+        """Claim one due asset and commit the lease before any network operation."""
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT media_id, tenant_id, session_id, provider_recording_sid,
-                              object_key, twilio_deleted_at, object_deleted_at
-                       FROM media_assets
-                       WHERE retention_expires_at <= now() AND deleted_at IS NULL
-                       ORDER BY retention_expires_at LIMIT %s FOR UPDATE SKIP LOCKED""",
-                    (limit,),
+                    """WITH candidate AS (
+                           SELECT media_id FROM media_assets
+                           WHERE retention_expires_at <= now()
+                             AND deleted_at IS NULL
+                             AND deletion_next_attempt_at <= now()
+                             AND (deletion_claim_token IS NULL
+                                  OR deletion_lease_expires_at <= now())
+                           ORDER BY retention_expires_at, media_id
+                           LIMIT 1 FOR UPDATE SKIP LOCKED
+                       )
+                       UPDATE media_assets AS asset
+                       SET deletion_claim_token=gen_random_uuid(),
+                           deletion_lease_expires_at=now()+interval '5 minutes',
+                           deletion_attempts=asset.deletion_attempts+1
+                       FROM candidate
+                       WHERE asset.media_id=candidate.media_id
+                       RETURNING asset.media_id, asset.tenant_id, asset.session_id,
+                                 asset.provider_recording_sid, asset.object_key,
+                                 asset.twilio_deleted_at, asset.object_deleted_at,
+                                 asset.deletion_claim_token""",
                 )
-                rows = cur.fetchall()
-        completed = 0
-        for media_id, tenant_id, session_id, recording_sid, object_key, twilio_deleted, object_deleted in rows:
-            if not twilio_deleted:
-                try:
-                    self.client.recordings(recording_sid).delete()
-                except Exception as exc:
-                    if getattr(exc, "status", None) != 404:
-                        continue
-                with self.connect() as conn:
-                    conn.execute("UPDATE media_assets SET twilio_deleted_at=now() WHERE media_id=%s", (media_id,))
-            if not object_deleted:
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return (*row[:7], str(row[7]))
+
+    def _mark_stage(self, media_id, claim_token: str, stage: str) -> bool:
+        # Only internal fixed column names are accepted; no caller-controlled SQL.
+        if stage not in {"twilio_deleted_at", "object_deleted_at"}:
+            raise ValueError("invalid retention deletion stage")
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""UPDATE media_assets SET {stage}=now()
+                        WHERE media_id=%s AND deletion_claim_token=%s
+                          AND deletion_lease_expires_at > now()
+                          AND deleted_at IS NULL""",
+                    (media_id, UUID(claim_token)),
+                )
+                return cur.rowcount == 1
+
+    def _schedule_retry(self, media_id, claim_token: str, exc: Exception) -> None:
+        # Persist only the exception type; provider errors can contain sensitive URLs.
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE media_assets
+                       SET deletion_claim_token=NULL, deletion_lease_expires_at=NULL,
+                           deletion_next_attempt_at=now()+make_interval(secs =>
+                               LEAST(3600, power(2, LEAST(deletion_attempts, 12))::int)),
+                           deletion_last_error=%s
+                       WHERE media_id=%s AND deletion_claim_token=%s
+                         AND deletion_lease_expires_at > now()
+                         AND deleted_at IS NULL""",
+                    (type(exc).__name__[:80], media_id, UUID(claim_token)),
+                )
+
+    def _finish(self, media_id, claim_token: str) -> bool:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE media_assets
+                       SET deleted_at=now(), deletion_claim_token=NULL,
+                           deletion_lease_expires_at=NULL, deletion_last_error=NULL
+                       WHERE media_id=%s AND deletion_claim_token=%s
+                         AND deletion_lease_expires_at > now()
+                         AND deleted_at IS NULL
+                         AND twilio_deleted_at IS NOT NULL
+                         AND object_deleted_at IS NOT NULL""",
+                    (media_id, UUID(claim_token)),
+                )
+                return cur.rowcount == 1
+
+    def _delete_claim(self, claim) -> bool:
+        (media_id, tenant_id, session_id, recording_sid, object_key,
+         twilio_deleted, object_deleted, claim_token) = claim
+
+        if not twilio_deleted:
+            try:
+                self.client.recordings(recording_sid).delete()
+            except Exception as exc:
+                if getattr(exc, "status", None) != 404:
+                    self._schedule_retry(media_id, claim_token, exc)
+                    return False
+            # A provider-side delete may have succeeded before a process crash.
+            # Twilio 404 on retry is therefore treated as already deleted.
+            if not self._mark_stage(media_id, claim_token, "twilio_deleted_at"):
+                return False
+
+        if not object_deleted:
+            try:
                 if object_key:
                     self.object_store.delete(
                         tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
                     )
-                with self.connect() as conn:
-                    conn.execute("UPDATE media_assets SET object_deleted_at=now() WHERE media_id=%s", (media_id,))
-            with self.connect() as conn:
-                conn.execute(
-                    """UPDATE media_assets SET deleted_at=now()
-                       WHERE media_id=%s AND twilio_deleted_at IS NOT NULL
-                       AND object_deleted_at IS NOT NULL""",
-                    (media_id,),
-                )
-            completed += 1
+            except Exception as exc:
+                self._schedule_retry(media_id, claim_token, exc)
+                return False
+            # S3 DeleteObject is safe to repeat if the process died before this write.
+            if not self._mark_stage(media_id, claim_token, "object_deleted_at"):
+                return False
+
+        return self._finish(media_id, claim_token)
+
+    def run_once(self, *, limit: int = 50) -> int:
+        if not 1 <= limit <= 200:
+            raise ValueError("retention batch limit is invalid")
+        completed = 0
+        for _ in range(limit):
+            claim = self._claim_one()
+            if claim is None:
+                break
+            if self._delete_claim(claim):
+                completed += 1
         return completed
