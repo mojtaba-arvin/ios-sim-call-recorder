@@ -21,7 +21,7 @@ class RetentionCycleTests(unittest.TestCase):
         self.assertTrue(run_cycle(ingestor, worker, clock=lambda: next(ticks), log=log))
 
         log.info.assert_called_once_with(
-            "retention_cycle_completed recovered_ingestions=%d deleted_assets=%d duration_ms=%d",
+            "retention_cycle_completed processed_ingestions=%d deleted_assets=%d duration_ms=%d",
             2, 3, 250,
         )
         log.error.assert_not_called()
