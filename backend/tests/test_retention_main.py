@@ -21,8 +21,8 @@ class RetentionCycleTests(unittest.TestCase):
         self.assertTrue(run_cycle(ingestor, worker, clock=lambda: next(ticks), log=log))
 
         log.info.assert_called_once_with(
-            "retention_cycle_completed",
-            extra={"recovered_ingestions": 2, "deleted_assets": 3, "duration_ms": 250},
+            "retention_cycle_completed recovered_ingestions=%d deleted_assets=%d duration_ms=%d",
+            2, 3, 250,
         )
         log.error.assert_not_called()
 
@@ -35,8 +35,8 @@ class RetentionCycleTests(unittest.TestCase):
         self.assertFalse(run_cycle(ingestor, Mock(), clock=lambda: next(ticks), log=log))
 
         log.error.assert_called_once_with(
-            "retention_cycle_failed",
-            extra={"error_type": "RuntimeError", "duration_ms": 500},
+            "retention_cycle_failed error_type=%s duration_ms=%d",
+            "RuntimeError", 500,
         )
         log.info.assert_not_called()
 
@@ -76,9 +76,10 @@ class RetryTelemetryTests(unittest.TestCase):
 
         self.assertEqual(len(captured.records), 1)
         record = captured.records[0]
-        self.assertEqual(record.getMessage(), "retention_delete_retry_scheduled")
-        self.assertEqual(record.stage, "object_storage")
-        self.assertEqual(record.error_type, "RuntimeError")
+        self.assertEqual(
+            record.getMessage(),
+            "retention_delete_retry_scheduled stage=object_storage error_type=RuntimeError",
+        )
         self.assertNotIn("secret-url-and-provider-id", captured.output[0])
         self.assertNotIn("opaque-media-id", captured.output[0])
         self.assertNotIn(token, captured.output[0])
