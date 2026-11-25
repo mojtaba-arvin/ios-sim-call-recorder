@@ -125,6 +125,32 @@ class TwilioAdapterTests(unittest.TestCase):
         self.assertEqual(result.state.value, "applied")
         self.assertEqual(result.call_sid, CALL)
 
+    def test_ambiguous_consent_create_timeout_is_not_dialed_again(self):
+        class SideEffectThenTimeoutCalls(FakeCalls):
+            def create(self, **kwargs):
+                self.created.append(kwargs)
+                # Model a provider-side call creation followed by a lost response.
+                raise TimeoutError("synthetic response lost after remote side effect")
+
+        client = FakeClient()
+        client.calls = SideEffectThenTimeoutCalls()
+        adapter = TwilioConferenceCommandAdapter(
+            client=client, account_sid=ACCOUNT, from_number="+14155550100",
+            public_origin="https://hooks.example.test",
+            consent_disclosure="This call is recorded. Press 1 to agree.",
+            address_resolver=lambda session, participant: "+14155550101",
+        )
+        first_attempt = command("consent.request", {"participant_ref": "participant-a"}, attempts=1)
+
+        with self.assertRaisesRegex(Exception, "twilio_transport_error"):
+            adapter.execute(first_attempt, conference_sid=None, call_sid=None)
+
+        retry = command("consent.request", {"participant_ref": "participant-a"}, attempts=2)
+        reconciliation = adapter.reconcile(retry, conference_sid=None, call_sid=None)
+
+        self.assertEqual(reconciliation.state.value, "unknown")
+        self.assertEqual(len(client.calls.created), 1)
+
     def test_uncertain_call_creation_is_not_replayed(self):
         result = self.adapter.reconcile(
             command("consent.request", {"participant_ref": "participant-a"}, attempts=2),
