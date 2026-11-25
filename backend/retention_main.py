@@ -45,6 +45,7 @@ def run_cycle(ingestor, worker, *, clock=time.monotonic, log=logger) -> bool:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
         dsn = database_url_from_env()
     except RuntimeError as exc:
