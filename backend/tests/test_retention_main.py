@@ -26,6 +26,22 @@ class RetentionCycleTests(unittest.TestCase):
         )
         log.error.assert_not_called()
 
+    def test_worker_failure_is_reported_after_ingestion_recovery(self):
+        ingestor = Mock()
+        ingestor.recover_once.return_value = 1
+        worker = Mock()
+        worker.run_once.side_effect = ValueError("private-provider-url")
+        log = Mock()
+        ticks = iter((2.0, 2.1))
+
+        self.assertFalse(run_cycle(ingestor, worker, clock=lambda: next(ticks), log=log))
+
+        log.error.assert_called_once_with(
+            "retention_cycle_failed error_type=%s duration_ms=%d",
+            "ValueError", 100,
+        )
+        log.info.assert_not_called()
+
     def test_failure_logs_type_without_exception_message(self):
         ingestor = Mock()
         ingestor.recover_once.side_effect = RuntimeError("secret-url-and-provider-id")
