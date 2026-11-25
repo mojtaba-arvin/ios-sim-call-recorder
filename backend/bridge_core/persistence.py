@@ -527,7 +527,8 @@ class PostgresBridgeRepository:
                 cur.execute(
                     """UPDATE outbox_commands SET status = 'delivered', delivered_at = now(),
                     lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
-                    WHERE command_id = %s AND status = 'leased' AND lease_token = %s""",
+                    WHERE command_id = %s AND status = 'leased' AND lease_token = %s
+                      AND lease_expires_at > now()""",
                     (command_id, lease_token))
                 if cur.rowcount != 1:
                     raise LeaseLost("outbox lease is no longer owned by this worker")
@@ -546,6 +547,7 @@ class PostgresBridgeRepository:
                     available_at = now() + (%s * interval '1 second'), last_error_code = %s,
                     lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
                     WHERE command_id = %s AND status = 'leased' AND lease_token = %s
+                      AND lease_expires_at > now()
                     RETURNING status""",
                     (terminal, retry_delay_seconds, error_code, command_id, lease_token))
                 row = cur.fetchone()
