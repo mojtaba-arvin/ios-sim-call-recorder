@@ -323,6 +323,46 @@ class PostgresPersistenceTests(unittest.TestCase):
         with self.assertRaises(LeaseLost):
             self.repo.acknowledge_outbox(first.command_id, first.lease_token)
 
+    def test_expired_lease_cannot_be_acknowledged_before_reclaim(self):
+        self.repo.enqueue_command(self.command("expired-ack"))
+        first = self.repo.claim_outbox(worker_id="worker-a", limit=1, lease_seconds=60)[0]
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE outbox_commands SET lease_expires_at=now()-interval '1 second' WHERE command_id=%s",
+                (first.command_id,),
+            )
+        with self.assertRaises(LeaseLost):
+            self.repo.acknowledge_outbox(first.command_id, first.lease_token)
+        second = self.repo.claim_outbox(worker_id="worker-b", limit=1, lease_seconds=60)[0]
+        self.assertEqual(first.command_id, second.command_id)
+        self.assertNotEqual(first.lease_token, second.lease_token)
+        with self.assertRaises(LeaseLost):
+            self.repo.acknowledge_outbox(first.command_id, first.lease_token)
+
+    def test_expired_lease_cannot_be_failed_before_reclaim(self):
+        self.repo.enqueue_command(self.command("expired-fail"))
+        first = self.repo.claim_outbox(worker_id="worker-a", limit=1, lease_seconds=60)[0]
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE outbox_commands SET lease_expires_at=now()-interval '1 second' WHERE command_id=%s",
+                (first.command_id,),
+            )
+        with self.assertRaises(LeaseLost):
+            self.repo.fail_outbox(
+                first.command_id, first.lease_token,
+                error_code="late_provider_timeout", retry_delay_seconds=0,
+            )
+        second = self.repo.claim_outbox(worker_id="worker-b", limit=1, lease_seconds=60)[0]
+        self.assertEqual(first.command_id, second.command_id)
+        self.assertNotEqual(first.lease_token, second.lease_token)
+        self.assertEqual(
+            self.repo.fail_outbox(
+                second.command_id, second.lease_token,
+                error_code="provider_timeout", retry_delay_seconds=0,
+            ),
+            "pending",
+        )
+
     def test_retry_is_bounded_and_dead_lettered(self):
         self.repo.enqueue_command(self.command("bounded-retry"))
         first = self.repo.claim_outbox(worker_id="worker-a", limit=1)[0]
