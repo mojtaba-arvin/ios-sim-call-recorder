@@ -24,12 +24,13 @@
 
 ## Migrations and runtime
 
-- Apply migrations in numeric order through 0011_rejected_media_metadata.sql.
+- Apply migrations in numeric order through 0015_media_retention_deletion_leases.sql. The latest retention migration adds per-asset deletion claim tokens, five-minute leases, attempt counters, retry scheduling and sanitized last-error classification.
 - The API uses RDS-managed connection secret fields in AWS; local Compose may use DATABASE_URL.
 - When TWILIO_ENABLED=true, the API mounts /v1/twilio/consent, /v1/twilio/call-status, /v1/twilio/conference and /v1/twilio/recording.
 - Provision each participant's E.164 address through authenticated PUT /v1/participants/{ref}/address before creating a session.
 - The session API enqueues consent requests transactionally. The outbox worker places calls; the API itself does not make provider calls.
-- The retention worker deletes the provider recording and S3 object independently. A deletion is complete only when both are confirmed.
+- The retention worker claims one expired media asset at a time, commits a five-minute lease before network calls, and fences progress/finalization by claim token plus unexpired lease. It deletes the Twilio recording and S3 object independently; a deletion is complete only when both are confirmed.
+- Failed provider/object deletion is rescheduled with bounded exponential backoff (up to one hour). Twilio 404 is treated as already deleted; S3 DeleteObject is safe to retry. The lease is not renewed, so a slow operation may defer completion until the lease expires and a later worker retries. External deletion remains at-least-once/idempotent, not exactly-once.
 - Twilio dual-channel media retrieval requires RequestedChannels=2. The current path supports exactly two participants and validates activity in both stereo channels.
 
 ## Controlled live acceptance
