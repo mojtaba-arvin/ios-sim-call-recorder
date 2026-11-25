@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import struct
@@ -33,6 +34,7 @@ from providers.twilio.events import TwilioEventDecodeError
 _RECORDING_SID = re.compile(r"^RE[0-9a-fA-F]{32}$")
 _ACCOUNT_SID = re.compile(r"^AC[0-9a-fA-F]{32}$")
 _MAX_MEDIA_BYTES = 500 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 def _validate_s3_redirect_url(url: str) -> None:
@@ -665,7 +667,7 @@ class TwilioMediaRetentionWorker:
                 )
                 return cur.rowcount == 1
 
-    def _schedule_retry(self, media_id, claim_token: str, exc: Exception) -> None:
+    def _schedule_retry(self, media_id, claim_token: str, exc: Exception, *, stage: str) -> None:
         # Persist only the exception type; provider errors can contain sensitive URLs.
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -680,6 +682,14 @@ class TwilioMediaRetentionWorker:
                          AND deleted_at IS NULL""",
                     (type(exc).__name__[:80], media_id, UUID(claim_token)),
                 )
+                scheduled = cur.rowcount == 1
+        if scheduled:
+            # Never include provider IDs, object keys, exception messages or URLs.
+            logger.warning(
+                "retention_delete_retry_scheduled stage=%s error_type=%s",
+                stage,
+                type(exc).__name__[:80],
+            )
 
     def _finish(self, media_id, claim_token: str) -> bool:
         with self.connect() as conn:
@@ -706,7 +716,7 @@ class TwilioMediaRetentionWorker:
                 self.client.recordings(recording_sid).delete()
             except Exception as exc:
                 if getattr(exc, "status", None) != 404:
-                    self._schedule_retry(media_id, claim_token, exc)
+                    self._schedule_retry(media_id, claim_token, exc, stage="twilio")
                     return False
             # A provider-side delete may have succeeded before a process crash.
             # Twilio 404 on retry is therefore treated as already deleted.
@@ -720,7 +730,7 @@ class TwilioMediaRetentionWorker:
                         tenant_id=tenant_id, session_id=session_id, media_id=str(media_id),
                     )
             except Exception as exc:
-                self._schedule_retry(media_id, claim_token, exc)
+                self._schedule_retry(media_id, claim_token, exc, stage="object_storage")
                 return False
             # S3 DeleteObject is safe to repeat if the process died before this write.
             if not self._mark_stage(media_id, claim_token, "object_deleted_at"):
