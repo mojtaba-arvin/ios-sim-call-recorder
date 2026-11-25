@@ -25,21 +25,17 @@ def run_cycle(ingestor, worker, *, clock=time.monotonic, log=logger) -> bool:
         deleted = worker.run_once(limit=50)
     except Exception as exc:
         log.error(
-            "retention_cycle_failed",
-            extra={
-                "error_type": type(exc).__name__[:80],
-                "duration_ms": round((clock() - started) * 1000),
-            },
+            "retention_cycle_failed error_type=%s duration_ms=%d",
+            type(exc).__name__[:80],
+            round((clock() - started) * 1000),
         )
         return False
 
     log.info(
-        "retention_cycle_completed",
-        extra={
-            "recovered_ingestions": recovered,
-            "deleted_assets": deleted,
-            "duration_ms": round((clock() - started) * 1000),
-        },
+        "retention_cycle_completed recovered_ingestions=%d deleted_assets=%d duration_ms=%d",
+        recovered,
+        deleted,
+        round((clock() - started) * 1000),
     )
     return True
 
