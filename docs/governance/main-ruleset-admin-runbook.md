@@ -1,63 +1,56 @@
 # Admin runbook — protect main Ruleset
 
-**Target:** repository `mojtaba-arvin/ios-sim-call-recorder`, existing Ruleset ID `27591151` (`protect main`).  
-**Current read-back:** active; target `~DEFAULT_BRANCH`; only `deletion` and `non_fast_forward`; bypass actors empty.  
-**Required outcome:** main only, pull requests, linear history, review-thread resolution and all eight stable Release Preflight checks. Do not create a duplicate ruleset.
+**Repository:** `mojtaba-arvin/ios-sim-call-recorder`  
+**Ruleset:** `protect main`, ID `27591151`  
+**Last verified read-back:** 2026-11-24 (GitHub API).
 
-## Why this is an admin handoff
+## Current live state
 
-The connected GitHub surface can GET the Ruleset but does not expose a supported PUT/PATCH action. This document and the adjacent JSON are a prepared patch, not an applied change.
+The Ruleset is **active** and targets only `refs/heads/main`. Its bypass actor list is empty, and the connected identity cannot bypass it.
 
-## Preconditions
+The live Ruleset read-back confirms these rules:
 
-1. Confirm you are an authorized repository administrator.
-2. Review `main-ruleset-payload.json` against the current ruleset read-back.
-3. Ensure the eight check names are present in the canonical `.github/workflows/release-preflight.yml`.
-4. Apply during a controlled maintenance window. Existing in-flight PRs may need fresh runs after enforcement.
-5. Do not add bypass actors for routine development.
+- `deletion`
+- `non_fast_forward`
+- `required_linear_history`
+- `pull_request`, with `required_review_thread_resolution: true`
+- `required_status_checks`, with strict up-to-date enforcement
 
-## Apply
+The eight required status contexts are exactly:
 
-From a trusted terminal with GitHub CLI authenticated as a repository administrator:
+- `backend-postgres (PostgreSQL 16)`
+- `backend-postgres (PostgreSQL 17)`
+- `swift-core`
+- `xctest (iPhone 16)`
+- `xctest (iPhone 16 Pro)`
+- `audio-analyzer`
+- `terraform-validate`
+- `repository-policy`
+
+There is no standalone `required_conversation_resolution` rule. Review-thread resolution is configured under the `pull_request` rule.
+
+## Historical application notes
+
+The JSON payload in `main-ruleset-payload.json` is the canonical desired configuration. The original administrator handoff is historical: the Ruleset was subsequently applied and its live state was verified. Do not rerun an administrative mutation merely because this runbook exists.
+
+To inspect the current configuration without changing it:
 
 ```sh
-gh auth status
-gh api --method PUT repos/mojtaba-arvin/ios-sim-call-recorder/rulesets/27591151 \
-  --input docs/governance/main-ruleset-payload.json
+gh api repos/mojtaba-arvin/ios-sim-call-recorder/rulesets/27591151
 ```
 
-This updates the existing Ruleset ID; it does not create a second ruleset.
+If the live read-back ever differs from the assertions above, stop merges and reconcile the actual state before proceeding. Do not create a duplicate Ruleset or bypass protection.
 
-## Mandatory read-back
+## Merge protocol
 
-```sh
-gh api repos/mojtaba-arvin/ios-sim-call-recorder/rulesets/27591151 \
-  > /tmp/ios-sim-call-recorder-main-ruleset-readback.json
-```
+- Merge only after all eight required checks pass on the exact current PR head.
+- Ensure the PR is mergeable and has no unresolved review threads.
+- Use squash merges to preserve the linear main history.
+- After each merge, update remaining PR branches with the new main and rerun exact-head checks.
 
-Verify all of the following from the returned JSON:
+## Evidence and release boundary
 
-- `id == 27591151`, `name == protect main`, `enforcement == active`.
-- `conditions.ref_name.include` contains only `refs/heads/main`.
-- `bypass_actors == []`.
-- Rules include `deletion`, `non_fast_forward`, `required_linear_history`, `pull_request`, and `required_status_checks`.
-- The `pull_request.parameters.required_review_thread_resolution` value is `true`.
-- `required_status_checks.strict_required_status_checks_policy == true`.
-- Required contexts exactly include:
-  - `backend-postgres (PostgreSQL 16)`
-  - `backend-postgres (PostgreSQL 17)`
-  - `swift-core`
-  - `xctest (iPhone 16)`
-  - `xctest (iPhone 16 Pro)`
-  - `audio-analyzer`
-  - `terraform-validate`
-  - `repository-policy`
-- Do not require path-filtered `Backend staging integration` globally.
+The Ruleset read-back proves repository governance only. It does not prove physical iPhone/SIM/carrier behavior, live Twilio acceptance, AWS deployment, customer validation, or legal/privacy approval. Those remain separate release gates.
 
-Conversation resolution is configured as the `required_review_thread_resolution` parameter of the `pull_request` rule. It is not a standalone Ruleset rule type.
 
-If any assertion fails, stop and reconcile the payload with the actual current Ruleset; do not create a second ruleset or claim success.
-
-## Evidence to attach to Issue #56
-
-Attach the sanitized GET read-back JSON and timestamp, plus administrator authorization evidence appropriate for the private audit trail. Do not include tokens. Close Issue #56 only after all rule assertions pass.
+**Freshness rule:** Treat the read-back above as a dated snapshot; re-read the live Ruleset before any future governance change or merge campaign.
