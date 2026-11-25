@@ -686,8 +686,9 @@ class TwilioMediaRetentionWorker:
         if scheduled:
             # Never include provider IDs, object keys, exception messages or URLs.
             logger.warning(
-                "retention_delete_retry_scheduled",
-                extra={"stage": stage, "error_type": type(exc).__name__[:80]},
+                "retention_delete_retry_scheduled stage=%s error_type=%s",
+                stage,
+                type(exc).__name__[:80],
             )
 
     def _finish(self, media_id, claim_token: str) -> bool:
