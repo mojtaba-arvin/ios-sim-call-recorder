@@ -48,3 +48,12 @@ These are conservative, reversible execution defaults for the 2026-11-23 enginee
 **Evidence:** PR #79 was squash-merged to main as `c2d3b23ccdb84aec8585b3a296b05eec3c241524`; the live Ruleset was read back after the change. PR branches #78 and #80–#87 were updated to include that main commit and new exact-head CI was triggered.
 
 **Limits:** This does not authorize AWS apply/deploy, paid Twilio traffic, physical SIM testing, production release, or legal/customer claims. Those remain independently blocked until external evidence and approvals exist.
+
+
+## D-EXEC-009 — Revalidate merge bases after every mainline merge
+
+**Decision (2026-11-25):** A green exact-head run is necessary but not sufficient when a PR's base has advanced. Before merging, compare the PR head against the live main SHA; if it is behind, rebuild the PR from current main and rerun required checks rather than bypassing strict status-check freshness.
+
+**Evidence:** PR #89 merged as 90bcbff2b6eeb8066b77a311140b72f467086a3b. PR #86 passed all eight required Release Preflight jobs on head f95b54cd9f286f06ab15fe5f06840ffcac2ebad6 and was squash-merged as d415faeee7130b520785ae9e4813fc8c3c18f788. The merge made PR #87's former head one commit behind; its content was recreated on current main as PR #91. The retention change from PR #90 was likewise recreated on current main as PR #92 so the required checks run against the current base.
+
+**Limits:** PR #91 and #92 remain pending exact-head CI at this decision's creation. No external provider, AWS, hardware or legal gate is advanced by these code/documentation merges. Do not delete superseded branches until replacement PRs merge and their diffs are verified.
