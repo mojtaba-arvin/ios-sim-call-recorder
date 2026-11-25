@@ -681,5 +681,126 @@ class PostgresPersistenceTests(unittest.TestCase):
         self.assertEqual(str(row[2]), second)
 
 
+    def _insert_expired_media_asset(self, recording_sid):
+        media_id = uuid4()
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO media_assets
+                   (media_id, tenant_id, session_id, provider, provider_account_id,
+                    provider_recording_sid, object_key, sha256, byte_count,
+                    duration_seconds, sample_rate_hz, channel_count, channel_activity,
+                    channel_map, verification_state, retention_expires_at)
+                   VALUES (%s,'tenant-retention',%s,'twilio','account-retention',%s,
+                           'private/test.wav',%s,32044,1.0,8000,2,'[0.5,0.5]'::jsonb,
+                           '{}'::jsonb,'verified',now()-interval '1 day')""",
+                (media_id, self.session.session_id, recording_sid, "a" * 64),
+            )
+        return media_id
+
+    def test_retention_deletion_resumes_after_partial_provider_success(self):
+        from providers.twilio.media import TwilioMediaRetentionWorker
+
+        recording_sid = "RE" + uuid4().hex
+        media_id = self._insert_expired_media_asset(recording_sid)
+
+        class Recording:
+            def __init__(self):
+                self.calls = 0
+            def delete(self):
+                self.calls += 1
+
+        class Client:
+            def __init__(self):
+                self.resource = Recording()
+            def recordings(self, _sid):
+                return self.resource
+
+        class Store:
+            def __init__(self):
+                self.calls = 0
+            def delete(self, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("synthetic object-store outage")
+
+        client, store = Client(), Store()
+        worker = TwilioMediaRetentionWorker(
+            connect=self.connect, client=client, object_store=store,
+        )
+
+        # Twilio deletion succeeds, S3 deletion fails; progress must be durable.
+        self.assertEqual(worker.run_once(limit=1), 0)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT twilio_deleted_at, object_deleted_at, deleted_at,
+                          deletion_claim_token, deletion_attempts, deletion_last_error
+                   FROM media_assets WHERE media_id=%s""",
+                (media_id,),
+            ).fetchone()
+            conn.execute(
+                "UPDATE media_assets SET deletion_next_attempt_at=now() WHERE media_id=%s",
+                (media_id,),
+            )
+        self.assertIsNotNone(row[0])
+        self.assertIsNone(row[1])
+        self.assertIsNone(row[2])
+        self.assertIsNone(row[3])
+        self.assertEqual(row[4], 1)
+        self.assertEqual(row[5], "RuntimeError")
+
+        # Retry resumes at object storage and does not repeat the Twilio delete.
+        self.assertEqual(worker.run_once(limit=1), 1)
+        self.assertEqual(client.resource.calls, 1)
+        self.assertEqual(store.calls, 2)
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT twilio_deleted_at, object_deleted_at, deleted_at,
+                          deletion_claim_token, deletion_lease_expires_at,
+                          deletion_attempts, deletion_last_error
+                   FROM media_assets WHERE media_id=%s""",
+                (media_id,),
+            ).fetchone()
+        self.assertTrue(all(value is not None for value in row[:3]))
+        self.assertIsNone(row[3])
+        self.assertIsNone(row[4])
+        self.assertEqual(row[5], 2)
+        self.assertIsNone(row[6])
+
+    def test_retention_claim_is_exclusive_and_expired_owner_is_fenced(self):
+        from providers.twilio.media import TwilioMediaRetentionWorker
+
+        recording_sid = "RE" + uuid4().hex
+        media_id = self._insert_expired_media_asset(recording_sid)
+        worker = TwilioMediaRetentionWorker(
+            connect=self.connect, client=object(), object_store=object(),
+        )
+        barrier = threading.Barrier(2)
+
+        def claim(_):
+            barrier.wait()
+            return worker._claim_one()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(pool.map(claim, range(2)))
+        active = [item for item in claims if item is not None]
+        self.assertEqual(len(active), 1)
+        old_token = active[0][7]
+
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE media_assets SET deletion_lease_expires_at=now()-interval '1 second'
+                   WHERE media_id=%s""",
+                (media_id,),
+            )
+        replacement = worker._claim_one()
+        self.assertIsNotNone(replacement)
+        self.assertNotEqual(old_token, replacement[7])
+
+        # Even before the old token is otherwise cleaned up, expiry alone fences it.
+        self.assertFalse(worker._mark_stage(media_id, old_token, "twilio_deleted_at"))
+        self.assertTrue(worker._mark_stage(media_id, replacement[7], "twilio_deleted_at"))
+
+
+
 if __name__ == "__main__":
     unittest.main()
