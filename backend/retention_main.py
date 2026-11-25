@@ -32,7 +32,7 @@ def run_cycle(ingestor, worker, *, clock=time.monotonic, log=logger) -> bool:
         return False
 
     log.info(
-        "retention_cycle_completed recovered_ingestions=%d deleted_assets=%d duration_ms=%d",
+        "retention_cycle_completed processed_ingestions=%d deleted_assets=%d duration_ms=%d",
         recovered,
         deleted,
         round((clock() - started) * 1000),
