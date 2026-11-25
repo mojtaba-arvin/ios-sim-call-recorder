@@ -214,3 +214,32 @@ No paid Twilio calls, AWS resources, production deployments, fabricated physical
 - PR #83 and #85 both modify `backend/worker_main.py`. Their current branch changes are independently testable, but the later merge must reconcile bounded Twilio HTTP timeout configuration with the one-command worker batch default; do not discard either behavior.
 - Release remains BLOCKED for external evidence: physical iPhone/SIM/carrier validation, live Twilio acceptance, AWS staging authorization/deployment, customer discovery, and jurisdiction-specific legal/privacy approval. Simulator CI is not evidence for physical SIM capture or carrier capability.
 - No AWS resources, paid Twilio calls, production deployment, physical-device tests, customer interviews, or legal approvals are claimed.
+
+
+## Session progress — 2026-11-25 (current continuation)
+
+**Mainline:** PR #89 is merged as 90bcbff2b6eeb8066b77a311140b72f467086a3b. PR #86's security/privacy checklist passed all eight required Release Preflight jobs on exact head f95b54cd9f286f06ab15fe5f06840ffcac2ebad6 (Run 45633360257) and was squash-merged as d415faeee7130b520785ae9e4813fc8c3c18f788.
+
+### PR disposition
+
+| PR | Scope | Exact head / evidence | Disposition |
+|---|---|---|---|
+| #89 | Ambiguous Twilio consent-call creation retry; restore Terraform plan-only files | 28b86eb4cbeafc1e7c65d93554385020956c77f5; merged SHA 90bcbff2b6eeb8066b77a311140b72f467086a3b | MERGED |
+| #86 | Privacy/security release checklist | f95b54cd9f286f06ab15fe5f06840ffcac2ebad6; Run 45633360257, all 8 jobs SUCCESS | MERGED as d415faeee7130b520785ae9e4813fc8c3c18f788 |
+| #87 | Carrier capability and forwarding register | Old head f0a1c48619e51548e308c4063a6f802751e1bd14 passed all 8 checks (Run 45633399711) but became 1 commit behind after #86 merged | Superseded by #91; retain old branch until replacement merges |
+| #90 | Fenced, retryable recording deletion | Old head 52bff42c22f4dce584146092ade81c5948926b61; backend staging Run 45634158939 passed; first Release Preflight Run 45634159283 had iPhone 16 Pro cancelled and was not a pass | Superseded by #92 on current main; retain old branch until replacement merges |
+| #91 | Carrier capability and forwarding register, recreated from current main | Head 3bbc84936d363000b672a928f06e2e1e02855bb7; Release Preflight Run 45640467563 queued/in progress at snapshot | PENDING |
+| #92 | Fenced recording deletion, recreated from current main | Head 1653edec35c4bf388a464a44f074957520be55d1; Release Preflight Run 45640545026 and Backend staging Run 45640545829 queued/in progress at snapshot | PENDING |
+
+PR #87 and #90 were not force-pushed or rewritten. Their replacement branches preserve the exact intended file changes on the current main base and trigger fresh checks. No branch was deleted.
+
+### Current engineering state
+
+- The deletion worker now uses one durable five-minute lease per asset, random claim tokens, token-and-expiry fencing for stage/final writes, attempt tracking, sanitized exception-type persistence and exponential retry scheduling capped at one hour.
+- Provider deletion remains at-least-once/idempotent, not exactly-once. Twilio 404 is treated as already deleted; S3 deletion may be repeated after a crash. The lease is not renewed; expired workers cannot write progress or finalize.
+- The new PostgreSQL tests cover partial Twilio-success/S3-failure recovery and concurrent claims with stale-owner fencing. These tests use controlled fakes/local PostgreSQL, not live provider operations.
+- PR #89's ambiguous consent-call creation test verifies that an unknown provider outcome is reconciled without issuing a second dial. Terraform plan-only files were restored; no Terraform plan/apply was run.
+
+### Release and product gates (unchanged)
+
+Release remains **BLOCKED**. CI/simulator success does not prove physical SIM capture, carrier merge, live Twilio acceptance, AWS staging deployment, counsel approval or demand. The highest-value next external work is: (1) select a launch jurisdiction and target segment, (2) run authorized physical-device/carrier topology tests, (3) conduct customer discovery and paid-pilot validation, and (4) obtain the account/legal approvals needed for controlled Twilio and AWS staging acceptance. Keep TWILIO_ENABLED=false; no paid calls, AWS resources, production deployment, physical-device tests or customer interviews are claimed.
