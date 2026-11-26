@@ -567,6 +567,102 @@ resource "aws_ecs_service" "retention" {
   tags = local.common_tags
 }
 
+# Retention worker metrics are created only when the live provider/worker path is enabled.
+# The optional SNS topic is supplied by the environment owner; no notification
+# endpoint or subscription is invented or provisioned here.
+resource "aws_cloudwatch_log_metric_filter" "retention_cycle_completed" {
+  count          = var.enable_live_twilio ? 1 : 0
+  name           = "${local.name}-retention-cycle-completed"
+  log_group_name = aws_cloudwatch_log_group.retention.name
+  pattern        = "\"retention_cycle_completed\""
+
+  metric_transformation {
+    name          = "RetentionCycleCompleted"
+    namespace     = "${local.name}/Retention"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "retention_cycle_failed" {
+  count          = var.enable_live_twilio ? 1 : 0
+  name           = "${local.name}-retention-cycle-failed"
+  log_group_name = aws_cloudwatch_log_group.retention.name
+  pattern        = "\"retention_cycle_failed\""
+
+  metric_transformation {
+    name          = "RetentionCycleFailures"
+    namespace     = "${local.name}/Retention"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "retention_delete_retry_scheduled" {
+  count          = var.enable_live_twilio ? 1 : 0
+  name           = "${local.name}-retention-delete-retry"
+  log_group_name = aws_cloudwatch_log_group.retention.name
+  pattern        = "\"retention_delete_retry_scheduled\""
+
+  metric_transformation {
+    name          = "RetentionDeleteRetries"
+    namespace     = "${local.name}/Retention"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "retention_cycle_failed" {
+  count               = var.enable_live_twilio ? 1 : 0
+  alarm_name          = "${local.name}-retention-cycle-failed"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RetentionCycleFailures"
+  namespace           = "${local.name}/Retention"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "A retention worker cycle failed; inspect sanitized retention_cycle_failed logs."
+  alarm_actions       = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  ok_actions          = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "retention_delete_retries" {
+  count               = var.enable_live_twilio ? 1 : 0
+  alarm_name          = "${local.name}-retention-delete-retries-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RetentionDeleteRetries"
+  namespace           = "${local.name}/Retention"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 3
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Three or more retention deletion retries were scheduled in 15 minutes."
+  alarm_actions       = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  ok_actions          = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "retention_worker_heartbeat" {
+  count               = var.enable_live_twilio ? 1 : 0
+  alarm_name          = "${local.name}-retention-worker-no-heartbeat"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "RetentionCycleCompleted"
+  namespace           = "${local.name}/Retention"
+  period              = 180
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_description   = "No successful retention cycle was observed for two consecutive three-minute periods."
+  alarm_actions       = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  ok_actions          = var.alarm_sns_topic_arn == null ? [] : [var.alarm_sns_topic_arn]
+  tags                = local.common_tags
+}
+
 resource "aws_cloudwatch_metric_alarm" "api_cpu" {
   alarm_name          = "${local.name}-api-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -679,7 +775,6 @@ output "media_bucket" {
 output "media_kms_key_arn" {
   value = aws_kms_key.media.arn
 }
-
 
 # Regional edge protection for the public API. This is an origin-side
 # defense-in-depth layer; application authentication and provider signature
