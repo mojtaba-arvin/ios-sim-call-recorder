@@ -108,3 +108,15 @@ variable "waf_rate_limit_per_ip" {
     error_message = "waf_rate_limit_per_ip must be between 100 and 20000."
   }
 }
+
+
+variable "alarm_sns_topic_arn" {
+  type        = string
+  default     = null
+  nullable    = true
+  description = "Optional pre-created SNS topic ARN for retention CloudWatch alarm notifications."
+  validation {
+    condition     = var.alarm_sns_topic_arn == null || startswith(var.alarm_sns_topic_arn, "arn:")
+    error_message = "alarm_sns_topic_arn must be null or an SNS topic ARN."
+  }
+}
