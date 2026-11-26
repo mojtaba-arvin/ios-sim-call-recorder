@@ -48,3 +48,26 @@ These are conservative, reversible execution defaults for the 2026-11-23 enginee
 **Evidence:** PR #79 was squash-merged to main as `c2d3b23ccdb84aec8585b3a296b05eec3c241524`; the live Ruleset was read back after the change. PR branches #78 and #80–#87 were updated to include that main commit and new exact-head CI was triggered.
 
 **Limits:** This does not authorize AWS apply/deploy, paid Twilio traffic, physical SIM testing, production release, or legal/customer claims. Those remain independently blocked until external evidence and approvals exist.
+
+
+## D-EXEC-009 — Treat retention deletion as fenced, at-least-once external work
+
+**Decision:** Retention deletion claims are per asset, committed before network calls, and fenced by a random claim token plus a five-minute lease. Persist Twilio and object-storage completion independently; retry only the unfinished stage and finalize only while the current token and unexpired lease still match.
+
+**Reason:** A worker can crash after an external delete succeeds but before the database records it. Twilio DELETE and S3 DeleteObject are retried as idempotent operations; a provider 404 is treated as already deleted. The database fence prevents an expired worker from finalizing another worker's claim, but cannot cancel an external request already in flight.
+
+**Limit:** This is at-least-once execution with idempotent retries, not exactly-once remote execution. No lease renewal or live Twilio/S3 acceptance is established by CI.
+
+## D-EXEC-010 — Emit sanitized retention telemetry; keep alerting as a separate gate
+
+**Decision:** Retention cycle logs include only processed ingestion count, deleted asset count, duration and exception class. Retry events include only a fixed stage label and exception class. Never log exception messages, provider identifiers, object keys, URLs, phone numbers, claim tokens or audio.
+
+**Reason:** Silent worker failures and invisible durable retries are operationally unsafe; identifiers and exception messages may contain sensitive provider data.
+
+**Limit:** Logs are not alerts. CloudWatch metric filters, alarms, notification routing and an exercised incident response remain unprovisioned and must be validated in AWS staging before operational acceptance.
+
+## D-EXEC-011 — Refresh stale PR branches after every mainline merge
+
+**Decision:** Recreate small documentation PRs from the latest main when their base becomes stale; do not bypass required checks or merge stale heads. Keep the superseded branch until its replacement is merged, then remove it only after confirming it is no longer needed.
+
+**Reason:** Main protection requires exact-head CI and a fresh base. A passing run on an older commit does not certify a replacement branch or newer mainline state.
