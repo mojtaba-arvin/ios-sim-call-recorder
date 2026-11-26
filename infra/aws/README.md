@@ -103,3 +103,12 @@ must be handled with narrowly scoped exclusions, not by disabling the ACL.
 WAF sampled requests and WAF logging are disabled in this baseline to avoid
 retaining request metadata by default. CloudWatch aggregate rule metrics remain
 enabled. AWS WAF incurs additional usage charges; review pricing before apply.
+
+
+## Retention worker alarms
+
+When `enable_live_twilio = true`, Terraform creates metric filters and CloudWatch alarms for retention cycle failures, repeated deletion retries, and missing successful-cycle heartbeat. These resources are absent while the retention service is disabled.
+
+Set `alarm_sns_topic_arn` to an already-created, approved SNS topic ARN to route alarm and recovery notifications. If it is null, CloudWatch alarms still evaluate but send no notifications. The topic subscription and delivery must be verified by the operator. Thresholds are conservative staging defaults (one cycle failure in 60 seconds; three retries in 15 minutes; no successful cycle across two three-minute periods) and must be tuned against observed workload before production use.
+
+Terraform source is not deployed evidence: run a reviewed plan, apply only with explicit environment approval, then trigger controlled failure/retry/heartbeat tests and verify notifications.
