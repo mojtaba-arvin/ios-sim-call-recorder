@@ -574,7 +574,7 @@ resource "aws_cloudwatch_log_metric_filter" "retention_cycle_completed" {
   count          = var.enable_live_twilio ? 1 : 0
   name           = "${local.name}-retention-cycle-completed"
   log_group_name = aws_cloudwatch_log_group.retention.name
-  pattern        = "\"retention_cycle_completed\""
+  pattern        = "retention_cycle_completed"
 
   metric_transformation {
     name          = "RetentionCycleCompleted"
@@ -588,7 +588,7 @@ resource "aws_cloudwatch_log_metric_filter" "retention_cycle_failed" {
   count          = var.enable_live_twilio ? 1 : 0
   name           = "${local.name}-retention-cycle-failed"
   log_group_name = aws_cloudwatch_log_group.retention.name
-  pattern        = "\"retention_cycle_failed\""
+  pattern        = "retention_cycle_failed"
 
   metric_transformation {
     name          = "RetentionCycleFailures"
@@ -602,7 +602,7 @@ resource "aws_cloudwatch_log_metric_filter" "retention_delete_retry_scheduled" {
   count          = var.enable_live_twilio ? 1 : 0
   name           = "${local.name}-retention-delete-retry"
   log_group_name = aws_cloudwatch_log_group.retention.name
-  pattern        = "\"retention_delete_retry_scheduled\""
+  pattern        = "retention_delete_retry_scheduled"
 
   metric_transformation {
     name          = "RetentionDeleteRetries"
