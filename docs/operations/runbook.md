@@ -24,7 +24,7 @@
 
 ## Migrations and runtime
 
-- Apply migrations in numeric order through 0011_rejected_media_metadata.sql.
+- Apply migrations in numeric order through 0015_media_retention_deletion_leases.sql.
 - The API uses RDS-managed connection secret fields in AWS; local Compose may use DATABASE_URL.
 - When TWILIO_ENABLED=true, the API mounts /v1/twilio/consent, /v1/twilio/call-status, /v1/twilio/conference and /v1/twilio/recording.
 - Provision each participant's E.164 address through authenticated PUT /v1/participants/{ref}/address before creating a session.
@@ -72,3 +72,29 @@
 - Counsel approval, paid-pilot evidence and selected launch market.
 - Secret rotation procedure and alerts for outbox age/dead letters, webhook failures, unknown reconciliation, recording verification failures, retention backlog, API 5xx and spend.
 - AWS resources have not been provisioned. Terraform is a reviewed source artifact, not a deployed staging environment.
+
+
+## Retention worker observability (merged 2026-11-26)
+
+The retention worker emits the following sanitized events:
+
+| Event | Safe fields | Operational meaning |
+|---|---|---|
+| retention_cycle_completed | processed_ingestions, deleted_assets, duration_ms | Recovery/deletion cycle completed |
+| retention_cycle_failed | error_type, duration_ms | Ingestion recovery or deletion cycle raised an exception |
+| retention_delete_retry_scheduled | stage, error_type | A retry was durably scheduled for Twilio or object storage |
+
+Do not add exception messages, provider SIDs, object keys, signed URLs, phone numbers, claim tokens or audio to these events. The worker logs one cycle outcome and continues its scheduled loop; a logged failure is not an alert.
+
+### CloudWatch alerting still required
+
+After AWS staging exists and the retention log group is confirmed:
+
+1. Create metric filters for retention_cycle_failed and retention_delete_retry_scheduled.
+2. Alarm on any cycle failure in a short evaluation window; alert on repeated retry scheduling (choose a threshold after observing normal staging behavior).
+3. Add a worker-heartbeat/missing-cycle alarm so a stopped container is detected even when it emits no error.
+4. Route alarms to an approved SNS/incident destination; confirm subscription and delivery.
+5. Trigger controlled test events in staging and verify alarm state transitions and notification receipt.
+6. Document owner, response target, runbook link and recovery steps.
+
+No metric filters, alarms, SNS topic, notification subscription or AWS resources are claimed as provisioned by this repository change.
