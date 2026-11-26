@@ -214,3 +214,42 @@ No paid Twilio calls, AWS resources, production deployments, fabricated physical
 - PR #83 and #85 both modify `backend/worker_main.py`. Their current branch changes are independently testable, but the later merge must reconcile bounded Twilio HTTP timeout configuration with the one-command worker batch default; do not discard either behavior.
 - Release remains BLOCKED for external evidence: physical iPhone/SIM/carrier validation, live Twilio acceptance, AWS staging authorization/deployment, customer discovery, and jurisdiction-specific legal/privacy approval. Simulator CI is not evidence for physical SIM capture or carrier capability.
 - No AWS resources, paid Twilio calls, production deployment, physical-device tests, customer interviews, or legal approvals are claimed.
+
+
+## Current verified checkpoint — 2026-11-26 07:26 +04:00
+
+This checkpoint supersedes the earlier 2026-11-23/24 snapshots above.
+
+### Mainline and engineering PRs
+
+- Main is 72a3d0d71e2729c3f8e107635709c56602a079b4.
+- PR #92 merged as 6d4b970754c1c4593e587d7aff0f782da4da7370: per-recording retention deletion claims, five-minute lease, random token fencing, durable provider/object-store stage progress, retry backoff and PostgreSQL 16/17 recovery/concurrency coverage.
+- PR #97 merged as 72a3d0d71e2729c3f8e107635709c56602a079b4: sanitized retention cycle success/failure telemetry and durable retry events. Exact-head Release Preflight passed all eight jobs; Backend staging integration passed on an isolated CI stack. This is not AWS staging deployment or live Twilio/S3 acceptance.
+- PR #94 was closed as stale after #97 advanced main. Its carrier register was recreated from the current main as PR #98 on branch docs/carrier-capability-register-20261126. Do not merge until all required exact-head checks pass.
+- PR #98 is documentation-only: the carrier capability register and forwarding protocol keep C-001 UNKNOWN and FWD-01..04 NOT RUN. No country, operator, plan or carrier capability is certified.
+- The earlier PR #93 documentation branch is stale/diverged; this PR refreshes the canonical decision, execution and runbook documents on a new current-main branch.
+
+### Operational evidence and product gates
+
+| Gate | Status | Evidence needed to close |
+|---|---|---|
+| Retention deletion implementation | ENGINEERING COMPLETE | Already merged; keep at-least-once/idempotent wording |
+| Retention worker observability | ENGINEERING COMPLETE | #97 merged; validate emitted logs in deployed AWS |
+| CloudWatch alerting | BLOCKED-ACCESS | Provision metric filters, alarms and notification destination; trigger and verify test alarm |
+| Carrier capability register | DOCUMENTED / NOT VALIDATED | #98 merge, then official operator evidence and physical SIM tests |
+| Native SIM capture / conference merge | BLOCKED-HARDWARE | Physical iPhone/SIM/carrier tests with consenting participants and per-channel audio evidence |
+| Twilio provider acceptance | BLOCKED-ACCESS / EXTERNAL | Authorized staging account, test numbers, disclosure approval, callback/media/deletion evidence |
+| AWS staging | BLOCKED-ACCESS | Approved AWS account/role, Terraform provisioning, deploy, readiness checks and rollback |
+| Customer / legal validation | BLOCKED-EXTERNAL | Selected jurisdiction/segment, interviews, observed prototype tests, paid-pilot evidence and written legal/privacy review |
+
+### Current product decision
+
+Do not add more recording features until the real capture pathway and initial buyer segment are validated. Keep TWILIO_ENABLED=false until authorized provider staging and consent/legal gates pass. Do not describe the app-owned Twilio Conference as native SIM-call recording. Keep product release BLOCKED.
+
+
+## Verified checkpoint — 2026-11-26 14:00 +04:00
+
+- PR #98 merged to main as `7d3e8d0f083d99b265879d9a584bb3bcdd9a74a3`; carrier register is now in main, but all operator/country capabilities remain UNKNOWN until primary-source or physical evidence exists.
+- PR #99 and #100 were recreated from this new main tip because D-EXEC-011 requires fresh-base PRs and exact-head CI after each mainline merge. The earlier PR heads are not eligible for merge.
+- PR #99 contains the decision log and runbook updates; PR #100 contains optional CloudWatch metrics/alarms gated behind `enable_live_twilio`. Neither change proves AWS provisioning, notifications, live Twilio acceptance, or physical capture.
+- Keep `TWILIO_ENABLED=false` and release BLOCKED. Engineering completion is not operational/product acceptance.
