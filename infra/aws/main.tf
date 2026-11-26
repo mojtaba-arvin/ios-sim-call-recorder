@@ -567,8 +567,6 @@ resource "aws_ecs_service" "retention" {
   tags = local.common_tags
 }
 
-
-
 # Retention worker metrics are created only when the live provider/worker path is enabled.
 # The optional SNS topic is supplied by the environment owner; no notification
 # endpoint or subscription is invented or provisioned here.
@@ -777,7 +775,6 @@ output "media_bucket" {
 output "media_kms_key_arn" {
   value = aws_kms_key.media.arn
 }
-
 
 # Regional edge protection for the public API. This is an origin-side
 # defense-in-depth layer; application authentication and provider signature
