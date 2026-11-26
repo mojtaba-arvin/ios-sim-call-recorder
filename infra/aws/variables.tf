@@ -98,7 +98,6 @@ variable "tags" {
   default = {}
 }
 
-
 variable "waf_rate_limit_per_ip" {
   type        = number
   default     = 2000
@@ -108,7 +107,6 @@ variable "waf_rate_limit_per_ip" {
     error_message = "waf_rate_limit_per_ip must be between 100 and 20000."
   }
 }
-
 
 variable "alarm_sns_topic_arn" {
   type        = string
