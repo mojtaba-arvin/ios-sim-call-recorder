@@ -4,7 +4,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
-permissions: {}
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: commit-identity-${{ github.event.pull_request.number || github.ref }}
@@ -16,19 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch public PR head without credentials
-        env:
-          REPOSITORY: ${{ github.repository }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git init .
-          git remote add origin "https://github.com/${REPOSITORY}.git"
-          git fetch --depth=1 origin "${PR_HEAD_SHA}"
-          git checkout --detach FETCH_HEAD
+      - name: Check out PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          token: ${{ github.token }}
+          persist-credentials: false
       - name: Validate policy fixtures
         run: python3 scripts/check_commit_identity.py --self-test
-      - name: Validate pull request commit authors (public API, no token)
+      - name: Validate pull request commit authors
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python3 scripts/check_commit_identity.py
