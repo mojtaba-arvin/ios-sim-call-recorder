@@ -82,3 +82,7 @@ Use the role contracts in `.agents/roles/`. Each task has one accountable implem
 ## Completion definition
 
 A task is complete only when its acceptance criteria are met, relevant checks pass on the final commit, the diff has been reviewed, documentation is accurate, and the PR is ready for human review.
+
+## GitHub Issue title convention
+
+Every Issue title must use `<type>(<scope>): <short, clear description>`. Use one lowercase Conventional Commit type: `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, or `revert`. Scope must be concise lowercase kebab-case and identify the affected domain/component. Keep priority, milestone, feature/command IDs, phase, agent identity, dates, and run metadata in labels, milestones, or the Issue body—not the title. Do not use bracketed prefixes, standalone priority codes, `Recover:`, or agent/supervisor identity prefixes. Use `chore(roadmap): ...` for milestone bookkeeping and `chore(supervisor): ...` for run ledgers. Preserve all Issue metadata and relationships when renaming; change only the title. See the [shared canonical contract](https://github.com/mojtaba-arvin/commands/blob/main/_shared/issue-title-contract.md).
