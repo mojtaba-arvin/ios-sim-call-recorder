@@ -112,7 +112,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          version="$(xcodebuild -version | tr '\\n' '-')"
+          version="$(xcodebuild -version | tr '\n' '-')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Restore Xcode DerivedData
         id: derived-data-cache
