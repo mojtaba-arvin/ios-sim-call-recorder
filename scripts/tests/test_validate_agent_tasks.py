@@ -196,6 +196,44 @@ class AgentTaskValidatorTests(unittest.TestCase):
         errors = validate_task_graph([task])
         self.assertTrue(any("acceptance_criteria" in error for error in errors))
 
+    def test_low_and_medium_risk_accept_owner_authorized_automated_review(self) -> None:
+        for risk in ("low", "medium"):
+            with self.subTest(risk=risk):
+                task = make_task("IOS-1")
+                task["status"] = "done"
+                task["risk"] = risk
+                task["evidence"] = {
+                    "exact_head_sha": "a" * 40,
+                    "ci_run_sha": "a" * 40,
+                    "tests_status": "success",
+                    "ci_run_url": "https://github.com/example/repo/actions/runs/123",
+                    "review_mode": "owner_authorized_automated",
+                    "owner_authorization": "Task scope authorizes automated self-review; not an independent human review.",
+                    "documentation_updated": True,
+                }
+                self.assertEqual(validate_task_graph([task]), [])
+
+    def test_high_and_critical_risk_require_independent_human_review(self) -> None:
+        for risk in ("high", "critical"):
+            with self.subTest(risk=risk):
+                task = make_task("IOS-1")
+                task["status"] = "done"
+                task["risk"] = risk
+                task["evidence"] = {
+                    "exact_head_sha": "a" * 40,
+                    "ci_run_sha": "a" * 40,
+                    "tests_status": "success",
+                    "ci_run_url": "https://github.com/example/repo/actions/runs/123",
+                    "review_mode": "owner_authorized_automated",
+                    "owner_authorization": "Automated review is not an independent human review.",
+                    "documentation_updated": True,
+                }
+                errors = validate_task_graph([task])
+                self.assertTrue(any("high/critical-risk tasks require an independent_human review" in error for error in errors))
+                task["evidence"]["review_mode"] = "independent_human"
+                task["evidence"]["reviewer"] = "independent-reviewer"
+                self.assertEqual(validate_task_graph([task]), [])
+
 
 if __name__ == "__main__":
     unittest.main()
