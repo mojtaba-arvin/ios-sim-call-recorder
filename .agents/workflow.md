@@ -12,13 +12,13 @@ Product owner / task requester
           |
           +----> Implementation (one scoped branch)
           |
-          +----> Independent review (read-only until findings)
+          +----> Independent review (required for high/critical risk)
           |
           v
    CI / physical-device validation
           |
           v
-   PR ready for human review
+   PR ready for evidence-gated merge
 ```
 
 ## Role and skill selection
@@ -46,7 +46,7 @@ Each issue should identify:
 
 ## Parallel execution rules
 
-Parallel workers must have disjoint path ownership. If two work items need the same interface, the architect defines the interface first; implementation proceeds after the contract is committed. Avoid speculative branches that cannot be integrated independently.
+Parallel workers must have disjoint path ownership. If two work items need the same interface, the architect defines the interface first; implementation proceeds after the contract is committed. Avoid speculative branches that cannot be integrated independently. Independent review is mandatory for high/critical-risk work; routine low/medium-risk PRs may use owner-authorized automated self-review.
 
 ## Historical learning and preflight
 
@@ -61,8 +61,10 @@ Before implementing a non-trivial change:
 
 ## Review gates
 
-- P0: credentials, privacy, consent bypass, data loss, direct main mutation — block immediately.
-- P1: lifecycle correctness, race conditions, concurrency, incorrect compatibility claims, missing critical tests — block merge.
+- P0: credentials, privacy, consent bypass, data loss, direct main mutation — block immediately and require independent human review before merge.
+- P1: lifecycle correctness, race conditions, concurrency, incorrect compatibility claims, missing critical tests — block merge and require independent human review.
+- P2: maintainability, observability, documentation and performance concerns — fix or explicitly justify; no blanket human approval is required.
+- P3: style-only improvements — do not block a release unless they obscure correctness.
 - P2: maintainability, observability, documentation and performance concerns — fix or explicitly justify.
 - P3: style-only improvements — do not block a release unless they obscure correctness.
 
@@ -91,4 +93,4 @@ Do not promote evidence from one tier to another.
 - Use `.agents/templates/task.example.json` as the starting schema for atomic work items.
 - Validate dependencies, cycles, status-specific fields and done-state evidence with `python3 scripts/validate_agent_tasks.py <task-files-or-directory>`.
 - The policy workflow validates the example contract and runs the task-validator regression suite.
-- The validator is structural: it does not execute tests, authenticate reviewers or query GitHub. The orchestrator must still verify exact-head CI and independent review before setting `done`.
+- The validator is structural: it does not execute tests, authenticate reviewers or query GitHub. The orchestrator must verify exact-head CI and the risk-based review mode before setting `done`: `independent_human` for high/critical risk; `owner_authorized_automated` is acceptable for low/medium risk and must never be represented as a human approval.
