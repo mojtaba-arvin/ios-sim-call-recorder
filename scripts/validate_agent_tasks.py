@@ -135,6 +135,8 @@ def validate_task_graph(tasks: list[dict[str, Any]]) -> list[str]:
             if evidence.get("tests_status") != "success":
                 errors.append(f"{task_id}: done tasks require successful exact-head tests")
             review_mode = evidence.get("review_mode")
+            if risk in {"high", "critical"} and review_mode != "independent_human":
+                errors.append(f"{task_id}: high/critical-risk tasks require an independent_human review")
             if review_mode == "independent_human":
                 reviewer = evidence.get("reviewer")
                 if not isinstance(reviewer, str) or not reviewer.strip():
