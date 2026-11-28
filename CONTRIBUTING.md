@@ -42,3 +42,7 @@ Use Conventional Commits:
 ## Security and privacy
 
 Never commit credentials, provisioning profiles, private keys, personal data or raw recordings. Use synthetic fixtures by default. Report vulnerabilities privately to the repository owner rather than publishing exploit details in an issue.
+
+## GitHub Issue title convention
+
+Use `<type>(<scope>): <short, clear description>` for every Issue title. The type must be one of `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, or `revert`; scope must be concise lowercase kebab-case. Keep priorities, milestones, feature/command IDs, agent identity, and run metadata in labels, milestone fields, or the Issue body. Do not use bracketed prefixes, standalone priority codes, `Recover:`, or supervisor identity prefixes. Preserve Issue metadata and relationships when renaming. Follow the [repository Issue title contract](docs/issue-title-convention.md).
