@@ -23,7 +23,7 @@ The active `protect main` ruleset (ID `27591151`) targets `refs/heads/main` and 
 - strict up-to-date checks, deletion protection, non-fast-forward protection, and linear history
 - no bypass actors
 
-`require_extra_approval_for_unattributed_changes=true` has no effect while the required approval count is zero. This is a live ruleset observation, not a reason to weaken any required status check or thread-resolution rule.
+`require_extra_approval_for_unattributed_changes=true` has no effect while the required approval count is zero, as documented by GitHub. This is a live ruleset observation, not a reason to weaken any required status check or thread-resolution rule.
 
 Recommended policy:
 - do not add a blanket approval count for every PR
